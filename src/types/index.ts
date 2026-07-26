@@ -61,6 +61,20 @@ export interface WorkspaceMember {
   role: 'me' | 'partner';
 }
 
+export type FinanceType = 'income' | 'expense';
+
+export interface FinanceEntry {
+  id: string;
+  workspaceId: string;
+  type: FinanceType;
+  amount: number;
+  category: string;
+  note?: string;
+  date: string; // yyyy-mm-dd
+  createdAt: number;
+  createdByName: string;
+}
+
 export interface Workspace {
   id: string;
   name: string;
@@ -68,6 +82,7 @@ export interface Workspace {
   ownerUid: string;
   members: WorkspaceMember[];
   memberUids: string[];
+  monthlyBudget?: number;
   createdAt: number;
 }
 

@@ -4,12 +4,14 @@ import { useWorkspaceStore } from './store/workspaceStore';
 import { useTaskStore } from './store/taskStore';
 import { useGoalStore } from './store/goalStore';
 import { useShoppingStore } from './store/shoppingStore';
+import { useFinanceStore } from './store/financeStore';
 import NameSetupPage from './pages/NameSetupPage';
 import WorkspaceSetupPage from './pages/WorkspaceSetupPage';
 import Layout, { type Tab } from './components/Layout';
 import HomeView from './pages/HomeView';
 import GoalsView from './pages/GoalsView';
 import ShoppingView from './pages/ShoppingView';
+import FinanceView from './pages/FinanceView';
 import SettingsView from './pages/SettingsView';
 import { Loader2, Heart } from 'lucide-react';
 
@@ -19,6 +21,7 @@ export default function App() {
   const { listen: listenTasks } = useTaskStore();
   const { listen: listenGoals } = useGoalStore();
   const { listen: listenShopping } = useShoppingStore();
+  const { listen: listenFinance } = useFinanceStore();
   const [tab, setTab] = useState<Tab>('home');
 
   useEffect(() => {
@@ -32,12 +35,14 @@ export default function App() {
     const unsubTasks = listenTasks(workspace.id);
     const unsubGoals = listenGoals(workspace.id);
     const unsubShopping = listenShopping(workspace.id);
+    const unsubFinance = listenFinance(workspace.id);
     return () => {
       unsubTasks();
       unsubGoals();
       unsubShopping();
+      unsubFinance();
     };
-  }, [workspace?.id, listenTasks, listenGoals, listenShopping]);
+  }, [workspace?.id, listenTasks, listenGoals, listenShopping, listenFinance]);
 
   if (loading) {
     return (
@@ -78,6 +83,7 @@ export default function App() {
       {tab === 'home' && <HomeView workspaceId={workspace.id} />}
       {tab === 'goals' && <GoalsView workspaceId={workspace.id} />}
       {tab === 'shopping' && <ShoppingView workspaceId={workspace.id} />}
+      {tab === 'finance' && <FinanceView workspaceId={workspace.id} />}
       {tab === 'settings' && <SettingsView />}
     </Layout>
   );

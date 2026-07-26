@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   Target,
   ShoppingCart,
+  Wallet,
   Settings as SettingsIcon,
   Moon,
   Sun,
@@ -16,12 +17,13 @@ import { useWorkspaceStore } from '../store/workspaceStore';
 import { useThemeStore } from '../store/themeStore';
 import { usePresence } from '../hooks/usePresence';
 
-export type Tab = 'home' | 'goals' | 'shopping' | 'settings';
+export type Tab = 'home' | 'goals' | 'shopping' | 'finance' | 'settings';
 
 const NAV: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { id: 'home', label: 'Обзор', icon: LayoutDashboard },
   { id: 'goals', label: 'Наши цели', icon: Target },
   { id: 'shopping', label: 'Покупки', icon: ShoppingCart },
+  { id: 'finance', label: 'Финансы', icon: Wallet },
   { id: 'settings', label: 'Настройки', icon: SettingsIcon },
 ];
 
