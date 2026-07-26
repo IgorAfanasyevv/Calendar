@@ -140,6 +140,9 @@ export default function CalendarPanel({ workspaceId }: { workspaceId: string }) 
         droppable
         eventResizableFromStart
         events={events}
+        eventDisplay="block"
+        dayMaxEventRows={3}
+        moreLinkText={(n) => `+ ещё ${n}`}
         eventClick={handleEventClick}
         eventDrop={handleDrop}
         eventResize={handleResize}
