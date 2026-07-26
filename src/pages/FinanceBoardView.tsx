@@ -199,8 +199,8 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
                 <YAxis fontSize={11} />
                 <Tooltip formatter={(v) => fmt(Number(v))} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="Доходы" fill="#10b981" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Расходы" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Доходы" fill="#6ee7b7" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Расходы" fill="#fca5a5" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : (
