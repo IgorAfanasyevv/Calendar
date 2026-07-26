@@ -44,7 +44,21 @@ export const useAuthStore = create<AuthState>((set) => {
         if (snap.exists()) {
           set({ profile: snap.data() as UserProfile, loading: false, error: null });
         } else {
-          set({ loading: false });
+          // Аккаунт есть в Firebase Auth, но профиля в Firestore нет —
+          // например, если запись профиля не удалась при регистрации.
+          // Создаём профиль сейчас, чтобы не застревать молча на экране входа.
+          const fallbackProfile: UserProfile = {
+            uid: user.uid,
+            email: user.email || '',
+            displayName: user.displayName || (user.email ? user.email.split('@')[0] : 'Пользователь'),
+          };
+          setDoc(ref, fallbackProfile).catch((err) => {
+            set({
+              loading: false,
+              error: `Не удалось создать профиль: ${err.message}. Проверьте, что правила Firestore загружены (npm run deploy:rules).`,
+            });
+          });
+          // onSnapshot вызовется повторно после успешной записи и подхватит профиль
         }
       },
       (err) => {
