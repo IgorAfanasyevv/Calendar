@@ -24,6 +24,7 @@ export interface Task {
   assignee: Assignee;
   done: boolean;
   checklist: ChecklistItem[];
+  goalId?: string;
   createdBy: string;
   createdByName: string;
   updatedBy?: string;
@@ -83,6 +84,7 @@ export interface Workspace {
   members: WorkspaceMember[];
   memberUids: string[];
   monthlyBudget?: number;
+  currency?: string; // ISO code, e.g. 'RUB', 'USD', 'EUR'
   createdAt: number;
 }
 

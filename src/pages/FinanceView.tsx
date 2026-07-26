@@ -17,14 +17,11 @@ import { useFinanceStore } from '../store/financeStore';
 import { useWorkspaceStore } from '../store/workspaceStore';
 import { useAuthStore } from '../store/authStore';
 import type { FinanceEntry, FinanceType } from '../types';
+import { CURRENCIES, currencySymbol } from '../lib/currency';
 
 const EXPENSE_CATEGORIES = ['Продукты', 'Жильё', 'Транспорт', 'Развлечения', 'Здоровье', 'Одежда', 'Путешествия', 'Другое'];
 const INCOME_CATEGORIES = ['Зарплата', 'Подработка', 'Подарок', 'Другое'];
 const PIE_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#94a3b8'];
-
-function fmt(n: number) {
-  return n.toLocaleString('ru-RU') + ' ₽';
-}
 
 function monthKey(date: string) {
   return date.slice(0, 7); // yyyy-mm
@@ -37,12 +34,16 @@ function monthLabel(key: string) {
 }
 
 export default function FinanceView({ workspaceId }: { workspaceId: string }) {
-  const { entries, addEntry, deleteEntry, setBudget } = useFinanceStore();
+  const { entries, addEntry, deleteEntry, setBudget, setCurrency } = useFinanceStore();
   const { workspace } = useWorkspaceStore();
   const { profile } = useAuthStore();
   const [adding, setAdding] = useState(false);
   const [editingBudget, setEditingBudget] = useState(false);
   const [budgetInput, setBudgetInput] = useState(String(workspace?.monthlyBudget || ''));
+
+  const currencyCode = workspace?.currency || 'RUB';
+  const symbol = currencySymbol(currencyCode);
+  const fmt = (n: number) => `${n.toLocaleString('ru-RU')} ${symbol}`;
 
   const currentMonth = new Date().toISOString().slice(0, 7);
 
@@ -100,12 +101,23 @@ export default function FinanceView({ workspaceId }: { workspaceId: string }) {
           <h1 className="text-xl font-semibold">Финансы</h1>
           <p className="text-sm text-neutral-400">Общий бюджет, доходы и расходы</p>
         </div>
-        <button
-          onClick={() => setAdding(true)}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white text-sm font-medium shadow-lg shadow-indigo-500/25"
-        >
-          <Plus size={15} /> Добавить операцию
-        </button>
+        <div className="flex items-center gap-2">
+          <select
+            value={currencyCode}
+            onChange={(e) => setCurrency(workspaceId, e.target.value)}
+            className="text-xs bg-neutral-100 dark:bg-neutral-800 rounded-xl px-3 py-2 font-medium"
+          >
+            {Object.entries(CURRENCIES).map(([code, c]) => (
+              <option key={code} value={code}>{c.label}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => setAdding(true)}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white text-sm font-medium shadow-lg shadow-indigo-500/25"
+          >
+            <Plus size={15} /> Добавить операцию
+          </button>
+        </div>
       </div>
 
       {/* Summary cards */}
@@ -230,6 +242,7 @@ export default function FinanceView({ workspaceId }: { workspaceId: string }) {
         <AddEntryModal
           workspaceId={workspaceId}
           authorName={profile?.displayName || ''}
+          symbol={symbol}
           onSave={addEntry}
           onClose={() => setAdding(false)}
         />
@@ -262,11 +275,13 @@ function SummaryCard({
 function AddEntryModal({
   workspaceId,
   authorName,
+  symbol,
   onSave,
   onClose,
 }: {
   workspaceId: string;
   authorName: string;
+  symbol: string;
   onSave: (workspaceId: string, entry: Partial<FinanceEntry>, authorName: string) => Promise<void>;
   onClose: () => void;
 }) {
@@ -323,7 +338,7 @@ function AddEntryModal({
           type="number"
           autoFocus
           className="input text-lg font-semibold"
-          placeholder="Сумма, ₽"
+          placeholder={`Сумма, ${symbol}`}
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
         />

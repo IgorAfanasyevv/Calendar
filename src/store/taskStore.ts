@@ -12,6 +12,12 @@ import {
 import { db } from '../lib/firebase';
 import type { Task } from '../types';
 
+// Firestore выдаёт ошибку, если в документ попадает поле со значением undefined —
+// убираем такие поля перед записью (например, необязательный goalId).
+function stripUndefined<T extends object>(obj: T): T {
+  return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined)) as T;
+}
+
 interface TaskState {
   tasks: Task[];
   loading: boolean;
@@ -40,31 +46,37 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   },
 
   addTask: async (workspaceId, task, actor) => {
-    await addDoc(collection(db, 'workspaces', workspaceId, 'tasks'), {
-      title: '',
-      description: '',
-      color: '#6366f1',
-      category: 'Общее',
-      priority: 'medium',
-      repeat: 'none',
-      assignee: 'together',
-      done: false,
-      checklist: [],
-      ...task,
-      workspaceId,
-      createdBy: actor.uid,
-      createdByName: actor.name,
-      createdAt: Date.now(),
-    });
+    await addDoc(
+      collection(db, 'workspaces', workspaceId, 'tasks'),
+      stripUndefined({
+        title: '',
+        description: '',
+        color: '#6366f1',
+        category: 'Общее',
+        priority: 'medium',
+        repeat: 'none',
+        assignee: 'together',
+        done: false,
+        checklist: [],
+        ...task,
+        workspaceId,
+        createdBy: actor.uid,
+        createdByName: actor.name,
+        createdAt: Date.now(),
+      })
+    );
   },
 
   updateTask: async (id, patch, actor) => {
-    await updateDoc(doc(db, 'workspaces', get().tasks.find((t) => t.id === id)?.workspaceId || '', 'tasks', id), {
-      ...patch,
-      updatedBy: actor.uid,
-      updatedByName: actor.name,
-      updatedAt: Date.now(),
-    });
+    await updateDoc(
+      doc(db, 'workspaces', get().tasks.find((t) => t.id === id)?.workspaceId || '', 'tasks', id),
+      stripUndefined({
+        ...patch,
+        updatedBy: actor.uid,
+        updatedByName: actor.name,
+        updatedAt: Date.now(),
+      })
+    );
   },
 
   deleteTask: async (id: string) => {

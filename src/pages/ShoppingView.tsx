@@ -1,11 +1,15 @@
 import { useMemo, useState } from 'react';
 import { Plus, Trash2, EyeOff, Eye } from 'lucide-react';
 import { useShoppingStore } from '../store/shoppingStore';
+import { useWorkspaceStore } from '../store/workspaceStore';
+import { currencySymbol } from '../lib/currency';
 
 const CATEGORIES = ['Продукты', 'Дом', 'Одежда', 'Электроника', 'Подарки', 'Другое'];
 
 export default function ShoppingView({ workspaceId }: { workspaceId: string }) {
   const { items, addItem, toggleBought, deleteItem } = useShoppingStore();
+  const { workspace } = useWorkspaceStore();
+  const symbol = currencySymbol(workspace?.currency);
   const [name, setName] = useState('');
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [price, setPrice] = useState('');
@@ -38,7 +42,7 @@ export default function ShoppingView({ workspaceId }: { workspaceId: string }) {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-semibold">Список покупок</h1>
-          <p className="text-sm text-neutral-400">Осталось купить на {total.toLocaleString('ru-RU')} ₽</p>
+          <p className="text-sm text-neutral-400">Осталось купить на {total.toLocaleString('ru-RU')} {symbol}</p>
         </div>
         <button
           onClick={() => setHideBought(!hideBought)}
@@ -94,7 +98,7 @@ export default function ShoppingView({ workspaceId }: { workspaceId: string }) {
                     {item.name} {item.quantity > 1 && <span className="text-neutral-400">× {item.quantity}</span>}
                   </span>
                   {item.price !== undefined && (
-                    <span className="text-xs text-neutral-400">{item.price * item.quantity} ₽</span>
+                    <span className="text-xs text-neutral-400">{item.price * item.quantity} {symbol}</span>
                   )}
                   <button onClick={() => deleteItem(item.id)} className="text-neutral-400 hover:text-rose-500">
                     <Trash2 size={14} />

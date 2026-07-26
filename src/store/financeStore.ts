@@ -10,6 +10,7 @@ interface FinanceState {
   addEntry: (workspaceId: string, entry: Partial<FinanceEntry>, authorName: string) => Promise<void>;
   deleteEntry: (id: string) => Promise<void>;
   setBudget: (workspaceId: string, amount: number) => Promise<void>;
+  setCurrency: (workspaceId: string, currency: string) => Promise<void>;
 }
 
 export const useFinanceStore = create<FinanceState>((set, get) => ({
@@ -42,5 +43,8 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   },
   setBudget: async (workspaceId, amount) => {
     await updateDoc(doc(db, 'workspaces', workspaceId), { monthlyBudget: amount });
+  },
+  setCurrency: async (workspaceId, currency) => {
+    await updateDoc(doc(db, 'workspaces', workspaceId), { currency });
   },
 }));

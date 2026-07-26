@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { Plus, Trash2, Calendar } from 'lucide-react';
+import { Plus, Trash2, Calendar, CheckSquare, Check } from 'lucide-react';
 import { useGoalStore } from '../store/goalStore';
 import { useAuthStore } from '../store/authStore';
+import { useTaskStore } from '../store/taskStore';
 import Modal from '../components/Modal';
-import type { ChecklistItem, Goal } from '../types';
+import TaskModal from '../components/TaskModal';
+import type { ChecklistItem, Goal, Task } from '../types';
 
 export default function GoalsView({ workspaceId }: { workspaceId: string }) {
   const { goals, addGoal, updateGoal, deleteGoal } = useGoalStore();
@@ -27,7 +29,7 @@ export default function GoalsView({ workspaceId }: { workspaceId: string }) {
 
       <div className="grid sm:grid-cols-2 gap-4">
         {goals.map((g) => (
-          <GoalCard key={g.id} goal={g} onUpdate={updateGoal} onDelete={deleteGoal} />
+          <GoalCard key={g.id} goal={g} workspaceId={workspaceId} onUpdate={updateGoal} onDelete={deleteGoal} />
         ))}
         {goals.length === 0 && (
           <p className="text-sm text-neutral-400 col-span-2 text-center py-12">Пока нет целей — добавьте первую мечту ✨</p>
@@ -50,14 +52,23 @@ export default function GoalsView({ workspaceId }: { workspaceId: string }) {
 
 function GoalCard({
   goal,
+  workspaceId,
   onUpdate,
   onDelete,
 }: {
   goal: Goal;
+  workspaceId: string;
   onUpdate: (id: string, patch: Partial<Goal>) => void;
   onDelete: (id: string) => void;
 }) {
   const [newStep, setNewStep] = useState('');
+  const { tasks, toggleDone } = useTaskStore();
+  const { firebaseUser, profile } = useAuthStore();
+  const [addingTask, setAddingTask] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | undefined>(undefined);
+
+  const linkedTasks = tasks.filter((t) => t.goalId === goal.id);
+  const actor = { uid: firebaseUser?.uid || '', name: profile?.displayName || '' };
 
   function toggleStep(step: ChecklistItem) {
     const steps = goal.steps.map((s) => (s.id === step.id ? { ...s, done: !s.done } : s));
@@ -120,6 +131,50 @@ function GoalCard({
           </button>
         </div>
       </div>
+
+      {/* Связанные задачи из общего списка задач */}
+      <div className="mt-4 pt-4 border-t border-neutral-200/60 dark:border-neutral-700/60">
+        <div className="flex items-center justify-between mb-2">
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-neutral-500">
+            <CheckSquare size={13} /> Задачи ({linkedTasks.length})
+          </span>
+          <button
+            onClick={() => setAddingTask(true)}
+            className="text-xs text-indigo-500 hover:text-indigo-600 font-medium flex items-center gap-1"
+          >
+            <Plus size={12} /> Задача
+          </button>
+        </div>
+        <div className="space-y-1">
+          {linkedTasks.map((t) => (
+            <div key={t.id} className="flex items-center gap-2 text-xs">
+              <button
+                onClick={() => toggleDone(t, actor)}
+                className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
+                  t.done ? 'bg-emerald-500 border-emerald-500' : 'border-neutral-300 dark:border-neutral-600'
+                }`}
+              >
+                {t.done && <Check size={10} className="text-white" />}
+              </button>
+              <button
+                onClick={() => setEditingTask(t)}
+                className={`truncate text-left flex-1 hover:underline ${t.done ? 'line-through text-neutral-400' : ''}`}
+              >
+                {t.title}
+              </button>
+              {t.date && <span className="text-neutral-400 shrink-0">{t.date}</span>}
+            </div>
+          ))}
+          {linkedTasks.length === 0 && <p className="text-[11px] text-neutral-400">Пока нет задач для этой цели</p>}
+        </div>
+      </div>
+
+      {addingTask && (
+        <TaskModal workspaceId={workspaceId} goalId={goal.id} onClose={() => setAddingTask(false)} />
+      )}
+      {editingTask && (
+        <TaskModal workspaceId={workspaceId} initial={editingTask} onClose={() => setEditingTask(undefined)} />
+      )}
     </div>
   );
 }

@@ -12,11 +12,13 @@ export default function TaskModal({
   workspaceId,
   initial,
   prefillDate,
+  goalId,
   onClose,
 }: {
   workspaceId: string;
   initial?: Task;
   prefillDate?: string;
+  goalId?: string;
   onClose: () => void;
 }) {
   const { addTask, updateTask, deleteTask } = useTaskStore();
@@ -60,6 +62,7 @@ export default function TaskModal({
       repeat,
       assignee,
       checklist,
+      goalId: initial?.goalId ?? goalId,
     };
     try {
       if (initial) {
