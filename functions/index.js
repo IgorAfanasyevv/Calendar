@@ -128,6 +128,16 @@ async function getMember(workspaceId, uid) {
 }
 
 exports.fitnessAssistant = onCall({ secrets: ['ANTHROPIC_API_KEY'] }, async (request) => {
+  try {
+    return await handleFitnessAssistant(request);
+  } catch (err) {
+    if (err instanceof HttpsError) throw err;
+    logger.error('fitnessAssistant error', err);
+    throw new HttpsError('internal', (err && err.message) || 'Внутренняя ошибка сервера');
+  }
+});
+
+async function handleFitnessAssistant(request) {
   const uid = request.auth && request.auth.uid;
   if (!uid) throw new HttpsError('unauthenticated', 'Нужно войти в аккаунт.');
 
@@ -292,7 +302,7 @@ ${goal ? `Дневная цель ${name} по калориям: ${goal} кка�
   }
 
   throw new HttpsError('invalid-argument', 'Неизвестное действие.');
-});
+}
 
 // ---------------------------------------------------------------------------
 // Общий ИИ-помощник (доступен из любого экрана приложения): отвечает на вопросы
@@ -532,6 +542,16 @@ async function executeAssistantTool(name, input, ctx) {
 }
 
 exports.assistant = onCall({ secrets: ['ANTHROPIC_API_KEY'] }, async (request) => {
+  try {
+    return await handleAssistant(request);
+  } catch (err) {
+    if (err instanceof HttpsError) throw err;
+    logger.error('assistant error', err);
+    throw new HttpsError('internal', (err && err.message) || 'Внутренняя ошибка сервера');
+  }
+});
+
+async function handleAssistant(request) {
   const uid = request.auth && request.auth.uid;
   if (!uid) throw new HttpsError('unauthenticated', 'Нужно войти в аккаунт.');
 
@@ -589,4 +609,4 @@ exports.assistant = onCall({ secrets: ['ANTHROPIC_API_KEY'] }, async (request) =
 
   const finalText = response.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
   return { text: finalText || 'Готово.', messages: messages.concat([{ role: 'assistant', content: response.content }]) };
-});
+}
