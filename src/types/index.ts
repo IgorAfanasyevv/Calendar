@@ -59,6 +59,7 @@ export interface ShoppingItem {
 export interface WorkspaceMember {
   uid: string;
   displayName: string;
+  email: string;
   role: 'me' | 'partner';
 }
 
@@ -90,6 +91,7 @@ export interface Workspace {
 
 export interface UserProfile {
   uid: string;
+  email: string;
   displayName: string;
   workspaceId?: string;
 }

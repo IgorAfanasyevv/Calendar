@@ -5,7 +5,7 @@ import { useTaskStore } from './store/taskStore';
 import { useGoalStore } from './store/goalStore';
 import { useShoppingStore } from './store/shoppingStore';
 import { useFinanceStore } from './store/financeStore';
-import NameSetupPage from './pages/NameSetupPage';
+import AuthPage from './pages/AuthPage';
 import WorkspaceSetupPage from './pages/WorkspaceSetupPage';
 import Layout, { type Tab } from './components/Layout';
 import HomeView from './pages/HomeView';
@@ -59,8 +59,7 @@ export default function App() {
         <div className="max-w-sm text-center space-y-3">
           <p className="text-rose-500 text-sm font-medium">{error}</p>
           <p className="text-xs text-neutral-400">
-            Проверьте .env (ключи Firebase), что включён провайдер "Anonymous" в Firebase
-            Authentication, и что правила Firestore загружены командой{' '}
+            Проверьте .env (ключи Firebase) и что правила Firestore загружены командой{' '}
             <code className="bg-neutral-100 dark:bg-neutral-800 px-1 rounded">npm run deploy:rules</code>.
           </p>
         </div>
@@ -68,7 +67,7 @@ export default function App() {
     );
   }
 
-  if (!firebaseUser || !profile) return <NameSetupPage />;
+  if (!firebaseUser || !profile) return <AuthPage />;
   if (!profile.workspaceId) return <WorkspaceSetupPage />;
   if (!workspace) {
     return (

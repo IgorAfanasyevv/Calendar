@@ -36,7 +36,7 @@ export default function Layout({
   onTabChange: (t: Tab) => void;
   children: ReactNode;
 }) {
-  const { profile, firebaseUser, forgetDevice } = useAuthStore();
+  const { profile, firebaseUser, logOut } = useAuthStore();
   const { workspace } = useWorkspaceStore();
   const { dark, toggle } = useThemeStore();
   const { isOnline } = usePresence(workspace?.id, firebaseUser?.uid);
@@ -103,11 +103,7 @@ export default function Layout({
               {dark ? 'Светлая' : 'Тёмная'}
             </button>
             <button
-              onClick={() => {
-                if (confirm('Забыть это устройство? Понадобится заново ввести код приглашения.')) {
-                  forgetDevice();
-                }
-              }}
+              onClick={logOut}
               className="flex items-center justify-center px-3 py-2 rounded-xl glass text-xs hover:brightness-95 text-rose-500"
               title="Выйти"
             >
