@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, PieChart as PieChartIcon } from 'lucide-react';
+import { Plus, PieChart as PieChartIcon, X } from 'lucide-react';
 import { useFinanceBoardStore } from '../store/financeBoardStore';
 import { useFinanceStore } from '../store/financeStore';
 import { useAuthStore } from '../store/authStore';
@@ -7,7 +7,7 @@ import FinanceBoardView from './FinanceBoardView';
 import FinanceOverview from './FinanceOverview';
 
 export default function FinanceView({ workspaceId }: { workspaceId: string }) {
-  const { boards, listen: listenBoards, createBoard } = useFinanceBoardStore();
+  const { boards, listen: listenBoards, createBoard, deleteBoard } = useFinanceBoardStore();
   const { listenBoard } = useFinanceStore();
   const { profile } = useAuthStore();
   const [selected, setSelected] = useState<string>('overview');
@@ -39,6 +39,14 @@ export default function FinanceView({ workspaceId }: { workspaceId: string }) {
     setSelected(id);
   }
 
+  async function handleDelete(e: React.MouseEvent, boardId: string, name: string) {
+    e.stopPropagation();
+    if (confirm(`Удалить вкладку «${name}» вместе со всеми операциями в ней? Это необратимо.`)) {
+      if (selected === boardId) setSelected('overview');
+      await deleteBoard(workspaceId, boardId);
+    }
+  }
+
   const activeBoard = boards.find((b) => b.id === selected);
 
   return (
@@ -56,11 +64,22 @@ export default function FinanceView({ workspaceId }: { workspaceId: string }) {
           <button
             key={b.id}
             onClick={() => setSelected(b.id)}
-            className={`px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition ${
+            className={`group flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition ${
               selected === b.id ? 'bg-indigo-500 text-white' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500'
             }`}
           >
             {b.name}
+            <span
+              onClick={(e) => handleDelete(e, b.id, b.name)}
+              className={`rounded-full p-0.5 transition ${
+                selected === b.id
+                  ? 'hover:bg-white/20 text-white/70 hover:text-white'
+                  : 'text-neutral-400 hover:bg-neutral-300 dark:hover:bg-neutral-600 hover:text-neutral-700 dark:hover:text-neutral-200'
+              }`}
+              title="Удалить вкладку"
+            >
+              <X size={12} />
+            </span>
           </button>
         ))}
 

@@ -1,5 +1,16 @@
 import { create } from 'zustand';
-import { addDoc, arrayUnion, collection, doc, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
+import {
+  addDoc,
+  arrayUnion,
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  onSnapshot,
+  orderBy,
+  query,
+  updateDoc,
+} from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import type { FinanceBoard } from '../types';
 
@@ -11,6 +22,7 @@ interface FinanceBoardState {
   loading: boolean;
   listen: (workspaceId: string) => () => void;
   createBoard: (workspaceId: string, name: string, actor: { name: string }) => Promise<string>;
+  deleteBoard: (workspaceId: string, boardId: string) => Promise<void>;
   setBudget: (workspaceId: string, boardId: string, amount: number) => Promise<void>;
   setCurrency: (workspaceId: string, boardId: string, currency: string) => Promise<void>;
   addExpenseCategory: (workspaceId: string, boardId: string, category: string) => Promise<void>;
@@ -38,6 +50,11 @@ export const useFinanceBoardStore = create<FinanceBoardState>((set) => ({
       createdByName: actor.name,
     });
     return ref.id;
+  },
+  deleteBoard: async (workspaceId, boardId) => {
+    const entriesSnap = await getDocs(collection(db, 'workspaces', workspaceId, 'financeBoards', boardId, 'entries'));
+    await Promise.all(entriesSnap.docs.map((d) => deleteDoc(d.ref)));
+    await deleteDoc(doc(db, 'workspaces', workspaceId, 'financeBoards', boardId));
   },
   setBudget: async (workspaceId, boardId, amount) => {
     await updateDoc(doc(db, 'workspaces', workspaceId, 'financeBoards', boardId), { monthlyBudget: amount });
