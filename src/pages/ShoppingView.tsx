@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Plus, Trash2, EyeOff, Eye } from 'lucide-react';
 import { useShoppingStore } from '../store/shoppingStore';
 import { useWorkspaceStore } from '../store/workspaceStore';
+import { useAuthStore } from '../store/authStore';
 import { currencySymbol } from '../lib/currency';
 
 const CATEGORIES = ['Продукты', 'Дом', 'Одежда', 'Электроника', 'Подарки', 'Другое'];
@@ -9,6 +10,8 @@ const CATEGORIES = ['Продукты', 'Дом', 'Одежда', 'Электр�
 export default function ShoppingView({ workspaceId }: { workspaceId: string }) {
   const { items, addItem, toggleBought, deleteItem } = useShoppingStore();
   const { workspace } = useWorkspaceStore();
+  const { firebaseUser, profile } = useAuthStore();
+  const actor = { uid: firebaseUser?.uid || '', name: profile?.displayName || '' };
   const symbol = currencySymbol(workspace?.currency);
   const [name, setName] = useState('');
   const [category, setCategory] = useState(CATEGORIES[0]);
@@ -31,7 +34,7 @@ export default function ShoppingView({ workspaceId }: { workspaceId: string }) {
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
-    await addItem(workspaceId, { name: name.trim(), category, price: price ? Number(price) : undefined, quantity });
+    await addItem(workspaceId, { name: name.trim(), category, price: price ? Number(price) : undefined, quantity }, actor);
     setName('');
     setPrice('');
     setQuantity(1);
@@ -93,14 +96,14 @@ export default function ShoppingView({ workspaceId }: { workspaceId: string }) {
             <div className="space-y-1.5">
               {list.map((item) => (
                 <div key={item.id} className="flex items-center gap-3 rounded-xl glass px-3 py-2.5">
-                  <input type="checkbox" checked={item.bought} onChange={() => toggleBought(item)} />
+                  <input type="checkbox" checked={item.bought} onChange={() => toggleBought(item, actor)} />
                   <span className={`text-sm flex-1 ${item.bought ? 'line-through text-neutral-400' : ''}`}>
                     {item.name} {item.quantity > 1 && <span className="text-neutral-400">× {item.quantity}</span>}
                   </span>
                   {item.price !== undefined && (
                     <span className="text-xs text-neutral-400">{item.price * item.quantity} {symbol}</span>
                   )}
-                  <button onClick={() => deleteItem(item.id)} className="text-neutral-400 hover:text-rose-500">
+                  <button onClick={() => deleteItem(item.id, actor)} className="text-neutral-400 hover:text-rose-500">
                     <Trash2 size={14} />
                   </button>
                 </div>

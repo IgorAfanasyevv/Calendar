@@ -2,14 +2,15 @@ import { create } from 'zustand';
 import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import type { Goal } from '../types';
+import { logActivity } from './activityStore';
 
 interface GoalState {
   goals: Goal[];
   loading: boolean;
   listen: (workspaceId: string) => () => void;
-  addGoal: (workspaceId: string, goal: Partial<Goal>, authorName: string) => Promise<void>;
+  addGoal: (workspaceId: string, goal: Partial<Goal>, actor: { uid: string; name: string }) => Promise<void>;
   updateGoal: (id: string, patch: Partial<Goal>) => Promise<void>;
-  deleteGoal: (id: string) => Promise<void>;
+  deleteGoal: (id: string, actor: { uid: string; name: string }) => Promise<void>;
 }
 
 export const useGoalStore = create<GoalState>((set, get) => ({
@@ -23,7 +24,7 @@ export const useGoalStore = create<GoalState>((set, get) => ({
     });
     return unsub;
   },
-  addGoal: async (workspaceId, goal, authorName) => {
+  addGoal: async (workspaceId, goal, actor) => {
     await addDoc(collection(db, 'workspaces', workspaceId, 'goals'), {
       title: '',
       description: '',
@@ -32,17 +33,19 @@ export const useGoalStore = create<GoalState>((set, get) => ({
       ...goal,
       workspaceId,
       createdAt: Date.now(),
-      createdByName: authorName,
+      createdByName: actor.name,
     });
+    logActivity(workspaceId, actor.uid, actor.name, `добавил(а) новую цель «${goal.title}»`);
   },
   updateGoal: async (id, patch) => {
     const g = get().goals.find((x) => x.id === id);
     if (!g) return;
     await updateDoc(doc(db, 'workspaces', g.workspaceId, 'goals', id), patch);
   },
-  deleteGoal: async (id) => {
+  deleteGoal: async (id, actor) => {
     const g = get().goals.find((x) => x.id === id);
     if (!g) return;
     await deleteDoc(doc(db, 'workspaces', g.workspaceId, 'goals', id));
+    logActivity(g.workspaceId, actor.uid, actor.name, `удалил(а) цель «${g.title}»`);
   },
 }));

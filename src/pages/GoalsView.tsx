@@ -9,8 +9,9 @@ import type { ChecklistItem, Goal, Task } from '../types';
 
 export default function GoalsView({ workspaceId }: { workspaceId: string }) {
   const { goals, addGoal, updateGoal, deleteGoal } = useGoalStore();
-  const { profile } = useAuthStore();
+  const { firebaseUser, profile } = useAuthStore();
   const [creating, setCreating] = useState(false);
+  const actor = { uid: firebaseUser?.uid || '', name: profile?.displayName || '' };
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -39,7 +40,7 @@ export default function GoalsView({ workspaceId }: { workspaceId: string }) {
         <Modal title="Новая цель" onClose={() => setCreating(false)}>
           <NewGoalForm
             onSave={async (data) => {
-              await addGoal(workspaceId, data, profile?.displayName || '');
+              await addGoal(workspaceId, data, actor);
               setCreating(false);
             }}
           />
@@ -58,7 +59,7 @@ function GoalCard({
   goal: Goal;
   workspaceId: string;
   onUpdate: (id: string, patch: Partial<Goal>) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string, actor: { uid: string; name: string }) => void;
 }) {
   const [newStep, setNewStep] = useState('');
   const { tasks, toggleDone } = useTaskStore();
@@ -86,7 +87,7 @@ function GoalCard({
     <div className="rounded-2xl glass p-5">
       <div className="flex items-start justify-between mb-2">
         <h3 className="font-semibold">{goal.title}</h3>
-        <button onClick={() => onDelete(goal.id)} className="text-neutral-400 hover:text-rose-500">
+        <button onClick={() => onDelete(goal.id, actor)} className="text-neutral-400 hover:text-rose-500">
           <Trash2 size={15} />
         </button>
       </div>

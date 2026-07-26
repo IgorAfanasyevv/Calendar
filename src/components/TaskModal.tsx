@@ -78,7 +78,7 @@ export default function TaskModal({
 
   async function handleDelete() {
     if (!initial) return;
-    await deleteTask(initial.id);
+    await deleteTask(initial.id, actor);
     onClose();
   }
 

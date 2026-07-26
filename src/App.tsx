@@ -7,6 +7,7 @@ import { useTaskStore } from './store/taskStore';
 import { useGoalStore } from './store/goalStore';
 import { useShoppingStore } from './store/shoppingStore';
 import { useFinanceStore } from './store/financeStore';
+import { useActivityStore } from './store/activityStore';
 import AuthPage from './pages/AuthPage';
 import WorkspaceSetupPage from './pages/WorkspaceSetupPage';
 import Layout, { type Tab } from './components/Layout';
@@ -24,6 +25,7 @@ export default function App() {
   const { listen: listenGoals } = useGoalStore();
   const { listen: listenShopping } = useShoppingStore();
   const { listen: listenFinance } = useFinanceStore();
+  const { listen: listenActivity } = useActivityStore();
   const [tab, setTab] = useState<Tab>('home');
 
   useEffect(() => {
@@ -50,13 +52,15 @@ export default function App() {
     const unsubGoals = listenGoals(workspace.id);
     const unsubShopping = listenShopping(workspace.id);
     const unsubFinance = listenFinance(workspace.id);
+    const unsubActivity = listenActivity(workspace.id);
     return () => {
       unsubTasks();
       unsubGoals();
       unsubShopping();
       unsubFinance();
+      unsubActivity();
     };
-  }, [workspace?.id, listenTasks, listenGoals, listenShopping, listenFinance]);
+  }, [workspace?.id, listenTasks, listenGoals, listenShopping, listenFinance, listenActivity]);
 
   if (loading) {
     return (

@@ -2,7 +2,9 @@ import { useMemo } from 'react';
 import { AlertTriangle, CalendarClock, CheckCircle2, Target } from 'lucide-react';
 import { useTaskStore } from '../store/taskStore';
 import { useGoalStore } from '../store/goalStore';
-import WeatherWidget from './WeatherWidget';
+import CitiesWeatherCard from './CitiesWeatherCard';
+import CitiesTimeCard from './CitiesTimeCard';
+import ActivityCard from './ActivityCard';
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -33,13 +35,18 @@ export default function RightPanel() {
 
   return (
     <div className="h-full p-4 space-y-4 overflow-y-auto">
+      <ActivityCard />
+
       <div className="rounded-2xl glass p-4 flex items-center justify-between">
-        <WeatherWidget />
+        <span className="text-xs font-medium text-neutral-500">Прогресс задач</span>
         <div className="text-right">
           <div className="text-2xl font-bold text-indigo-500">{completionPct}%</div>
           <div className="text-[11px] text-neutral-400">задач выполнено</div>
         </div>
       </div>
+
+      <CitiesTimeCard />
+      <CitiesWeatherCard />
 
       <Section icon={CheckCircle2} color="text-indigo-500" title="Сегодня" empty="Нет задач на сегодня">
         {todays.map((t) => (

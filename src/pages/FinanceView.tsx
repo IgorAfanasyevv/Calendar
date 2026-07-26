@@ -36,7 +36,8 @@ function monthLabel(key: string) {
 export default function FinanceView({ workspaceId }: { workspaceId: string }) {
   const { entries, addEntry, deleteEntry, setBudget, setCurrency } = useFinanceStore();
   const { workspace } = useWorkspaceStore();
-  const { profile } = useAuthStore();
+  const { firebaseUser, profile } = useAuthStore();
+  const actor = { uid: firebaseUser?.uid || '', name: profile?.displayName || '' };
   const [adding, setAdding] = useState(false);
   const [editingBudget, setEditingBudget] = useState(false);
   const [budgetInput, setBudgetInput] = useState(String(workspace?.monthlyBudget || ''));
@@ -227,7 +228,7 @@ export default function FinanceView({ workspaceId }: { workspaceId: string }) {
                   <span className={`text-sm font-semibold shrink-0 ${e.type === 'income' ? 'text-emerald-500' : 'text-rose-500'}`}>
                     {e.type === 'income' ? '+' : '-'}{fmt(e.amount)}
                   </span>
-                  <button onClick={() => deleteEntry(e.id)} className="text-neutral-400 hover:text-rose-500 shrink-0">
+                  <button onClick={() => deleteEntry(e.id, actor)} className="text-neutral-400 hover:text-rose-500 shrink-0">
                     <Trash2 size={14} />
                   </button>
                 </div>
@@ -241,8 +242,9 @@ export default function FinanceView({ workspaceId }: { workspaceId: string }) {
       {adding && (
         <AddEntryModal
           workspaceId={workspaceId}
-          authorName={profile?.displayName || ''}
+          actor={actor}
           symbol={symbol}
+          currencyCode={currencyCode}
           onSave={addEntry}
           onClose={() => setAdding(false)}
         />
@@ -274,15 +276,17 @@ function SummaryCard({
 
 function AddEntryModal({
   workspaceId,
-  authorName,
+  actor,
   symbol,
+  currencyCode,
   onSave,
   onClose,
 }: {
   workspaceId: string;
-  authorName: string;
+  actor: { uid: string; name: string };
   symbol: string;
-  onSave: (workspaceId: string, entry: Partial<FinanceEntry>, authorName: string) => Promise<void>;
+  currencyCode: string;
+  onSave: (workspaceId: string, entry: Partial<FinanceEntry>, actor: { uid: string; name: string }, currency?: string) => Promise<void>;
   onClose: () => void;
 }) {
   const [type, setType] = useState<FinanceType>('expense');
@@ -304,7 +308,7 @@ function AddEntryModal({
     if (!val || val <= 0) return;
     setSaving(true);
     try {
-      await onSave(workspaceId, { type, amount: val, category, note, date }, authorName);
+      await onSave(workspaceId, { type, amount: val, category, note, date }, actor, currencyCode);
       onClose();
     } finally {
       setSaving(false);

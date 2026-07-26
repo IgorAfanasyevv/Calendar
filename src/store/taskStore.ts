@@ -11,6 +11,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import type { Task } from '../types';
+import { logActivity } from './activityStore';
 
 // Firestore выдаёт ошибку, если в документ попадает поле со значением undefined —
 // убираем такие поля перед записью (например, необязательный goalId).
@@ -24,7 +25,7 @@ interface TaskState {
   listen: (workspaceId: string) => () => void;
   addTask: (workspaceId: string, task: Partial<Task>, actor: { uid: string; name: string }) => Promise<void>;
   updateTask: (id: string, patch: Partial<Task>, actor: { uid: string; name: string }) => Promise<void>;
-  deleteTask: (id: string) => Promise<void>;
+  deleteTask: (id: string, actor: { uid: string; name: string }) => Promise<void>;
   toggleDone: (task: Task, actor: { uid: string; name: string }) => Promise<void>;
 }
 
@@ -65,11 +66,13 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         createdAt: Date.now(),
       })
     );
+    logActivity(workspaceId, actor.uid, actor.name, `добавил(а) новую задачу «${task.title}»`);
   },
 
   updateTask: async (id, patch, actor) => {
+    const t = get().tasks.find((x) => x.id === id);
     await updateDoc(
-      doc(db, 'workspaces', get().tasks.find((t) => t.id === id)?.workspaceId || '', 'tasks', id),
+      doc(db, 'workspaces', t?.workspaceId || '', 'tasks', id),
       stripUndefined({
         ...patch,
         updatedBy: actor.uid,
@@ -77,20 +80,29 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         updatedAt: Date.now(),
       })
     );
+    if (t) logActivity(t.workspaceId, actor.uid, actor.name, `изменил(а) задачу «${patch.title || t.title}»`);
   },
 
-  deleteTask: async (id: string) => {
+  deleteTask: async (id, actor) => {
     const t = get().tasks.find((task) => task.id === id);
     if (!t) return;
     await deleteDoc(doc(db, 'workspaces', t.workspaceId, 'tasks', id));
+    logActivity(t.workspaceId, actor.uid, actor.name, `удалил(а) задачу «${t.title}»`);
   },
 
   toggleDone: async (task, actor) => {
+    const done = !task.done;
     await updateDoc(doc(db, 'workspaces', task.workspaceId, 'tasks', task.id), {
-      done: !task.done,
+      done,
       updatedBy: actor.uid,
       updatedByName: actor.name,
       updatedAt: Date.now(),
     });
+    logActivity(
+      task.workspaceId,
+      actor.uid,
+      actor.name,
+      `${done ? 'выполнил(а)' : 'вернул(а) в работу'} задачу «${task.title}»`
+    );
   },
 }));

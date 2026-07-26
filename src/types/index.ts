@@ -89,6 +89,16 @@ export interface Workspace {
   createdAt: number;
 }
 
+export interface ActivityEntry {
+  id: string;
+  workspaceId: string;
+  message: string;
+  actorUid: string;
+  actorName: string;
+  readBy: string[];
+  createdAt: number;
+}
+
 export interface UserProfile {
   uid: string;
   email: string;
