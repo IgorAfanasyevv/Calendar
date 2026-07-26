@@ -78,6 +78,7 @@ export interface FinanceEntry {
   note?: string;
   date: string; // yyyy-mm-dd
   planned?: boolean; // true = запланированная будущая трата, ещё не оплачена
+  paidAmount?: number; // сколько уже оплачено частями от запланированной суммы
   createdAt: number;
   createdByName: string;
 }

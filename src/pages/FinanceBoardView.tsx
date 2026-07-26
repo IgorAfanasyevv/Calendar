@@ -50,7 +50,7 @@ function monthLabel(key: string) {
 }
 
 export default function FinanceBoardView({ workspaceId, board }: { workspaceId: string; board: FinanceBoard }) {
-  const { entriesByBoard, addEntry, deleteEntry, markPaid } = useFinanceStore();
+  const { entriesByBoard, addEntry, deleteEntry, payInstallment } = useFinanceStore();
   const { setBudget, setCurrency } = useFinanceBoardStore();
   const { firebaseUser, profile } = useAuthStore();
   const actor = { uid: firebaseUser?.uid || '', name: profile?.displayName || '' };
@@ -63,9 +63,13 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
     [allEntries]
   );
   const plannedTotal = useMemo(
-    () => plannedEntries.filter((e) => e.type === 'expense').reduce((s, e) => s + e.amount, 0),
+    () =>
+      plannedEntries
+        .filter((e) => e.type === 'expense')
+        .reduce((s, e) => s + (e.amount - (e.paidAmount || 0)), 0),
     [plannedEntries]
   );
+  const [payingEntry, setPayingEntry] = useState<FinanceEntry | null>(null);
 
   const [adding, setAdding] = useState(false);
   const [editingBudget, setEditingBudget] = useState(false);
@@ -253,33 +257,49 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
             <CalendarClock size={15} /> Предстоящие траты
           </span>
           {plannedTotal > 0 && (
-            <span className="text-xs text-neutral-400">Итого: {fmt(plannedTotal)}</span>
+            <span className="text-xs text-neutral-400">Осталось оплатить: {fmt(plannedTotal)}</span>
           )}
         </div>
         {plannedEntries.length > 0 ? (
           <div className="space-y-1.5">
-            {plannedEntries.map((e) => (
-              <div key={e.id} className="flex items-center gap-3 rounded-xl bg-amber-50/60 dark:bg-amber-500/10 px-3 py-2.5">
-                <span className={`w-2 h-2 rounded-full shrink-0 ${e.type === 'income' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm truncate">{e.category}{e.note ? ` — ${e.note}` : ''}</p>
-                  <p className="text-[11px] text-neutral-400">{e.date} · {e.createdByName}</p>
+            {plannedEntries.map((e) => {
+              const paid = e.paidAmount || 0;
+              const remaining = e.amount - paid;
+              const pct = e.amount > 0 ? Math.min(100, Math.round((paid / e.amount) * 100)) : 0;
+              return (
+                <div key={e.id} className="rounded-xl bg-amber-50/60 dark:bg-amber-500/10 px-3 py-2.5">
+                  <div className="flex items-center gap-3">
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${e.type === 'income' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm truncate">{e.category}{e.note ? ` — ${e.note}` : ''}</p>
+                      <p className="text-[11px] text-neutral-400">{e.date} · {e.createdByName}</p>
+                    </div>
+                    <span className={`text-sm font-semibold shrink-0 ${e.type === 'income' ? 'text-emerald-500' : 'text-rose-500'}`}>
+                      {e.type === 'income' ? '+' : '-'}{fmt(remaining)}
+                      {paid > 0 && <span className="text-[10px] text-neutral-400 font-normal"> из {fmt(e.amount)}</span>}
+                    </span>
+                    <button
+                      onClick={() => setPayingEntry(e)}
+                      className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 hover:text-emerald-700 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-1 rounded-lg shrink-0"
+                      title="Внести платёж"
+                    >
+                      <Check size={12} /> Оплатить
+                    </button>
+                    <button onClick={() => deleteEntry(e, actor)} className="text-neutral-400 hover:text-rose-500 shrink-0">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                  {paid > 0 && (
+                    <div className="mt-2 pl-5">
+                      <div className="h-1.5 rounded-full bg-neutral-200/70 dark:bg-neutral-700 overflow-hidden">
+                        <div className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500" style={{ width: `${pct}%` }} />
+                      </div>
+                      <p className="text-[10px] text-neutral-400 mt-1">Оплачено {fmt(paid)} из {fmt(e.amount)} ({pct}%)</p>
+                    </div>
+                  )}
                 </div>
-                <span className={`text-sm font-semibold shrink-0 ${e.type === 'income' ? 'text-emerald-500' : 'text-rose-500'}`}>
-                  {e.type === 'income' ? '+' : '-'}{fmt(e.amount)}
-                </span>
-                <button
-                  onClick={() => markPaid(e, actor)}
-                  className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 hover:text-emerald-700 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-1 rounded-lg shrink-0"
-                  title="Отметить оплаченным"
-                >
-                  <Check size={12} /> Оплачено
-                </button>
-                <button onClick={() => deleteEntry(e, actor)} className="text-neutral-400 hover:text-rose-500 shrink-0">
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <p className="text-xs text-neutral-400">
@@ -327,6 +347,18 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
           onClose={() => setAdding(false)}
         />
       )}
+
+      {payingEntry && (
+        <PayInstallmentModal
+          entry={payingEntry}
+          symbol={symbol}
+          onPay={async (amount) => {
+            await payInstallment(payingEntry, amount, actor, board.currency);
+            setPayingEntry(null);
+          }}
+          onClose={() => setPayingEntry(null)}
+        />
+      )}
     </div>
   );
 }
@@ -348,6 +380,74 @@ function SummaryCard({
         <Icon size={14} className={color} /> {label}
       </div>
       <div className="text-lg font-bold">{value}</div>
+    </div>
+  );
+}
+
+function PayInstallmentModal({
+  entry,
+  symbol,
+  onPay,
+  onClose,
+}: {
+  entry: FinanceEntry;
+  symbol: string;
+  onPay: (amount: number) => Promise<void>;
+  onClose: () => void;
+}) {
+  const remaining = entry.amount - (entry.paidAmount || 0);
+  const [amount, setAmount] = useState(String(remaining));
+  const [saving, setSaving] = useState(false);
+
+  async function handleConfirm() {
+    const val = Number(amount);
+    if (!val || val <= 0) return;
+    setSaving(true);
+    try {
+      await onPay(Math.min(val, remaining));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-sm rounded-3xl bg-white dark:bg-neutral-900 shadow-2xl p-6 space-y-3"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-lg font-semibold mb-1">Оплата: {entry.category}</h2>
+        <p className="text-xs text-neutral-400 mb-2">
+          Осталось оплатить {remaining.toLocaleString('ru-RU')} {symbol} из {entry.amount.toLocaleString('ru-RU')} {symbol}
+        </p>
+
+        <input
+          type="number"
+          autoFocus
+          max={remaining}
+          className="input text-lg font-semibold"
+          placeholder={`Сумма платежа, ${symbol}`}
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+        />
+
+        <div className="flex gap-2">
+          <button
+            onClick={() => setAmount(String(remaining))}
+            className="flex-1 py-2 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-xs font-medium"
+          >
+            Оплатить всё ({remaining.toLocaleString('ru-RU')} {symbol})
+          </button>
+        </div>
+
+        <button
+          onClick={handleConfirm}
+          disabled={saving || !amount || Number(amount) <= 0}
+          className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white font-medium text-sm disabled:opacity-50"
+        >
+          Подтвердить платёж
+        </button>
+      </div>
     </div>
   );
 }
