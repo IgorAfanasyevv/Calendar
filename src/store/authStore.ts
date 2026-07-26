@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut,
   updateProfile,
@@ -18,6 +19,7 @@ interface AuthState {
   error: string | null;
   signUp: (email: string, password: string, displayName: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
   logOut: () => Promise<void>;
   clearError: () => void;
 }
@@ -90,6 +92,15 @@ export const useAuthStore = create<AuthState>((set) => {
         throw e;
       }
     },
+    resetPassword: async (email) => {
+      set({ error: null });
+      try {
+        await sendPasswordResetEmail(auth, email);
+      } catch (e) {
+        set({ error: friendlyAuthError(e) });
+        throw e;
+      }
+    },
     logOut: async () => {
       await signOut(auth);
     },
@@ -110,6 +121,8 @@ function friendlyAuthError(e: unknown): string {
     'auth/invalid-credential': 'Неверный email или пароль.',
     'auth/user-not-found': 'Пользователь не найден.',
     'auth/wrong-password': 'Неверный пароль.',
+    'auth/missing-email': 'Введите email.',
+    'auth/too-many-requests': 'Слишком много попыток. Попробуйте позже.',
   };
   return map[code] || 'Что-то пошло не так. Попробуйте ещё раз.';
 }
