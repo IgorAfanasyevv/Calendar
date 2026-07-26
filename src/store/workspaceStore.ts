@@ -22,6 +22,7 @@ interface WorkspaceState {
   createWorkspace: (name: string, member: WorkspaceMember) => Promise<string>;
   joinWorkspace: (inviteCode: string, member: WorkspaceMember) => Promise<string>;
   removeMember: (workspaceId: string, uid: string) => Promise<void>;
+  setCalorieGoal: (workspaceId: string, uid: string, goal: number) => Promise<void>;
   clearError: () => void;
 }
 
@@ -103,5 +104,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const members = current.members.filter((m) => m.uid !== uid);
     const memberUids = current.memberUids.filter((u) => u !== uid);
     await updateDoc(doc(db, 'workspaces', workspaceId), { members, memberUids });
+  },
+
+  // Личная цель по калориям хранится внутри members[] (доступно на чтение всем
+  // участникам пространства), а не в users/{uid}, куда партнёр не имеет доступа.
+  setCalorieGoal: async (workspaceId, uid, goal) => {
+    const current = get().workspace;
+    if (!current) return;
+    const members = current.members.map((m) => (m.uid === uid ? { ...m, calorieGoal: goal } : m));
+    await updateDoc(doc(db, 'workspaces', workspaceId), { members });
   },
 }));

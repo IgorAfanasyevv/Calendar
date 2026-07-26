@@ -14,6 +14,7 @@ import HomeView from './pages/HomeView';
 import GoalsView from './pages/GoalsView';
 import ShoppingView from './pages/ShoppingView';
 import FinanceView from './pages/FinanceView';
+import FitnessView from './pages/FitnessView';
 import SettingsView from './pages/SettingsView';
 import { Loader2, Heart } from 'lucide-react';
 
@@ -97,6 +98,7 @@ export default function App() {
       {tab === 'goals' && <GoalsView workspaceId={workspace.id} />}
       {tab === 'shopping' && <ShoppingView workspaceId={workspace.id} />}
       {tab === 'finance' && <FinanceView workspaceId={workspace.id} />}
+      {tab === 'fitness' && <FitnessView workspaceId={workspace.id} />}
       {tab === 'settings' && <SettingsView />}
     </Layout>
   );

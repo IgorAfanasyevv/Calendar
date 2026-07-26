@@ -64,6 +64,48 @@ export interface WorkspaceMember {
   displayName: string;
   email: string;
   role: 'me' | 'partner';
+  calorieGoal?: number;
+}
+
+export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+
+export interface FoodEntry {
+  id: string;
+  workspaceId: string;
+  date: string; // yyyy-mm-dd
+  mealType: MealType;
+  name: string;
+  calories: number;
+  protein?: number;
+  fat?: number;
+  carbs?: number;
+  planned?: boolean; // true = запланировано в меню, ещё не съедено
+  createdBy: string;
+  createdByName: string;
+  createdAt: number;
+}
+
+export interface FoodPreset {
+  id: string;
+  workspaceId: string;
+  name: string;
+  calories: number;
+  protein?: number;
+  fat?: number;
+  carbs?: number;
+}
+
+export interface WorkoutEntry {
+  id: string;
+  workspaceId: string;
+  date: string;
+  name: string;
+  durationMinutes: number;
+  caloriesBurned?: number;
+  note?: string;
+  createdBy: string;
+  createdByName: string;
+  createdAt: number;
 }
 
 export type FinanceType = 'income' | 'expense';

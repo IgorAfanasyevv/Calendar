@@ -4,6 +4,7 @@ import {
   Target,
   ShoppingCart,
   Wallet,
+  Dumbbell,
   Settings as SettingsIcon,
   Moon,
   Sun,
@@ -17,13 +18,14 @@ import { useWorkspaceStore } from '../store/workspaceStore';
 import { useThemeStore } from '../store/themeStore';
 import { usePresence } from '../hooks/usePresence';
 
-export type Tab = 'home' | 'goals' | 'shopping' | 'finance' | 'settings';
+export type Tab = 'home' | 'goals' | 'shopping' | 'finance' | 'fitness' | 'settings';
 
 const NAV: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { id: 'home', label: 'Обзор', icon: LayoutDashboard },
   { id: 'goals', label: 'Наши цели', icon: Target },
   { id: 'shopping', label: 'Покупки', icon: ShoppingCart },
   { id: 'finance', label: 'Финансы', icon: Wallet },
+  { id: 'fitness', label: 'Фитнес', icon: Dumbbell },
   { id: 'settings', label: 'Настройки', icon: SettingsIcon },
 ];
 
@@ -115,12 +117,12 @@ export default function Layout({
       </aside>
 
       {/* Mobile top nav */}
-      <div className="md:hidden fixed bottom-0 inset-x-0 z-30 glass border-t border-neutral-200/50 dark:border-neutral-800 flex justify-around py-2">
+      <div className="md:hidden fixed bottom-0 inset-x-0 z-30 glass border-t border-neutral-200/50 dark:border-neutral-800 flex overflow-x-auto py-2 px-1">
         {NAV.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
             onClick={() => onTabChange(id)}
-            className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg text-[10px] ${
+            className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg text-[10px] shrink-0 min-w-[64px] ${
               tab === id ? 'text-indigo-600 dark:text-indigo-400' : 'text-neutral-500'
             }`}
           >
