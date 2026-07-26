@@ -25,6 +25,8 @@ export interface Task {
   done: boolean;
   checklist: ChecklistItem[];
   goalId?: string;
+  reminder1DaySent?: boolean;
+  reminder1HourSent?: boolean;
   createdBy: string;
   createdByName: string;
   updatedBy?: string;

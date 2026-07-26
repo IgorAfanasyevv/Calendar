@@ -9,7 +9,10 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "deploy": "npm run build && npx firebase-tools deploy",
-    "deploy:rules": "npx firebase-tools deploy --only firestore:rules"
+    "deploy:rules": "npx firebase-tools deploy --only firestore:rules",
+    "deploy:indexes": "npx firebase-tools deploy --only firestore:indexes",
+    "deploy:functions": "npx firebase-tools deploy --only functions",
+    "setup:functions": "cd functions && npm install"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.21",
