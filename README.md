@@ -129,6 +129,44 @@ Hosting URL: https://ваш-проект.web.app
 
 ---
 
+## 6.1. Автоматический деплой при каждом пуше (без WebStorm)
+
+Если не хочется каждый раз запускать `npm run deploy` вручную — можно настроить это один раз,
+и дальше сайт будет сам обновляться при каждом `git push` в GitHub (через GitHub Actions).
+Файл `.github/workflows/deploy.yml` уже готов, нужно только один раз добавить секреты.
+
+**Шаг 1 — создать сервисный аккаунт Firebase:**
+1. [console.firebase.google.com](https://console.firebase.google.com) → ваш проект → шестерёнка ⚙️ → **Project settings**
+2. Вкладка **Service accounts** → кнопка **Generate new private key** → скачается файл `.json`
+3. Откройте этот файл текстовым редактором, скопируйте всё содержимое
+
+**Шаг 2 — добавить секреты в GitHub:**
+Откройте `https://github.com/IgorAfanasyevv/Calendar/settings/secrets/actions` → **New repository secret**
+и добавьте по очереди (имя secret → значение):
+
+| Имя секрета | Значение |
+|---|---|
+| `FIREBASE_SERVICE_ACCOUNT` | всё содержимое скачанного `.json`-файла целиком |
+| `VITE_FIREBASE_API_KEY` | из вашего `.env` |
+| `VITE_FIREBASE_AUTH_DOMAIN` | из вашего `.env` |
+| `VITE_FIREBASE_PROJECT_ID` | из вашего `.env` |
+| `VITE_FIREBASE_STORAGE_BUCKET` | из вашего `.env` |
+| `VITE_FIREBASE_MESSAGING_SENDER_ID` | из вашего `.env` |
+| `VITE_FIREBASE_APP_ID` | из вашего `.env` |
+
+**Готово.** После этого при каждом `git push` в ветку `main` GitHub сам:
+1. установит зависимости,
+2. соберёт проект,
+3. опубликует сайт на Firebase Hosting,
+4. обновит правила безопасности Firestore.
+
+Прогресс можно посмотреть на вкладке **Actions** в GitHub-репозитории. Регистрировать
+новые аккаунты/пользователей это не требует — это отдельный процесс: настройка CI/CD один раз
+делает так, чтобы *сам код* публиковался автоматически, а регистрация пользователей в приложении
+как работала через экран входа, так и работает.
+
+---
+
 ## 7. Структура проекта
 
 ```
