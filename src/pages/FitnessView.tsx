@@ -25,8 +25,8 @@ export default function FitnessView({ workspaceId }: { workspaceId: string }) {
   }, [workspaceId, listenFood, listenPresets, listenWorkouts]);
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <div className="flex items-center gap-2 mb-6">
+    <div className="p-4 sm:p-6 max-w-4xl mx-auto">
+      <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-1">
         <TabButton active={tab === 'diary'} onClick={() => setTab('diary')} icon={UtensilsCrossed} label="Дневник питания" />
         <TabButton active={tab === 'menu'} onClick={() => setTab('menu')} icon={CalendarRange} label="Меню" />
         <TabButton active={tab === 'workouts'} onClick={() => setTab('workouts')} icon={Dumbbell} label="Тренировки" />
@@ -53,7 +53,7 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition ${
+      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap shrink-0 transition ${
         active ? 'bg-indigo-500 text-white' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500'
       }`}
     >
