@@ -1,14 +1,6 @@
 import { create } from 'zustand';
-import {
-  createUserWithEmailAndPassword,
-  onAuthStateChanged,
-  sendPasswordResetEmail,
-  signInWithEmailAndPassword,
-  signOut,
-  updateProfile,
-  type User,
-} from 'firebase/auth';
-import { doc, getDoc, onSnapshot, setDoc } from 'firebase/firestore';
+import { onAuthStateChanged, signInAnonymously, signOut, type User } from 'firebase/auth';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import type { UserProfile } from '../types';
 
@@ -17,25 +9,29 @@ interface AuthState {
   profile: UserProfile | null;
   loading: boolean;
   error: string | null;
-  signUp: (email: string, password: string, displayName: string) => Promise<void>;
-  signIn: (email: string, password: string) => Promise<void>;
-  resetPassword: (email: string) => Promise<void>;
-  logOut: () => Promise<void>;
+  setDisplayName: (name: string) => Promise<void>;
+  forgetDevice: () => Promise<void>;
   clearError: () => void;
 }
 
 let unsubscribeProfile: (() => void) | null = null;
 
 export const useAuthStore = create<AuthState>((set) => {
-  onAuthStateChanged(auth, async (user) => {
+  onAuthStateChanged(auth, (user) => {
     if (unsubscribeProfile) {
       unsubscribeProfile();
       unsubscribeProfile = null;
     }
+
     if (!user) {
-      set({ firebaseUser: null, profile: null, loading: false });
+      // Нет анонимной сессии — создаём её автоматически, без участия пользователя.
+      set({ firebaseUser: null, profile: null, loading: true });
+      signInAnonymously(auth).catch((err) => {
+        set({ loading: false, error: `Не удалось подключиться: ${err.message}` });
+      });
       return;
     }
+
     set({ firebaseUser: user, loading: true });
     const ref = doc(db, 'users', user.uid);
     unsubscribeProfile = onSnapshot(
@@ -44,26 +40,11 @@ export const useAuthStore = create<AuthState>((set) => {
         if (snap.exists()) {
           set({ profile: snap.data() as UserProfile, loading: false, error: null });
         } else {
-          // Аккаунт есть в Firebase Auth, но профиля в Firestore нет —
-          // например, если запись профиля не удалась при регистрации.
-          // Создаём профиль сейчас, чтобы не застревать молча на экране входа.
-          const fallbackProfile: UserProfile = {
-            uid: user.uid,
-            email: user.email || '',
-            displayName: user.displayName || (user.email ? user.email.split('@')[0] : 'Пользователь'),
-          };
-          setDoc(ref, fallbackProfile).catch((err) => {
-            set({
-              loading: false,
-              error: `Не удалось создать профиль: ${err.message}. Проверьте, что правила Firestore загружены (npm run deploy:rules).`,
-            });
-          });
-          // onSnapshot вызовется повторно после успешной записи и подхватит профиль
+          // Ещё не задано имя — покажем экран "Как вас зовут?"
+          set({ profile: null, loading: false });
         }
       },
       (err) => {
-        // Не даём приложению зависнуть на спиннере, если Firestore недоступен
-        // (чаще всего — не загружены правила безопасности firestore.rules)
         set({
           loading: false,
           error:
@@ -81,62 +62,27 @@ export const useAuthStore = create<AuthState>((set) => {
     loading: true,
     error: null,
     clearError: () => set({ error: null }),
-    signUp: async (email, password, displayName) => {
+
+    setDisplayName: async (name: string) => {
       set({ error: null });
+      const user = auth.currentUser;
+      if (!user) {
+        set({ error: 'Нет активной сессии, обновите страницу.' });
+        return;
+      }
+      const profile: UserProfile = { uid: user.uid, displayName: name.trim() };
       try {
-        const cred = await createUserWithEmailAndPassword(auth, email, password);
-        await updateProfile(cred.user, { displayName });
-        const profile: UserProfile = {
-          uid: cred.user.uid,
-          email,
-          displayName,
-        };
-        await setDoc(doc(db, 'users', cred.user.uid), profile);
+        await setDoc(doc(db, 'users', user.uid), profile, { merge: true });
       } catch (e) {
-        set({ error: friendlyAuthError(e) });
+        set({ error: `Не удалось сохранить имя: ${(e as Error).message}` });
         throw e;
       }
     },
-    signIn: async (email, password) => {
-      set({ error: null });
-      try {
-        await signInWithEmailAndPassword(auth, email, password);
-      } catch (e) {
-        set({ error: friendlyAuthError(e) });
-        throw e;
-      }
-    },
-    resetPassword: async (email) => {
-      set({ error: null });
-      try {
-        await sendPasswordResetEmail(auth, email);
-      } catch (e) {
-        set({ error: friendlyAuthError(e) });
-        throw e;
-      }
-    },
-    logOut: async () => {
+
+    // "Забыть это устройство" — выходит из анонимной сессии, при следующей загрузке
+    // будет создана новая сессия и понадобится заново ввести имя и код приглашения.
+    forgetDevice: async () => {
       await signOut(auth);
     },
   };
 });
-
-export async function fetchProfileOnce(uid: string): Promise<UserProfile | null> {
-  const snap = await getDoc(doc(db, 'users', uid));
-  return snap.exists() ? (snap.data() as UserProfile) : null;
-}
-
-function friendlyAuthError(e: unknown): string {
-  const code = (e as { code?: string })?.code || '';
-  const map: Record<string, string> = {
-    'auth/email-already-in-use': 'Этот email уже зарегистрирован.',
-    'auth/invalid-email': 'Некорректный email.',
-    'auth/weak-password': 'Пароль слишком простой (минимум 6 символов).',
-    'auth/invalid-credential': 'Неверный email или пароль.',
-    'auth/user-not-found': 'Пользователь не найден.',
-    'auth/wrong-password': 'Неверный пароль.',
-    'auth/missing-email': 'Введите email.',
-    'auth/too-many-requests': 'Слишком много попыток. Попробуйте позже.',
-  };
-  return map[code] || 'Что-то пошло не так. Попробуйте ещё раз.';
-}

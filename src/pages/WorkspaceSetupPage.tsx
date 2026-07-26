@@ -21,7 +21,6 @@ export default function WorkspaceSetupPage() {
       await createWorkspace(name, {
         uid: firebaseUser!.uid,
         displayName: profile!.displayName,
-        email: profile!.email,
         role: 'me',
       });
     } finally {
@@ -37,7 +36,6 @@ export default function WorkspaceSetupPage() {
       await joinWorkspace(code, {
         uid: firebaseUser!.uid,
         displayName: profile!.displayName,
-        email: profile!.email,
         role: 'partner',
       });
     } catch {
