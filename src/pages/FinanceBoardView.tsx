@@ -175,7 +175,16 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
           {pieData.length > 0 ? (
             <ResponsiveContainer width="100%" height={220}>
               <PieChart>
-                <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={50} outerRadius={80} paddingAngle={2}>
+                <Pie
+                  data={pieData}
+                  dataKey="value"
+                  nameKey="name"
+                  innerRadius={50}
+                  outerRadius={80}
+                  paddingAngle={2}
+                  label={({ percent }) => `${Math.round((percent ?? 0) * 100)}%`}
+                  labelLine={false}
+                >
                   {pieData.map((_, i) => (
                     <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                   ))}

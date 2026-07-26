@@ -46,7 +46,16 @@ export default function FinanceOverview({ boards }: { boards: FinanceBoard[] }) 
           <>
             <ResponsiveContainer width="100%" height={320}>
               <PieChart>
-                <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={70} outerRadius={120} paddingAngle={2}>
+                <Pie
+                  data={pieData}
+                  dataKey="value"
+                  nameKey="name"
+                  innerRadius={70}
+                  outerRadius={120}
+                  paddingAngle={2}
+                  label={({ percent }) => `${Math.round((percent ?? 0) * 100)}%`}
+                  labelLine={false}
+                >
                   {pieData.map((_, i) => (
                     <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                   ))}
