@@ -17,7 +17,6 @@ export default function GoalsView({ workspaceId }: { workspaceId: string }) {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-semibold">Наши цели</h1>
-          <p className="text-sm text-neutral-400">Купить машину, поехать в Японию, накопить на квартиру...</p>
         </div>
         <button
           onClick={() => setCreating(true)}
