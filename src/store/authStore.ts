@@ -36,13 +36,27 @@ export const useAuthStore = create<AuthState>((set) => {
     }
     set({ firebaseUser: user, loading: true });
     const ref = doc(db, 'users', user.uid);
-    unsubscribeProfile = onSnapshot(ref, (snap) => {
-      if (snap.exists()) {
-        set({ profile: snap.data() as UserProfile, loading: false });
-      } else {
-        set({ loading: false });
+    unsubscribeProfile = onSnapshot(
+      ref,
+      (snap) => {
+        if (snap.exists()) {
+          set({ profile: snap.data() as UserProfile, loading: false, error: null });
+        } else {
+          set({ loading: false });
+        }
+      },
+      (err) => {
+        // Не даём приложению зависнуть на спиннере, если Firestore недоступен
+        // (чаще всего — не загружены правила безопасности firestore.rules)
+        set({
+          loading: false,
+          error:
+            err.code === 'permission-denied'
+              ? 'Нет доступа к базе данных. Убедитесь, что правила безопасности Firestore загружены (npm run deploy:rules).'
+              : `Ошибка подключения к Firestore: ${err.message}`,
+        });
       }
-    });
+    );
   });
 
   return {

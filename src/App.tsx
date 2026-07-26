@@ -14,7 +14,7 @@ import SettingsView from './pages/SettingsView';
 import { Loader2, Heart } from 'lucide-react';
 
 export default function App() {
-  const { firebaseUser, profile, loading } = useAuthStore();
+  const { firebaseUser, profile, loading, error } = useAuthStore();
   const { workspace, listen: listenWorkspace } = useWorkspaceStore();
   const { listen: listenTasks } = useTaskStore();
   const { listen: listenGoals } = useGoalStore();
@@ -44,6 +44,20 @@ export default function App() {
       <div className="min-h-screen flex flex-col items-center justify-center gap-3 text-neutral-400">
         <Heart size={28} className="text-rose-400" />
         <Loader2 className="animate-spin" size={20} />
+      </div>
+    );
+  }
+
+  if (firebaseUser && !profile && error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <div className="max-w-sm text-center space-y-3">
+          <p className="text-rose-500 text-sm font-medium">{error}</p>
+          <p className="text-xs text-neutral-400">
+            Проверьте .env (ключи Firebase) и что правила Firestore загружены командой{' '}
+            <code className="bg-neutral-100 dark:bg-neutral-800 px-1 rounded">npm run deploy:rules</code>.
+          </p>
+        </div>
       </div>
     );
   }
