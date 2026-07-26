@@ -31,10 +31,16 @@ service cloud.firestore {
         request.resource.data.ownerUid == request.auth.uid &&
         request.resource.data.memberUids.hasOnly([request.auth.uid]);
 
-      // Обновлять может либо существующий участник, либо пользователь,
-      // присоединяющийся по коду (добавляющий самого себя в memberUids).
-      allow update: if isMember(workspaceId) ||
-        (isSignedIn() && request.auth.uid in request.resource.data.memberUids);
+      // Обновлять пространство может:
+      // 1) пользователь, присоединяющийся по коду (добавляет самого себя в memberUids);
+      // 2) владелец пространства — может менять что угодно, включая удаление участников;
+      // 3) любой участник — но не список участников/владельца (совместные настройки:
+      //    название, бюджет, валюта и т.п.).
+      allow update: if
+        (isSignedIn() && request.auth.uid in request.resource.data.memberUids && !(request.auth.uid in resource.data.memberUids)) ||
+        (isSignedIn() && request.auth.uid == resource.data.ownerUid) ||
+        (isMember(workspaceId) &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['members', 'memberUids', 'ownerUid']));
 
       // Удалить пространство может только владелец
       allow delete: if isSignedIn() && resource.data.ownerUid == request.auth.uid;

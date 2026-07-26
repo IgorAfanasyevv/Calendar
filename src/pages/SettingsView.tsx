@@ -1,20 +1,29 @@
 import { useState } from 'react';
-import { Copy, Check, Moon, Sun, LogOut } from 'lucide-react';
+import { Copy, Check, Moon, Sun, LogOut, UserX } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useWorkspaceStore } from '../store/workspaceStore';
 import { useThemeStore } from '../store/themeStore';
 
 export default function SettingsView() {
   const { profile, logOut } = useAuthStore();
-  const { workspace } = useWorkspaceStore();
+  const { workspace, removeMember } = useWorkspaceStore();
   const { dark, toggle } = useThemeStore();
   const [copied, setCopied] = useState(false);
+
+  const isOwner = !!profile && !!workspace && profile.uid === workspace.ownerUid;
 
   function copyInvite() {
     if (!workspace) return;
     navigator.clipboard.writeText(workspace.inviteCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
+  }
+
+  function handleRemove(uid: string, name: string) {
+    if (!workspace) return;
+    if (confirm(`Удалить ${name} из пространства? Он потеряет доступ и сможет вернуться только по новому приглашению.`)) {
+      removeMember(workspace.id, uid);
+    }
   }
 
   return (
@@ -49,11 +58,27 @@ export default function SettingsView() {
         <div className="space-y-1.5">
           {workspace?.members.map((m) => (
             <div key={m.uid} className="flex items-center justify-between text-xs text-neutral-500">
-              <span>{m.displayName}</span>
-              <span>{m.email}</span>
+              <span>{m.displayName}{m.uid === workspace.ownerUid ? ' (владелец)' : ''}</span>
+              <div className="flex items-center gap-2">
+                <span>{m.email}</span>
+                {isOwner && m.uid !== workspace.ownerUid && (
+                  <button
+                    onClick={() => handleRemove(m.uid, m.displayName)}
+                    className="text-neutral-400 hover:text-rose-500"
+                    title="Удалить участника"
+                  >
+                    <UserX size={14} />
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>
+        {!isOwner && (
+          <p className="text-[11px] text-neutral-400">
+            Удалять участников может только владелец пространства.
+          </p>
+        )}
       </div>
 
       <div className="rounded-2xl glass p-5 space-y-4">

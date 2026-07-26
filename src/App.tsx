@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { doc, updateDoc, deleteField } from 'firebase/firestore';
+import { db } from './lib/firebase';
 import { useAuthStore } from './store/authStore';
 import { useWorkspaceStore } from './store/workspaceStore';
 import { useTaskStore } from './store/taskStore';
@@ -29,6 +31,18 @@ export default function App() {
     const unsub = listenWorkspace(profile.workspaceId);
     return unsub;
   }, [profile?.workspaceId, listenWorkspace]);
+
+  // Если владелец удалил этого пользователя из пространства — его uid больше
+  // не входит в memberUids. Сбрасываем локальную привязку к пространству,
+  // чтобы человек вернулся на экран "создать/подключиться по коду".
+  useEffect(() => {
+    if (!workspace || !firebaseUser || !profile?.workspaceId) return;
+    if (workspace.id !== profile.workspaceId) return;
+    if (!workspace.memberUids.includes(firebaseUser.uid)) {
+      useWorkspaceStore.setState({ workspace: null });
+      updateDoc(doc(db, 'users', firebaseUser.uid), { workspaceId: deleteField() }).catch(() => {});
+    }
+  }, [workspace, firebaseUser, profile?.workspaceId]);
 
   useEffect(() => {
     if (!workspace?.id) return;

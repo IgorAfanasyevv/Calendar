@@ -21,6 +21,7 @@ interface WorkspaceState {
   listen: (workspaceId: string) => () => void;
   createWorkspace: (name: string, member: WorkspaceMember) => Promise<string>;
   joinWorkspace: (inviteCode: string, member: WorkspaceMember) => Promise<string>;
+  removeMember: (workspaceId: string, uid: string) => Promise<void>;
   clearError: () => void;
 }
 
@@ -31,7 +32,7 @@ function randomInviteCode(): string {
   return code;
 }
 
-export const useWorkspaceStore = create<WorkspaceState>((set) => ({
+export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   workspace: null,
   loading: false,
   error: null,
@@ -92,5 +93,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       set({ loading: false });
       throw e;
     }
+  },
+
+  // Удалить участника из пространства — по правилам Firestore это может
+  // сделать только владелец (ownerUid) пространства.
+  removeMember: async (workspaceId, uid) => {
+    const current = get().workspace;
+    if (!current) return;
+    const members = current.members.filter((m) => m.uid !== uid);
+    const memberUids = current.memberUids.filter((u) => u !== uid);
+    await updateDoc(doc(db, 'workspaces', workspaceId), { members, memberUids });
   },
 }));
