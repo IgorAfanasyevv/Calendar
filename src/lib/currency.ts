@@ -2,6 +2,7 @@ export const CURRENCIES: Record<string, { symbol: string; label: string }> = {
   RUB: { symbol: '₽', label: 'Рубль (₽)' },
   USD: { symbol: '$', label: 'Доллар ($)' },
   EUR: { symbol: '€', label: 'Евро (€)' },
+  ILS: { symbol: '₪', label: 'Шекель (₪)' },
   GBP: { symbol: '£', label: 'Фунт (£)' },
   KZT: { symbol: '₸', label: 'Тенге (₸)' },
   UAH: { symbol: '₴', label: 'Гривна (₴)' },
