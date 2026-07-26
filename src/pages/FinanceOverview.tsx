@@ -5,6 +5,21 @@ import type { FinanceBoard } from '../types';
 
 const PIE_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#94a3b8', '#14b8a6', '#f43f5e'];
 
+// Рисует процент прямо ВНУТРИ дольки (на середине радиуса кольца), а не снаружи со стрелкой
+function renderInsideLabel(props: { cx?: number; cy?: number; midAngle?: number; innerRadius?: number; outerRadius?: number; percent?: number }) {
+  const { cx = 0, cy = 0, midAngle = 0, innerRadius = 0, outerRadius = 0, percent = 0 } = props;
+  const RADIAN = Math.PI / 180;
+  const radius = innerRadius + (outerRadius - innerRadius) * 0.6;
+  const x = cx + radius * Math.cos(-midAngle * RADIAN);
+  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+  if (percent < 0.04) return null;
+  return (
+    <text x={x} y={y} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight={700}>
+      {`${Math.round(percent * 100)}%`}
+    </text>
+  );
+}
+
 function monthKey(date: string) {
   return date.slice(0, 7);
 }
@@ -53,7 +68,7 @@ export default function FinanceOverview({ boards }: { boards: FinanceBoard[] }) 
                   innerRadius={70}
                   outerRadius={120}
                   paddingAngle={2}
-                  label={({ percent }) => `${Math.round((percent ?? 0) * 100)}%`}
+                  label={renderInsideLabel}
                   labelLine={false}
                 >
                   {pieData.map((_, i) => (
