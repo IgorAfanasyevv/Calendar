@@ -5,6 +5,7 @@ import { useWorkspaceStore } from '../store/workspaceStore';
 import { useAuthStore } from '../store/authStore';
 import type { FoodEntry, MealType } from '../types';
 import AddFoodModal from '../components/AddFoodModal';
+import FitnessAssistant from '../components/FitnessAssistant';
 
 const MEAL_LABELS: Record<MealType, string> = {
   breakfast: 'Завтрак',
@@ -68,6 +69,8 @@ export default function FoodDiaryView({ workspaceId }: { workspaceId: string }) 
 
   return (
     <div className="space-y-6">
+      {isMe && <FitnessAssistant workspaceId={workspaceId} />}
+
       {/* Переключатель "Я" / партнёр */}
       {members.length > 1 && (
         <div className="flex gap-2">
