@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Glassmorphism helper */
+.glass {
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.dark .glass {
+  background: rgba(30, 30, 35, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: rgba(120,120,140,0.35); border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(120,120,140,0.55); }
+
+/* FullCalendar theme tweaks */
+.fc {
+  --fc-border-color: rgba(120,120,140,0.15);
+  --fc-page-bg-color: transparent;
+  --fc-neutral-bg-color: transparent;
+  --fc-today-bg-color: rgba(99,102,241,0.08);
+  font-family: inherit;
+}
+.fc .fc-toolbar-title { font-weight: 700; font-size: 1.1rem; }
+.fc .fc-button {
+  background: var(--fc-btn-bg, #6366f1);
+  border: none;
+  text-transform: capitalize;
+  border-radius: 10px;
+  box-shadow: none !important;
+}
+.fc .fc-button:hover { filter: brightness(1.08); }
+.fc .fc-button-active { filter: brightness(0.9); }
+
+.input {
+  @apply w-full px-3 py-2 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 text-sm;
+}
+
+@keyframes modalIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
