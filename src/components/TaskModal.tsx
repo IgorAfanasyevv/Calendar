@@ -11,17 +11,19 @@ const CATEGORIES = ['Общее', 'Работа', 'Дом', 'Здоровье', 
 export default function TaskModal({
   workspaceId,
   initial,
+  prefillDate,
   onClose,
 }: {
   workspaceId: string;
   initial?: Task;
+  prefillDate?: string;
   onClose: () => void;
 }) {
   const { addTask, updateTask, deleteTask } = useTaskStore();
   const { firebaseUser, profile } = useAuthStore();
   const [title, setTitle] = useState(initial?.title || '');
   const [description, setDescription] = useState(initial?.description || '');
-  const [date, setDate] = useState(initial?.date || new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(initial?.date || prefillDate || new Date().toISOString().slice(0, 10));
   const [time, setTime] = useState(initial?.time || '');
   const [duration, setDuration] = useState(initial?.durationMinutes || 30);
   const [color, setColor] = useState(initial?.color || COLORS[0]);
