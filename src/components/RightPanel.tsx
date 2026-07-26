@@ -5,28 +5,35 @@ import { useGoalStore } from '../store/goalStore';
 import CitiesWeatherCard from './CitiesWeatherCard';
 import CitiesTimeCard from './CitiesTimeCard';
 import ActivityCard from './ActivityCard';
-
-function todayStr() {
-  return new Date().toISOString().slice(0, 10);
-}
+import { effectiveDate, effectiveTime, localDateStr } from '../lib/timezone';
 
 export default function RightPanel() {
   const { tasks } = useTaskStore();
   const { goals } = useGoalStore();
 
-  const today = todayStr();
+  const today = localDateStr(Date.now());
 
-  const todays = useMemo(() => tasks.filter((t) => t.date === today && !t.done), [tasks, today]);
+  const todays = useMemo(
+    () => tasks.filter((t) => effectiveDate(t) === today && !t.done),
+    [tasks, today]
+  );
   const upcoming = useMemo(
     () =>
       tasks
-        .filter((t) => t.date && t.date > today && !t.done)
-        .sort((a, b) => (a.date! > b.date! ? 1 : -1))
+        .filter((t) => {
+          const d = effectiveDate(t);
+          return d && d > today && !t.done;
+        })
+        .sort((a, b) => (effectiveDate(a)! > effectiveDate(b)! ? 1 : -1))
         .slice(0, 5),
     [tasks, today]
   );
   const overdue = useMemo(
-    () => tasks.filter((t) => t.date && t.date < today && !t.done),
+    () =>
+      tasks.filter((t) => {
+        const d = effectiveDate(t);
+        return d && d < today && !t.done;
+      }),
     [tasks, today]
   );
 
@@ -50,20 +57,20 @@ export default function RightPanel() {
 
       <Section icon={CheckCircle2} color="text-indigo-500" title="Сегодня" empty="Нет задач на сегодня">
         {todays.map((t) => (
-          <TaskRow key={t.id} title={t.title} sub={t.time} color={t.color} />
+          <TaskRow key={t.id} title={t.title} sub={effectiveTime(t)} color={t.color} />
         ))}
       </Section>
 
       <Section icon={CalendarClock} color="text-blue-500" title="Ближайшие" empty="Ничего не запланировано">
         {upcoming.map((t) => (
-          <TaskRow key={t.id} title={t.title} sub={t.date} color={t.color} />
+          <TaskRow key={t.id} title={t.title} sub={effectiveDate(t)} color={t.color} />
         ))}
       </Section>
 
       {overdue.length > 0 && (
         <Section icon={AlertTriangle} color="text-rose-500" title="Просрочено" empty="">
           {overdue.map((t) => (
-            <TaskRow key={t.id} title={t.title} sub={t.date} color="#ef4444" />
+            <TaskRow key={t.id} title={t.title} sub={effectiveDate(t)} color="#ef4444" />
           ))}
         </Section>
       )}

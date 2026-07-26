@@ -13,8 +13,9 @@ export interface Task {
   workspaceId: string;
   title: string;
   description?: string;
-  date?: string; // ISO date (yyyy-mm-dd)
-  time?: string; // HH:mm
+  date?: string; // ISO date (yyyy-mm-dd) - как ввёл создатель задачи, в его часовом поясе
+  time?: string; // HH:mm - как ввёл создатель задачи, в его часовом поясе
+  dueAtUtc?: number; // точный момент времени (epoch ms), не зависит от часового пояса — используется для отображения и напоминаний
   durationMinutes?: number;
   color: string;
   category: string;

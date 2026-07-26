@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
+import { deleteField } from 'firebase/firestore';
 import Modal from './Modal';
 import type { Assignee, ChecklistItem, Priority, Task } from '../types';
 import { useTaskStore } from '../store/taskStore';
 import { useAuthStore } from '../store/authStore';
+import { computeDueAtUtc, effectiveDate, effectiveTime } from '../lib/timezone';
 
 const COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444'];
 const CATEGORIES = ['Общее', 'Работа', 'Дом', 'Здоровье', 'Отношения', 'Финансы', 'Путешествия'];
@@ -25,8 +27,12 @@ export default function TaskModal({
   const { firebaseUser, profile } = useAuthStore();
   const [title, setTitle] = useState(initial?.title || '');
   const [description, setDescription] = useState(initial?.description || '');
-  const [date, setDate] = useState(initial?.date || prefillDate || new Date().toISOString().slice(0, 10));
-  const [time, setTime] = useState(initial?.time || '');
+  // Показываем дату/время в часовом поясе ТЕКУЩЕГО пользователя (даже если задачу
+  // создал партнёр в другом часовом поясе) — редактируем то, что видим.
+  const [date, setDate] = useState(
+    (initial ? effectiveDate(initial) : undefined) || prefillDate || new Date().toISOString().slice(0, 10)
+  );
+  const [time, setTime] = useState((initial ? effectiveTime(initial) : undefined) || '');
   const [duration, setDuration] = useState(initial?.durationMinutes || 30);
   const [color, setColor] = useState(initial?.color || COLORS[0]);
   const [category, setCategory] = useState(initial?.category || CATEGORIES[0]);
@@ -49,11 +55,17 @@ export default function TaskModal({
   async function handleSave() {
     if (!title.trim()) return;
     setSaving(true);
+    // dueAtUtc считаем от значений в форме — они всегда в часовом поясе ЭТОГО
+    // устройства, поэтому момент времени получится верным независимо от того,
+    // кто и где редактирует задачу.
+    const dueAtUtc = computeDueAtUtc(date, time);
+    const dueAtUtcValue = dueAtUtc !== undefined ? dueAtUtc : initial ? (deleteField() as unknown as undefined) : undefined;
     const payload = {
       title: title.trim(),
       description,
       date,
       time,
+      dueAtUtc: dueAtUtcValue,
       durationMinutes: duration,
       color,
       category,

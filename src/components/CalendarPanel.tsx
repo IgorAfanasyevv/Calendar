@@ -10,6 +10,7 @@ import { useAuthStore } from '../store/authStore';
 import type { Task } from '../types';
 import TaskModal from './TaskModal';
 import DayTasksModal from './DayTasksModal';
+import { computeDueAtUtc, effectiveDate, localDateStr, localTimeStr } from '../lib/timezone';
 
 export default function CalendarPanel({ workspaceId }: { workspaceId: string }) {
   const { tasks, updateTask } = useTaskStore();
@@ -20,13 +21,15 @@ export default function CalendarPanel({ workspaceId }: { workspaceId: string }) 
 
   const actor = { uid: firebaseUser?.uid || '', name: profile?.displayName || '' };
 
-  // Задачи, сгруппированные по дате — используется и для подсветки клеток, и для клика по дню
+  // Задачи, сгруппированные по дате В ЧАСОВОМ ПОЯСЕ ТЕКУЩЕГО ЗРИТЕЛЯ —
+  // используется и для подсветки клеток, и для клика по дню.
   const tasksByDate = useMemo(() => {
     const map: Record<string, Task[]> = {};
     tasks.forEach((t) => {
-      if (!t.date) return;
-      map[t.date] = map[t.date] || [];
-      map[t.date].push(t);
+      const d = effectiveDate(t);
+      if (!d) return;
+      map[d] = map[d] || [];
+      map[d].push(t);
     });
     return map;
   }, [tasks]);
@@ -36,17 +39,19 @@ export default function CalendarPanel({ workspaceId }: { workspaceId: string }) 
       tasks
         .filter((t) => t.date)
         .map((t) => {
-          const start = t.time ? `${t.date}T${t.time}` : t.date!;
+          // Если известен точный момент (dueAtUtc) — используем его: FullCalendar
+          // сам отрисует его в локальном часовом поясе браузера зрителя.
+          // Если времени нет (только дата) — это событие "на весь день",
+          // часовой пояс тут ни при чём.
+          const start = t.dueAtUtc ? new Date(t.dueAtUtc) : t.date!;
           const end =
-            t.time && t.durationMinutes
-              ? addMinutes(`${t.date}T${t.time}`, t.durationMinutes)
-              : undefined;
+            t.dueAtUtc && t.durationMinutes ? new Date(t.dueAtUtc + t.durationMinutes * 60000) : undefined;
           return {
             id: t.id,
             title: t.title,
             start,
             end,
-            allDay: !t.time,
+            allDay: !t.dueAtUtc,
             backgroundColor: t.color,
             borderColor: t.color,
             textColor: '#fff',
@@ -65,9 +70,15 @@ export default function CalendarPanel({ workspaceId }: { workspaceId: string }) 
     const task = tasks.find((t) => t.id === arg.event.id);
     if (!task) return;
     const start = arg.event.start!;
+    const date = localDateStr(start.getTime());
+    const time = arg.event.allDay ? undefined : localTimeStr(start.getTime());
     await updateTask(
       task.id,
-      { date: toDateStr(start), time: arg.event.allDay ? undefined : toTimeStr(start) },
+      {
+        date,
+        time,
+        dueAtUtc: time ? computeDueAtUtc(date, time) : undefined,
+      },
       actor
     );
   }
@@ -81,7 +92,7 @@ export default function CalendarPanel({ workspaceId }: { workspaceId: string }) 
 
   // Подсвечиваем саму клетку дня цветом задачи (или градиентом, если задач несколько)
   function handleDayCellMount(arg: DayCellMountArg) {
-    const dateStr = toDateStr(arg.date);
+    const dateStr = localDateStr(arg.date.getTime());
     const dayTasks = tasksByDate[dateStr];
     const frame = arg.el.querySelector<HTMLElement>('.fc-daygrid-day-frame') || arg.el;
     // Клетка кликабельна всегда (создание задачи или просмотр списка), курсор ставим в любом случае
@@ -170,18 +181,4 @@ function hexToRgba(hex: string, alpha: number): string {
   const g = (bigint >> 8) & 255;
   const b = bigint & 255;
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
-function addMinutes(dt: string, minutes: number): string {
-  const d = new Date(dt);
-  d.setMinutes(d.getMinutes() + minutes);
-  return d.toISOString().slice(0, 19);
-}
-
-function toDateStr(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-
-function toTimeStr(d: Date): string {
-  return d.toTimeString().slice(0, 5);
 }

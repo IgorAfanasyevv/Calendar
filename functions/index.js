@@ -28,8 +28,12 @@ exports.sendTaskReminders = onSchedule('every 15 minutes', async () => {
     const task = taskDoc.data();
     if (!task.date || !task.workspaceId) continue;
 
-    const dueMs = new Date(`${task.date}T${task.time || '00:00'}:00`).getTime();
-    if (Number.isNaN(dueMs)) continue;
+    // dueAtUtc — точный момент времени, посчитанный на клиенте в часовом поясе
+    // создателя/редактора задачи. Если его нет (старые задачи без времени —
+    // только дата, без dueAtUtc), пропускаем: без времени "напоминание за 1 час"
+    // не имеет смысла, а "за 1 день" в этом случае слишком неточно считать на сервере.
+    if (!task.dueAtUtc) continue;
+    const dueMs = task.dueAtUtc;
     const diff = dueMs - now;
 
     let kind = null;

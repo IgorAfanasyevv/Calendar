@@ -4,6 +4,7 @@ import { useTaskStore } from '../store/taskStore';
 import { useAuthStore } from '../store/authStore';
 import type { Task } from '../types';
 import TaskModal from './TaskModal';
+import { effectiveDate, effectiveTime } from '../lib/timezone';
 
 const ASSIGNEE_LABEL: Record<Task['assignee'], string> = { me: 'Я', partner: 'Партнёр', together: 'Вместе' };
 
@@ -27,7 +28,7 @@ export default function TaskListPanel({ workspaceId }: { workspaceId: string }) 
         const order = { high: 0, medium: 1, low: 2 };
         return order[a.priority] - order[b.priority];
       }
-      return (a.date || '9999').localeCompare(b.date || '9999');
+      return (effectiveDate(a) || '9999').localeCompare(effectiveDate(b) || '9999');
     });
     return list;
   }, [tasks, search, sort, filter]);
@@ -107,8 +108,8 @@ export default function TaskListPanel({ workspaceId }: { workspaceId: string }) 
                 <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-neutral-400">
                   {task.date && (
                     <span className="flex items-center gap-1">
-                      <Clock size={10} /> {task.date}
-                      {task.time ? ` ${task.time}` : ''}
+                      <Clock size={10} /> {effectiveDate(task)}
+                      {effectiveTime(task) ? ` ${effectiveTime(task)}` : ''}
                     </span>
                   )}
                   {task.location && (

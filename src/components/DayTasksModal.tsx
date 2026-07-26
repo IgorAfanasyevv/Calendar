@@ -1,6 +1,7 @@
 import { Plus, Clock, MapPin, Check } from 'lucide-react';
 import Modal from './Modal';
 import type { Task } from '../types';
+import { effectiveTime } from '../lib/timezone';
 
 const ASSIGNEE_LABEL: Record<Task['assignee'], string> = { me: 'Я', partner: 'Партнёр', together: 'Вместе' };
 
@@ -22,7 +23,7 @@ export default function DayTasksModal({
   onAddNew: () => void;
   onClose: () => void;
 }) {
-  const sorted = [...tasks].sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+  const sorted = [...tasks].sort((a, b) => (effectiveTime(a) || '').localeCompare(effectiveTime(b) || ''));
 
   return (
     <Modal title={formatDate(date)} onClose={onClose}>
@@ -51,9 +52,9 @@ export default function DayTasksModal({
                   <p className="text-xs text-neutral-500 dark:text-neutral-400 truncate mt-0.5">{task.description}</p>
                 )}
                 <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-neutral-400">
-                  {task.time && (
+                  {effectiveTime(task) && (
                     <span className="flex items-center gap-1">
-                      <Clock size={10} /> {task.time}
+                      <Clock size={10} /> {effectiveTime(task)}
                     </span>
                   )}
                   {task.location && (
