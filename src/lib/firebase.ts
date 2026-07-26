@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
 // Эти значения берутся из .env (см. .env.example).
@@ -16,3 +16,12 @@ const firebaseConfig = {
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+
+// Явно закрепляем сессию в браузере (localStorage), чтобы имя и пространство
+// не сбрасывались при перезапуске браузера или устройства — сессия живёт,
+// пока пользователь сам не нажмёт "Забыть это устройство".
+setPersistence(auth, browserLocalPersistence).catch(() => {
+  // Если браузер блокирует localStorage (например, часть приватных режимов),
+  // Firebase сам откатится на сессию в памяти — приложение продолжит работать,
+  // просто вход не переживёт перезапуск браузера в этом случае.
+});
