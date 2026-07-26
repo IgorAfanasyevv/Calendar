@@ -123,7 +123,7 @@ export default function CalendarPanel({ workspaceId }: { workspaceId: string }) 
   }
 
   return (
-    <div className="h-full p-4">
+    <div className="h-full p-2 sm:p-4">
       <FullCalendar
         plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
         initialView="dayGridMonth"

@@ -34,7 +34,7 @@ export default function TaskListPanel({ workspaceId }: { workspaceId: string }) 
   }, [tasks, search, sort, filter]);
 
   return (
-    <div className="flex flex-col h-full p-4 gap-3">
+    <div className="flex flex-col h-full p-3 sm:p-4 gap-3">
       <div className="flex items-center justify-between">
         <h2 className="font-semibold text-sm">Задачи</h2>
         <button

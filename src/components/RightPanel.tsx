@@ -41,7 +41,7 @@ export default function RightPanel() {
   const completionPct = tasks.length ? Math.round((doneCount / tasks.length) * 100) : 0;
 
   return (
-    <div className="h-full p-4 space-y-4 overflow-y-auto">
+    <div className="h-full p-3 sm:p-4 space-y-4 overflow-y-auto">
       <ActivityCard />
 
       <div className="rounded-2xl glass p-4 flex items-center justify-between">

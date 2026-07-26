@@ -116,6 +116,41 @@ button:disabled {
   padding: 8px 4px;
 }
 
+/* Мобильные экраны: компактнее клетки, кнопки и панель инструментов */
+@media (max-width: 640px) {
+  .fc .fc-daygrid-day-frame {
+    min-height: 62px;
+  }
+  .fc .fc-toolbar {
+    flex-direction: column;
+    gap: 8px;
+    align-items: stretch;
+  }
+  .fc .fc-toolbar-chunk {
+    display: flex;
+    justify-content: center;
+  }
+  .fc .fc-toolbar-title {
+    font-size: 0.95rem;
+  }
+  .fc .fc-button {
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+  .fc .fc-daygrid-event {
+    font-size: 10px;
+    padding: 1px 4px;
+  }
+  .fc .fc-col-header-cell-cushion {
+    font-size: 10px;
+    padding: 5px 2px;
+  }
+  .fc .fc-daygrid-day-number {
+    font-size: 11px;
+    padding: 2px 4px;
+  }
+}
+
 .input {
   @apply w-full px-3 py-2 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 text-sm;
 }
