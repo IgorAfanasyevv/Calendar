@@ -83,10 +83,12 @@ export default function CalendarPanel({ workspaceId }: { workspaceId: string }) 
   function handleDayCellMount(arg: DayCellMountArg) {
     const dateStr = toDateStr(arg.date);
     const dayTasks = tasksByDate[dateStr];
+    const frame = arg.el.querySelector<HTMLElement>('.fc-daygrid-day-frame') || arg.el;
+    // Клетка кликабельна всегда (создание задачи или просмотр списка), курсор ставим в любом случае
+    frame.style.cursor = 'pointer';
     if (!dayTasks || dayTasks.length === 0) return;
 
     const colors = Array.from(new Set(dayTasks.map((t) => t.color)));
-    const frame = arg.el.querySelector<HTMLElement>('.fc-daygrid-day-frame') || arg.el;
 
     if (colors.length === 1) {
       frame.style.backgroundColor = hexToRgba(colors[0], 0.14);
@@ -95,7 +97,6 @@ export default function CalendarPanel({ workspaceId }: { workspaceId: string }) 
       frame.style.background = `linear-gradient(90deg, ${stops.join(', ')})`;
     }
     frame.style.borderRadius = '10px';
-    frame.style.cursor = 'pointer';
   }
 
   // Клик по клетке дня (не по самой задаче) — показать список задач на этот день,
