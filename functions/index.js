@@ -293,3 +293,300 @@ ${goal ? `Дневная цель ${name} по калориям: ${goal} кка�
 
   throw new HttpsError('invalid-argument', 'Неизвестное действие.');
 });
+
+// ---------------------------------------------------------------------------
+// Общий ИИ-помощник (доступен из любого экрана приложения): отвечает на вопросы
+// по данным пространства и может сам создавать задачи/покупки/шаги целей/
+// финансовые записи через tool use.
+// ---------------------------------------------------------------------------
+
+const { randomUUID } = require('crypto');
+
+const ASSISTANT_TOOLS = [
+  {
+    name: 'create_task',
+    description: 'Создать новую задачу в разделе Задачи/Календарь.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Название задачи' },
+        date: { type: 'string', description: 'Дата в формате YYYY-MM-DD, если указана' },
+        time: { type: 'string', description: 'Время в формате HH:mm, если указано' },
+        category: { type: 'string', description: 'Категория, например Работа, Дом, Здоровье' },
+        priority: { type: 'string', enum: ['low', 'medium', 'high'] },
+        assignee: { type: 'string', enum: ['me', 'partner', 'together'], description: 'Кто выполняет' },
+      },
+      required: ['title'],
+    },
+  },
+  {
+    name: 'create_shopping_item',
+    description: 'Добавить товар в список покупок.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        category: { type: 'string' },
+        price: { type: 'number' },
+        quantity: { type: 'number' },
+      },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'create_goal',
+    description: 'Создать новую цель (используй, если пользователь просит новую цель или разбить что-то новое на шаги).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string' },
+        description: { type: 'string' },
+        steps: { type: 'array', items: { type: 'string' }, description: 'Шаги для достижения цели' },
+      },
+      required: ['title'],
+    },
+  },
+  {
+    name: 'add_goal_steps',
+    description: 'Добавить шаги к уже существующей цели (найди её по названию среди списка целей в контексте).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        goal_title: { type: 'string', description: 'Точное или похожее название существующей цели' },
+        steps: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['goal_title', 'steps'],
+    },
+  },
+  {
+    name: 'add_finance_entry',
+    description: 'Добавить доход или расход в одну из вкладок финансов (найди вкладку по названию среди списка в контексте).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        board_name: { type: 'string', description: 'Название вкладки финансов' },
+        type: { type: 'string', enum: ['income', 'expense'] },
+        amount: { type: 'number' },
+        category: { type: 'string' },
+        note: { type: 'string' },
+        date: { type: 'string', description: 'YYYY-MM-DD, по умолчанию сегодня' },
+      },
+      required: ['board_name', 'type', 'amount', 'category'],
+    },
+  },
+];
+
+async function buildAssistantContext(workspaceId, uid, actorName) {
+  const today = todayStr();
+
+  const [tasksSnap, goalsSnap, shoppingSnap, boardsSnap] = await Promise.all([
+    db.collection('workspaces').doc(workspaceId).collection('tasks').where('done', '==', false).limit(30).get(),
+    db.collection('workspaces').doc(workspaceId).collection('goals').limit(20).get(),
+    db.collection('workspaces').doc(workspaceId).collection('shopping').where('bought', '==', false).limit(30).get(),
+    db.collection('workspaces').doc(workspaceId).collection('financeBoards').get(),
+  ]);
+
+  const tasks = tasksSnap.docs.map((d) => {
+    const t = d.data();
+    return { title: t.title, date: t.date || null, time: t.time || null, category: t.category, assignee: t.assignee };
+  });
+
+  const goals = goalsSnap.docs.map((d) => {
+    const g = d.data();
+    return { title: g.title, progress: g.progress, steps: (g.steps || []).map((s) => ({ text: s.text, done: s.done })) };
+  });
+
+  const shopping = shoppingSnap.docs.map((d) => {
+    const s = d.data();
+    return { name: s.name, category: s.category, quantity: s.quantity };
+  });
+
+  const monthPrefix = today.slice(0, 7);
+  const boards = [];
+  for (const boardDoc of boardsSnap.docs) {
+    const board = boardDoc.data();
+    const entriesSnap = await db
+      .collection('workspaces')
+      .doc(workspaceId)
+      .collection('financeBoards')
+      .doc(boardDoc.id)
+      .collection('entries')
+      .where('date', '>=', `${monthPrefix}-01`)
+      .where('date', '<=', `${monthPrefix}-31`)
+      .get();
+    let income = 0;
+    let expense = 0;
+    entriesSnap.docs.forEach((e) => {
+      const data = e.data();
+      if (data.planned) return;
+      if (data.type === 'income') income += data.amount || 0;
+      else expense += data.amount || 0;
+    });
+    boards.push({
+      name: board.name,
+      currency: board.currency,
+      monthlyBudget: board.monthlyBudget || null,
+      thisMonthIncome: income,
+      thisMonthExpense: expense,
+    });
+  }
+
+  return `Сегодня ${today}. Текущий пользователь: ${actorName}.
+
+Активные задачи (до 30): ${JSON.stringify(tasks)}
+
+Цели: ${JSON.stringify(goals)}
+
+Список покупок (не куплено): ${JSON.stringify(shopping)}
+
+Вкладки финансов (доходы/расходы за этот месяц, без учёта запланированных): ${JSON.stringify(boards)}`;
+}
+
+async function executeAssistantTool(name, input, ctx) {
+  const { workspaceId, uid, actorName } = ctx;
+
+  if (name === 'create_task') {
+    const ref = db.collection('workspaces').doc(workspaceId).collection('tasks').doc();
+    await ref.set({
+      title: input.title,
+      description: '',
+      date: input.date || null,
+      time: input.time || null,
+      color: '#6366f1',
+      category: input.category || 'Общее',
+      priority: input.priority || 'medium',
+      repeat: 'none',
+      assignee: input.assignee || 'together',
+      done: false,
+      checklist: [],
+      workspaceId,
+      createdBy: uid,
+      createdByName: actorName,
+      createdAt: Date.now(),
+    });
+    return { ok: true, created: 'task', title: input.title };
+  }
+
+  if (name === 'create_shopping_item') {
+    const ref = db.collection('workspaces').doc(workspaceId).collection('shopping').doc();
+    await ref.set({
+      name: input.name,
+      category: input.category || 'Продукты',
+      price: input.price || null,
+      quantity: input.quantity || 1,
+      bought: false,
+      workspaceId,
+      createdAt: Date.now(),
+    });
+    return { ok: true, created: 'shopping_item', name: input.name };
+  }
+
+  if (name === 'create_goal') {
+    const ref = db.collection('workspaces').doc(workspaceId).collection('goals').doc();
+    await ref.set({
+      title: input.title,
+      description: input.description || '',
+      progress: 0,
+      steps: (input.steps || []).map((text) => ({ id: randomUUID(), text, done: false })),
+      workspaceId,
+      createdAt: Date.now(),
+      createdByName: actorName,
+    });
+    return { ok: true, created: 'goal', title: input.title };
+  }
+
+  if (name === 'add_goal_steps') {
+    const goalsSnap = await db.collection('workspaces').doc(workspaceId).collection('goals').get();
+    const target = goalsSnap.docs.find((d) =>
+      (d.data().title || '').toLowerCase().includes((input.goal_title || '').toLowerCase())
+    );
+    if (!target) return { ok: false, error: `Цель «${input.goal_title}» не найдена` };
+    const current = target.data().steps || [];
+    const newSteps = (input.steps || []).map((text) => ({ id: randomUUID(), text, done: false }));
+    await target.ref.update({ steps: [...current, ...newSteps] });
+    return { ok: true, updated: 'goal_steps', goal: target.data().title, added: newSteps.length };
+  }
+
+  if (name === 'add_finance_entry') {
+    const boardsSnap = await db.collection('workspaces').doc(workspaceId).collection('financeBoards').get();
+    const targetBoard = boardsSnap.docs.find((d) =>
+      (d.data().name || '').toLowerCase().includes((input.board_name || '').toLowerCase())
+    );
+    if (!targetBoard) return { ok: false, error: `Вкладка финансов «${input.board_name}» не найдена` };
+    const ref = targetBoard.ref.collection('entries').doc();
+    await ref.set({
+      type: input.type,
+      amount: input.amount,
+      category: input.category,
+      note: input.note || '',
+      date: input.date || todayStr(),
+      workspaceId,
+      boardId: targetBoard.id,
+      createdAt: Date.now(),
+      createdByName: actorName,
+    });
+    return { ok: true, created: 'finance_entry', board: targetBoard.data().name, amount: input.amount };
+  }
+
+  return { ok: false, error: `Неизвестный инструмент: ${name}` };
+}
+
+exports.assistant = onCall({ secrets: ['ANTHROPIC_API_KEY'] }, async (request) => {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'Нужно войти в аккаунт.');
+
+  const { workspaceId, message, history } = request.data || {};
+  if (!workspaceId || !message) throw new HttpsError('invalid-argument', 'Не хватает параметров.');
+
+  const info = await getMember(workspaceId, uid);
+  if (!info) throw new HttpsError('permission-denied', 'Вы не участник этого пространства.');
+  const actorName = (info.member && info.member.displayName) || 'Пользователь';
+
+  const context = await buildAssistantContext(workspaceId, uid, actorName);
+  const systemPrompt = `Ты — помощник в семейном приложении-органайзере для пары (задачи, календарь, цели, покупки, финансы). ` +
+    `Ты можешь отвечать на вопросы по данным пространства и создавать/дополнять записи через инструменты. ` +
+    `Если пользователь просит что-то создать — используй подходящий инструмент, не выдумывай, что уже сделано, пока реально не вызвал инструмент. ` +
+    `Если данных не хватает для действия (например, не нашлась вкладка финансов или цель) — прямо скажи об этом. ` +
+    `Отвечай по-русски, кратко и по-дружески.\n\n${context}`;
+
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+  const messages = [...(Array.isArray(history) ? history.slice(-8) : []), { role: 'user', content: message }];
+
+  let response = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 1024,
+    system: systemPrompt,
+    tools: ASSISTANT_TOOLS,
+    messages,
+  });
+
+  let iterations = 0;
+  while (response.stop_reason === 'tool_use' && iterations < 3) {
+    const toolUseBlocks = response.content.filter((b) => b.type === 'tool_use');
+    const toolResults = [];
+    for (const block of toolUseBlocks) {
+      let result;
+      try {
+        result = await executeAssistantTool(block.name, block.input, { workspaceId, uid, actorName });
+      } catch (err) {
+        logger.error('Ошибка инструмента ассистента', err);
+        result = { ok: false, error: 'Внутренняя ошибка при выполнении действия' };
+      }
+      toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(result) });
+    }
+    messages.push({ role: 'assistant', content: response.content });
+    messages.push({ role: 'user', content: toolResults });
+    response = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1024,
+      system: systemPrompt,
+      tools: ASSISTANT_TOOLS,
+      messages,
+    });
+    iterations++;
+  }
+
+  const finalText = response.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
+  return { text: finalText || 'Готово.', messages: messages.concat([{ role: 'assistant', content: response.content }]) };
+});

@@ -16,6 +16,7 @@ import ShoppingView from './pages/ShoppingView';
 import FinanceView from './pages/FinanceView';
 import FitnessView from './pages/FitnessView';
 import SettingsView from './pages/SettingsView';
+import GlobalAssistant from './components/GlobalAssistant';
 import { Loader2, Heart } from 'lucide-react';
 
 export default function App() {
@@ -93,13 +94,16 @@ export default function App() {
   }
 
   return (
-    <Layout tab={tab} onTabChange={setTab}>
-      {tab === 'home' && <HomeView workspaceId={workspace.id} />}
-      {tab === 'goals' && <GoalsView workspaceId={workspace.id} />}
-      {tab === 'shopping' && <ShoppingView workspaceId={workspace.id} />}
-      {tab === 'finance' && <FinanceView workspaceId={workspace.id} />}
-      {tab === 'fitness' && <FitnessView workspaceId={workspace.id} />}
-      {tab === 'settings' && <SettingsView />}
-    </Layout>
+    <>
+      <Layout tab={tab} onTabChange={setTab}>
+        {tab === 'home' && <HomeView workspaceId={workspace.id} />}
+        {tab === 'goals' && <GoalsView workspaceId={workspace.id} />}
+        {tab === 'shopping' && <ShoppingView workspaceId={workspace.id} />}
+        {tab === 'finance' && <FinanceView workspaceId={workspace.id} />}
+        {tab === 'fitness' && <FitnessView workspaceId={workspace.id} />}
+        {tab === 'settings' && <SettingsView />}
+      </Layout>
+      <GlobalAssistant />
+    </>
   );
 }
