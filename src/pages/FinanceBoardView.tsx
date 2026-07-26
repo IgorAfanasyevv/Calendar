@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Plus, Trash2, Wallet, TrendingUp, TrendingDown, PiggyBank, Pencil } from 'lucide-react';
+import { Plus, Trash2, Wallet, TrendingUp, TrendingDown, PiggyBank, Pencil, Check, CalendarClock } from 'lucide-react';
 import {
   PieChart,
   Pie,
@@ -50,11 +50,22 @@ function monthLabel(key: string) {
 }
 
 export default function FinanceBoardView({ workspaceId, board }: { workspaceId: string; board: FinanceBoard }) {
-  const { entriesByBoard, addEntry, deleteEntry } = useFinanceStore();
+  const { entriesByBoard, addEntry, deleteEntry, markPaid } = useFinanceStore();
   const { setBudget, setCurrency } = useFinanceBoardStore();
   const { firebaseUser, profile } = useAuthStore();
   const actor = { uid: firebaseUser?.uid || '', name: profile?.displayName || '' };
-  const entries = entriesByBoard[board.id] || [];
+  const allEntries = entriesByBoard[board.id] || [];
+  // Предстоящие (запланированные, ещё не оплаченные) траты не участвуют в подсчёте
+  // фактических расходов/бюджета/диаграмм — только в своём отдельном разделе.
+  const entries = useMemo(() => allEntries.filter((e) => !e.planned), [allEntries]);
+  const plannedEntries = useMemo(
+    () => allEntries.filter((e) => e.planned).sort((a, b) => a.date.localeCompare(b.date)),
+    [allEntries]
+  );
+  const plannedTotal = useMemo(
+    () => plannedEntries.filter((e) => e.type === 'expense').reduce((s, e) => s + e.amount, 0),
+    [plannedEntries]
+  );
 
   const [adding, setAdding] = useState(false);
   const [editingBudget, setEditingBudget] = useState(false);
@@ -235,6 +246,48 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
         </div>
       </div>
 
+      {/* Предстоящие траты — запланированные, ещё не оплаченные */}
+      <div className="rounded-2xl glass p-4">
+        <div className="flex items-center justify-between mb-3">
+          <span className="flex items-center gap-1.5 text-sm font-semibold text-amber-600 dark:text-amber-400">
+            <CalendarClock size={15} /> Предстоящие траты
+          </span>
+          {plannedTotal > 0 && (
+            <span className="text-xs text-neutral-400">Итого: {fmt(plannedTotal)}</span>
+          )}
+        </div>
+        {plannedEntries.length > 0 ? (
+          <div className="space-y-1.5">
+            {plannedEntries.map((e) => (
+              <div key={e.id} className="flex items-center gap-3 rounded-xl bg-amber-50/60 dark:bg-amber-500/10 px-3 py-2.5">
+                <span className={`w-2 h-2 rounded-full shrink-0 ${e.type === 'income' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm truncate">{e.category}{e.note ? ` — ${e.note}` : ''}</p>
+                  <p className="text-[11px] text-neutral-400">{e.date} · {e.createdByName}</p>
+                </div>
+                <span className={`text-sm font-semibold shrink-0 ${e.type === 'income' ? 'text-emerald-500' : 'text-rose-500'}`}>
+                  {e.type === 'income' ? '+' : '-'}{fmt(e.amount)}
+                </span>
+                <button
+                  onClick={() => markPaid(e, actor)}
+                  className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 hover:text-emerald-700 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-1 rounded-lg shrink-0"
+                  title="Отметить оплаченным"
+                >
+                  <Check size={12} /> Оплачено
+                </button>
+                <button onClick={() => deleteEntry(e, actor)} className="text-neutral-400 hover:text-rose-500 shrink-0">
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-neutral-400">
+            Нет предстоящих трат — при добавлении операции отметьте галочку "Запланировано"
+          </p>
+        )}
+      </div>
+
       {/* Transaction list grouped by month */}
       <div className="space-y-5">
         {grouped.map(([key, list]) => (
@@ -328,6 +381,7 @@ function AddEntryModal({
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [saving, setSaving] = useState(false);
   const [newCategoryInput, setNewCategoryInput] = useState<string | null>(null);
+  const [planned, setPlanned] = useState(false);
 
   const categories = type === 'income' ? board.incomeCategories : board.expenseCategories;
 
@@ -364,7 +418,7 @@ function AddEntryModal({
     if (!val || val <= 0) return;
     setSaving(true);
     try {
-      await onSave(workspaceId, board.id, { type, amount: val, category, note, date }, actor, board.currency);
+      await onSave(workspaceId, board.id, { type, amount: val, category, note, date, planned }, actor, board.currency);
       onClose();
     } finally {
       setSaving(false);
@@ -429,6 +483,11 @@ function AddEntryModal({
         <input className="input" placeholder="Комментарий (необязательно)" value={note} onChange={(e) => setNote(e.target.value)} />
 
         <input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} />
+
+        <label className="flex items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400 px-1">
+          <input type="checkbox" checked={planned} onChange={(e) => setPlanned(e.target.checked)} />
+          Запланировано (ещё не оплачено — попадёт в "Предстоящие траты")
+        </label>
 
         <button
           onClick={handleSave}

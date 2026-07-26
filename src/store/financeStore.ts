@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import type { FinanceEntry } from '../types';
 import { logActivity } from './activityStore';
@@ -16,6 +16,7 @@ interface FinanceState {
     currency?: string
   ) => Promise<void>;
   deleteEntry: (entry: FinanceEntry, actor: { uid: string; name: string }) => Promise<void>;
+  markPaid: (entry: FinanceEntry, actor: { uid: string; name: string }) => Promise<void>;
 }
 
 export const useFinanceStore = create<FinanceState>((set) => ({
@@ -54,5 +55,13 @@ export const useFinanceStore = create<FinanceState>((set) => ({
   deleteEntry: async (entry, actor) => {
     await deleteDoc(doc(db, 'workspaces', entry.workspaceId, 'financeBoards', entry.boardId, 'entries', entry.id));
     logActivity(entry.workspaceId, actor.uid, actor.name, `удалил(а) операцию «${entry.category}»`);
+  },
+  markPaid: async (entry, actor) => {
+    const today = new Date().toISOString().slice(0, 10);
+    await updateDoc(doc(db, 'workspaces', entry.workspaceId, 'financeBoards', entry.boardId, 'entries', entry.id), {
+      planned: false,
+      date: entry.date < today ? today : entry.date,
+    });
+    logActivity(entry.workspaceId, actor.uid, actor.name, `отметил(а) оплаченным «${entry.category}»`);
   },
 }));

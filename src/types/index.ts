@@ -77,6 +77,7 @@ export interface FinanceEntry {
   category: string;
   note?: string;
   date: string; // yyyy-mm-dd
+  planned?: boolean; // true = запланированная будущая трата, ещё не оплачена
   createdAt: number;
   createdByName: string;
 }
