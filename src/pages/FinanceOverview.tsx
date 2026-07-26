@@ -12,9 +12,11 @@ function renderInsideLabel(props: { cx?: number; cy?: number; midAngle?: number;
   const radius = innerRadius + (outerRadius - innerRadius) * 0.6;
   const x = cx + radius * Math.cos(-midAngle * RADIAN);
   const y = cy + radius * Math.sin(-midAngle * RADIAN);
-  if (percent < 0.04) return null;
+  if (percent < 0.03) return null; // слишком маленькая долька — цифры туда не влезут читаемо
+  // Размер шрифта гибко подстраивается под размер дольки, чтобы цифры не вылезали за края
+  const fontSize = percent > 0.18 ? 13 : percent > 0.1 ? 11.5 : percent > 0.06 ? 10 : 8.5;
   return (
-    <text x={x} y={y} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight={700}>
+    <text x={x} y={y} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={fontSize} fontWeight={700}>
       {`${Math.round(percent * 100)}%`}
     </text>
   );
