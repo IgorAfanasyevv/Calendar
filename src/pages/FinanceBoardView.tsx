@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Plus, Trash2, Wallet, TrendingUp, TrendingDown, PiggyBank, Pencil, Check, CalendarClock } from 'lucide-react';
+import { Plus, Trash2, Wallet, TrendingUp, TrendingDown, PiggyBank, Pencil, Check, CalendarClock, ChevronLeft, ChevronRight } from 'lucide-react';
 import {
   PieChart,
   Pie,
@@ -49,6 +49,21 @@ function monthLabel(key: string) {
   return `${names[Number(m) - 1]} ${y.slice(2)}`;
 }
 
+function fullMonthLabel(key: string) {
+  const [y, m] = key.split('-');
+  const names = [
+    'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+    'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
+  ];
+  return `${names[Number(m) - 1]} ${y}`;
+}
+
+function shiftMonth(key: string, delta: number): string {
+  const [y, m] = key.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
 export default function FinanceBoardView({ workspaceId, board }: { workspaceId: string; board: FinanceBoard }) {
   const { entriesByBoard, addEntry, deleteEntry, payInstallment } = useFinanceStore();
   const { setBudget, setCurrency } = useFinanceBoardStore();
@@ -78,11 +93,12 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
   const symbol = currencySymbol(board.currency);
   const fmt = (n: number) => `${n.toLocaleString('ru-RU')} ${symbol}`;
 
-  const currentMonth = new Date().toISOString().slice(0, 7);
+  const todayMonth = new Date().toISOString().slice(0, 7);
+  const [selectedMonth, setSelectedMonth] = useState(todayMonth);
 
-  const thisMonthEntries = useMemo(() => entries.filter((e) => monthKey(e.date) === currentMonth), [entries, currentMonth]);
-  const income = useMemo(() => thisMonthEntries.filter((e) => e.type === 'income').reduce((s, e) => s + e.amount, 0), [thisMonthEntries]);
-  const expense = useMemo(() => thisMonthEntries.filter((e) => e.type === 'expense').reduce((s, e) => s + e.amount, 0), [thisMonthEntries]);
+  const monthEntries = useMemo(() => entries.filter((e) => monthKey(e.date) === selectedMonth), [entries, selectedMonth]);
+  const income = useMemo(() => monthEntries.filter((e) => e.type === 'income').reduce((s, e) => s + e.amount, 0), [monthEntries]);
+  const expense = useMemo(() => monthEntries.filter((e) => e.type === 'expense').reduce((s, e) => s + e.amount, 0), [monthEntries]);
   const balance = income - expense;
   const budget = board.monthlyBudget || 0;
   const budgetLeft = budget - expense;
@@ -90,13 +106,13 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
 
   const pieData = useMemo(() => {
     const byCategory: Record<string, number> = {};
-    thisMonthEntries
+    monthEntries
       .filter((e) => e.type === 'expense')
       .forEach((e) => {
         byCategory[e.category] = (byCategory[e.category] || 0) + e.amount;
       });
     return Object.entries(byCategory).map(([name, value]) => ({ name, value }));
-  }, [thisMonthEntries]);
+  }, [monthEntries]);
 
   const monthlyData = useMemo(() => {
     const byMonth: Record<string, { income: number; expense: number }> = {};
@@ -111,15 +127,11 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
       .map(([key, v]) => ({ month: monthLabel(key), Доходы: v.income, Расходы: v.expense }));
   }, [entries]);
 
-  const grouped = useMemo(() => {
-    const map: Record<string, FinanceEntry[]> = {};
-    entries.forEach((e) => {
-      const key = monthKey(e.date);
-      map[key] = map[key] || [];
-      map[key].push(e);
-    });
-    return Object.entries(map).sort(([a], [b]) => b.localeCompare(a));
-  }, [entries]);
+  // Список операций именно за выбранный месяц (навигация стрелками выше)
+  const monthTransactions = useMemo(
+    () => [...monthEntries].sort((a, b) => b.date.localeCompare(a.date)),
+    [monthEntries]
+  );
 
   async function saveBudget() {
     const val = Number(budgetInput);
@@ -152,19 +164,46 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
         </div>
       </div>
 
+      {/* Навигация по месяцам */}
+      <div className="flex items-center justify-center gap-3">
+        <button
+          onClick={() => setSelectedMonth(shiftMonth(selectedMonth, -1))}
+          className="w-8 h-8 flex items-center justify-center rounded-full bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700"
+        >
+          <ChevronLeft size={16} />
+        </button>
+        <div className="text-center min-w-[140px]">
+          <p className="text-sm font-semibold">{fullMonthLabel(selectedMonth)}</p>
+          {selectedMonth !== todayMonth && (
+            <button
+              onClick={() => setSelectedMonth(todayMonth)}
+              className="text-[11px] text-indigo-500 hover:text-indigo-600"
+            >
+              Вернуться к текущему
+            </button>
+          )}
+        </div>
+        <button
+          onClick={() => setSelectedMonth(shiftMonth(selectedMonth, 1))}
+          className="w-8 h-8 flex items-center justify-center rounded-full bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700"
+        >
+          <ChevronRight size={16} />
+        </button>
+      </div>
+
       {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <SummaryCard icon={TrendingUp} color="text-emerald-500" label="Доходы (месяц)" value={fmt(income)} />
-        <SummaryCard icon={TrendingDown} color="text-rose-500" label="Расходы (месяц)" value={fmt(expense)} />
+        <SummaryCard icon={TrendingUp} color="text-emerald-500" label="Доходы" value={fmt(income)} />
+        <SummaryCard icon={TrendingDown} color="text-rose-500" label="Расходы" value={fmt(expense)} />
         <SummaryCard
           icon={PiggyBank}
           color={balance >= 0 ? 'text-indigo-500' : 'text-rose-500'}
-          label="Баланс (месяц)"
+          label="Баланс"
           value={fmt(balance)}
         />
         <div className="rounded-2xl glass p-4">
           <div className="flex items-center gap-2 text-xs font-medium text-neutral-500 mb-1">
-            <Wallet size={14} className="text-amber-500" /> Бюджет на месяц
+            <Wallet size={14} className="text-amber-500" /> Бюджет
             <button onClick={() => setEditingBudget(true)} className="ml-auto text-neutral-400 hover:text-indigo-500">
               <Pencil size={12} />
             </button>
@@ -203,7 +242,7 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
       {/* Charts */}
       <div className="grid sm:grid-cols-2 gap-4">
         <div className="rounded-2xl glass p-4">
-          <h3 className="text-sm font-semibold mb-2">Расходы по категориям (месяц)</h3>
+          <h3 className="text-sm font-semibold mb-2">Расходы по категориям — {fullMonthLabel(selectedMonth).toLowerCase()}</h3>
           {pieData.length > 0 ? (
             <ResponsiveContainer width="100%" height={220}>
               <PieChart>
@@ -308,33 +347,33 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
         )}
       </div>
 
-      {/* Transaction list grouped by month */}
-      <div className="space-y-5">
-        {grouped.map(([key, list]) => (
-          <div key={key}>
-            <h3 className="text-xs font-semibold text-neutral-400 uppercase tracking-wide mb-2">{monthLabel(key)}</h3>
-            <div className="space-y-1.5">
-              {list.map((e) => (
-                <div key={e.id} className="flex items-center gap-3 rounded-xl glass px-3 py-2.5">
-                  <span
-                    className={`w-2 h-2 rounded-full shrink-0 ${e.type === 'income' ? 'bg-emerald-500' : 'bg-rose-500'}`}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm truncate">{e.category}{e.note ? ` — ${e.note}` : ''}</p>
-                    <p className="text-[11px] text-neutral-400">{e.date} · {e.createdByName}</p>
-                  </div>
-                  <span className={`text-sm font-semibold shrink-0 ${e.type === 'income' ? 'text-emerald-500' : 'text-rose-500'}`}>
-                    {e.type === 'income' ? '+' : '-'}{fmt(e.amount)}
-                  </span>
-                  <button onClick={() => deleteEntry(e, actor)} className="text-neutral-400 hover:text-rose-500 shrink-0">
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              ))}
+      {/* Список операций за выбранный месяц */}
+      <div>
+        <h3 className="text-xs font-semibold text-neutral-400 uppercase tracking-wide mb-2">
+          Операции — {fullMonthLabel(selectedMonth)}
+        </h3>
+        <div className="space-y-1.5">
+          {monthTransactions.map((e) => (
+            <div key={e.id} className="flex items-center gap-3 rounded-xl glass px-3 py-2.5">
+              <span className={`w-2 h-2 rounded-full shrink-0 ${e.type === 'income' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm truncate">{e.category}{e.note ? ` — ${e.note}` : ''}</p>
+                <p className="text-[11px] text-neutral-400">{e.date} · {e.createdByName}</p>
+              </div>
+              <span className={`text-sm font-semibold shrink-0 ${e.type === 'income' ? 'text-emerald-500' : 'text-rose-500'}`}>
+                {e.type === 'income' ? '+' : '-'}{fmt(e.amount)}
+              </span>
+              <button onClick={() => deleteEntry(e, actor)} className="text-neutral-400 hover:text-rose-500 shrink-0">
+                <Trash2 size={14} />
+              </button>
             </div>
-          </div>
-        ))}
-        {grouped.length === 0 && <p className="text-sm text-neutral-400 text-center py-12">Пока нет операций 💰</p>}
+          ))}
+          {monthTransactions.length === 0 && (
+            <p className="text-sm text-neutral-400 text-center py-12">
+              Нет операций за {fullMonthLabel(selectedMonth).toLowerCase()} 💰
+            </p>
+          )}
+        </div>
       </div>
 
       {adding && (
@@ -343,6 +382,7 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
           board={board}
           actor={actor}
           symbol={symbol}
+          selectedMonth={selectedMonth}
           onSave={addEntry}
           onClose={() => setAdding(false)}
         />
@@ -457,6 +497,7 @@ function AddEntryModal({
   board,
   actor,
   symbol,
+  selectedMonth,
   onSave,
   onClose,
 }: {
@@ -464,6 +505,7 @@ function AddEntryModal({
   board: FinanceBoard;
   actor: { uid: string; name: string };
   symbol: string;
+  selectedMonth: string;
   onSave: (
     workspaceId: string,
     boardId: string,
@@ -478,7 +520,12 @@ function AddEntryModal({
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState(board.expenseCategories[0]);
   const [note, setNote] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  // Если открыт не текущий месяц (навигация стрелками) — по умолчанию подставляем
+  // 1-е число ЭТОГО месяца, чтобы было удобно планировать траты наперёд.
+  const todayMonth = new Date().toISOString().slice(0, 7);
+  const [date, setDate] = useState(
+    selectedMonth === todayMonth ? new Date().toISOString().slice(0, 10) : `${selectedMonth}-01`
+  );
   const [saving, setSaving] = useState(false);
   const [newCategoryInput, setNewCategoryInput] = useState<string | null>(null);
   const [planned, setPlanned] = useState(false);
