@@ -73,9 +73,18 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
   // Предстоящие (запланированные, ещё не оплаченные) траты не участвуют в подсчёте
   // фактических расходов/бюджета/диаграмм — только в своём отдельном разделе.
   const entries = useMemo(() => allEntries.filter((e) => !e.planned), [allEntries]);
+
+  const todayMonth = new Date().toISOString().slice(0, 7);
+  const [selectedMonth, setSelectedMonth] = useState(todayMonth);
+
+  // Предстоящие траты тоже привязаны к выбранному месяцу — навигация стрелками
+  // переключает их вместе со всем остальным.
   const plannedEntries = useMemo(
-    () => allEntries.filter((e) => e.planned).sort((a, b) => a.date.localeCompare(b.date)),
-    [allEntries]
+    () =>
+      allEntries
+        .filter((e) => e.planned && monthKey(e.date) === selectedMonth)
+        .sort((a, b) => a.date.localeCompare(b.date)),
+    [allEntries, selectedMonth]
   );
   const plannedTotal = useMemo(
     () =>
@@ -92,9 +101,6 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
 
   const symbol = currencySymbol(board.currency);
   const fmt = (n: number) => `${n.toLocaleString('ru-RU')} ${symbol}`;
-
-  const todayMonth = new Date().toISOString().slice(0, 7);
-  const [selectedMonth, setSelectedMonth] = useState(todayMonth);
 
   const monthEntries = useMemo(() => entries.filter((e) => monthKey(e.date) === selectedMonth), [entries, selectedMonth]);
   const income = useMemo(() => monthEntries.filter((e) => e.type === 'income').reduce((s, e) => s + e.amount, 0), [monthEntries]);
@@ -114,6 +120,8 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
     return Object.entries(byCategory).map(([name, value]) => ({ name, value }));
   }, [monthEntries]);
 
+  // Столбчатая диаграмма показывает 6 месяцев, ЗАКАНЧИВАЯ выбранным месяцем —
+  // навигация стрелками сдвигает и её тоже, а не только текущий месяц.
   const monthlyData = useMemo(() => {
     const byMonth: Record<string, { income: number; expense: number }> = {};
     entries.forEach((e) => {
@@ -121,11 +129,14 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
       byMonth[key] = byMonth[key] || { income: 0, expense: 0 };
       byMonth[key][e.type] += e.amount;
     });
-    return Object.entries(byMonth)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .slice(-6)
-      .map(([key, v]) => ({ month: monthLabel(key), Доходы: v.income, Расходы: v.expense }));
-  }, [entries]);
+    const window: string[] = [];
+    for (let i = 5; i >= 0; i--) window.push(shiftMonth(selectedMonth, -i));
+    return window.map((key) => ({
+      month: monthLabel(key),
+      Доходы: byMonth[key]?.income || 0,
+      Расходы: byMonth[key]?.expense || 0,
+    }));
+  }, [entries, selectedMonth]);
 
   // Список операций именно за выбранный месяц (навигация стрелками выше)
   const monthTransactions = useMemo(
@@ -342,7 +353,7 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
           </div>
         ) : (
           <p className="text-xs text-neutral-400">
-            Нет предстоящих трат — при добавлении операции отметьте галочку "Запланировано"
+            Нет предстоящих трат на {fullMonthLabel(selectedMonth).toLowerCase()} — при добавлении операции отметьте галочку "Запланировано"
           </p>
         )}
       </div>
