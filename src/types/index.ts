@@ -71,11 +71,24 @@ export type FinanceType = 'income' | 'expense';
 export interface FinanceEntry {
   id: string;
   workspaceId: string;
+  boardId: string;
   type: FinanceType;
   amount: number;
   category: string;
   note?: string;
   date: string; // yyyy-mm-dd
+  createdAt: number;
+  createdByName: string;
+}
+
+export interface FinanceBoard {
+  id: string;
+  workspaceId: string;
+  name: string;
+  currency: string;
+  monthlyBudget?: number;
+  expenseCategories: string[];
+  incomeCategories: string[];
   createdAt: number;
   createdByName: string;
 }

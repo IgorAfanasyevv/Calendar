@@ -6,7 +6,6 @@ import { useWorkspaceStore } from './store/workspaceStore';
 import { useTaskStore } from './store/taskStore';
 import { useGoalStore } from './store/goalStore';
 import { useShoppingStore } from './store/shoppingStore';
-import { useFinanceStore } from './store/financeStore';
 import { useActivityStore } from './store/activityStore';
 import AuthPage from './pages/AuthPage';
 import WorkspaceSetupPage from './pages/WorkspaceSetupPage';
@@ -24,7 +23,6 @@ export default function App() {
   const { listen: listenTasks } = useTaskStore();
   const { listen: listenGoals } = useGoalStore();
   const { listen: listenShopping } = useShoppingStore();
-  const { listen: listenFinance } = useFinanceStore();
   const { listen: listenActivity } = useActivityStore();
   const [tab, setTab] = useState<Tab>('home');
 
@@ -51,16 +49,14 @@ export default function App() {
     const unsubTasks = listenTasks(workspace.id);
     const unsubGoals = listenGoals(workspace.id);
     const unsubShopping = listenShopping(workspace.id);
-    const unsubFinance = listenFinance(workspace.id);
     const unsubActivity = listenActivity(workspace.id);
     return () => {
       unsubTasks();
       unsubGoals();
       unsubShopping();
-      unsubFinance();
       unsubActivity();
     };
-  }, [workspace?.id, listenTasks, listenGoals, listenShopping, listenFinance, listenActivity]);
+  }, [workspace?.id, listenTasks, listenGoals, listenShopping, listenActivity]);
 
   if (loading) {
     return (
