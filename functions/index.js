@@ -606,6 +606,70 @@ const ASSISTANT_TOOLS = [
       required: ['name', 'duration_minutes'],
     },
   },
+  {
+    name: 'delete_task',
+    description: 'Удалить задачу (найди по названию среди активных задач в контексте).',
+    input_schema: {
+      type: 'object',
+      properties: { title: { type: 'string', description: 'Точное или похожее название задачи' } },
+      required: ['title'],
+    },
+  },
+  {
+    name: 'delete_shopping_item',
+    description: 'Удалить товар из списка покупок (найди по названию среди списка покупок в контексте).',
+    input_schema: {
+      type: 'object',
+      properties: { name: { type: 'string' } },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'delete_goal',
+    description: 'Полностью удалить цель вместе со всеми её шагами (найди по названию среди списка целей в контексте). Необратимо — используй только если пользователь явно просит удалить именно цель.',
+    input_schema: {
+      type: 'object',
+      properties: { goal_title: { type: 'string' } },
+      required: ['goal_title'],
+    },
+  },
+  {
+    name: 'delete_food_entry',
+    description: 'Удалить запись из дневника питания или меню (найди по названию блюда, и по дате если указана).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Название блюда' },
+        date: { type: 'string', description: 'YYYY-MM-DD, если пользователь уточнил дату' },
+      },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'delete_workout',
+    description: 'Удалить тренировку (найди по названию и, если указано, по дате).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        date: { type: 'string', description: 'YYYY-MM-DD, если пользователь уточнил дату' },
+      },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'delete_finance_entry',
+    description: 'Удалить финансовую операцию (найди вкладку по названию и операцию по категории/сумме/заметке среди контекста).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        board_name: { type: 'string', description: 'Название вкладки финансов' },
+        category: { type: 'string', description: 'Категория операции, которую нужно удалить' },
+        amount: { type: 'number', description: 'Примерная сумма операции, если известна — помогает найти нужную' },
+      },
+      required: ['board_name'],
+    },
+  },
 ];
 
 async function buildAssistantContext(workspaceId, uid, actorName) {
@@ -888,6 +952,74 @@ async function executeAssistantTool(name, input, ctx) {
     return { ok: true, created: 'workout', name: input.name };
   }
 
+  if (name === 'delete_task') {
+    const tasksSnap = await db.collection('workspaces').doc(workspaceId).collection('tasks').where('done', '==', false).get();
+    const match = tasksSnap.docs.find((d) => (d.data().title || '').toLowerCase().includes((input.title || '').toLowerCase()));
+    if (!match) return { ok: false, error: `Задача «${input.title}» не найдена` };
+    await match.ref.delete();
+    return { ok: true, deleted: 'task', title: match.data().title };
+  }
+
+  if (name === 'delete_shopping_item') {
+    const shoppingSnap = await db.collection('workspaces').doc(workspaceId).collection('shopping').get();
+    const match = shoppingSnap.docs.find((d) => (d.data().name || '').toLowerCase().includes((input.name || '').toLowerCase()));
+    if (!match) return { ok: false, error: `Товар «${input.name}» не найден в покупках` };
+    await match.ref.delete();
+    return { ok: true, deleted: 'shopping_item', name: match.data().name };
+  }
+
+  if (name === 'delete_goal') {
+    const goalsSnap = await db.collection('workspaces').doc(workspaceId).collection('goals').get();
+    const match = goalsSnap.docs.find((d) => (d.data().title || '').toLowerCase().includes((input.goal_title || '').toLowerCase()));
+    if (!match) return { ok: false, error: `Цель «${input.goal_title}» не найдена` };
+    await match.ref.delete();
+    return { ok: true, deleted: 'goal', title: match.data().title };
+  }
+
+  if (name === 'delete_food_entry') {
+    let q = db.collection('workspaces').doc(workspaceId).collection('food').where('createdBy', '==', uid);
+    const foodSnap = await q.get();
+    const nameLower = (input.name || '').toLowerCase();
+    const candidates = foodSnap.docs.filter((d) => (d.data().name || '').toLowerCase().includes(nameLower));
+    const match = input.date ? candidates.find((d) => d.data().date === input.date) || candidates[0] : candidates[0];
+    if (!match) return { ok: false, error: `Блюдо «${input.name}» не найдено` };
+    await match.ref.delete();
+    return { ok: true, deleted: 'food_entry', name: match.data().name };
+  }
+
+  if (name === 'delete_workout') {
+    const workoutsSnap = await db.collection('workspaces').doc(workspaceId).collection('workouts').where('createdBy', '==', uid).get();
+    const nameLower = (input.name || '').toLowerCase();
+    const candidates = workoutsSnap.docs.filter((d) => (d.data().name || '').toLowerCase().includes(nameLower));
+    const match = input.date ? candidates.find((d) => d.data().date === input.date) || candidates[0] : candidates[0];
+    if (!match) return { ok: false, error: `Тренировка «${input.name}» не найдена` };
+    await match.ref.delete();
+    return { ok: true, deleted: 'workout', name: match.data().name };
+  }
+
+  if (name === 'delete_finance_entry') {
+    const boardsSnap = await db.collection('workspaces').doc(workspaceId).collection('financeBoards').get();
+    const targetBoard = boardsSnap.docs.find((d) =>
+      (d.data().name || '').toLowerCase().includes((input.board_name || '').toLowerCase())
+    );
+    if (!targetBoard) return { ok: false, error: `Вкладка финансов «${input.board_name}» не найдена` };
+    const entriesSnap = await targetBoard.ref.collection('entries').get();
+    let candidates = entriesSnap.docs;
+    if (input.category) {
+      const catLower = input.category.toLowerCase();
+      candidates = candidates.filter((d) => (d.data().category || '').toLowerCase().includes(catLower));
+    }
+    if (input.amount) {
+      candidates = candidates
+        .slice()
+        .sort((a, b) => Math.abs(a.data().amount - input.amount) - Math.abs(b.data().amount - input.amount));
+    }
+    const match = candidates[0];
+    if (!match) return { ok: false, error: 'Подходящая операция не найдена' };
+    await match.ref.delete();
+    return { ok: true, deleted: 'finance_entry', board: targetBoard.data().name, category: match.data().category };
+  }
+
   return { ok: false, error: `Неизвестный инструмент: ${name}` };
 }
 
@@ -915,7 +1047,7 @@ async function handleAssistant(request) {
   const context = await buildAssistantContext(workspaceId, uid, actorName);
   const systemPrompt = `Ты — помощник в семейном приложении-органайзере для пары (задачи, календарь, цели, покупки, финансы). ` +
     `Ты можешь отвечать на вопросы по данным пространства и создавать/дополнять записи через инструменты. ` +
-    `Если пользователь просит что-то создать — используй подходящий инструмент, не выдумывай, что уже сделано, пока реально не вызвал инструмент. ` +
+    `Если пользователь просит что-то создать или удалить — используй подходящий инструмент, не выдумывай, что уже сделано, пока реально не вызвал инструмент. Перед удалением можешь кратко уточнить, если не уверен(а), что нашёл именно нужный элемент, но если запрос однозначный — просто удаляй. ` +
     `Если данных не хватает для действия (например, не нашлась вкладка финансов или цель) — прямо скажи об этом. ` +
     `Отвечай по-русски, кратко и по-дружески.\n\n${context}`;
 

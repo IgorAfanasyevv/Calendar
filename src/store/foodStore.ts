@@ -22,6 +22,7 @@ interface FoodState {
   addPreset: (workspaceId: string, preset: Partial<FoodPreset>) => Promise<void>;
   deletePreset: (preset: FoodPreset) => Promise<void>;
   sendIngredientsToShopping: (entry: FoodEntry) => Promise<void>;
+  unselectFromMenu: (entry: FoodEntry) => Promise<void>;
 }
 
 export const useFoodStore = create<FoodState>((set) => ({
@@ -102,5 +103,9 @@ export const useFoodStore = create<FoodState>((set) => ({
       )
     );
     await updateDoc(doc(db, 'workspaces', entry.workspaceId, 'food', entry.id), { addedToShopping: true });
+  },
+  // Вернуть блюдо назад из "Точно буду готовить" в общий список меню
+  unselectFromMenu: async (entry) => {
+    await updateDoc(doc(db, 'workspaces', entry.workspaceId, 'food', entry.id), { addedToShopping: false });
   },
 }));
