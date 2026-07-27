@@ -193,9 +193,14 @@ export default function FoodMenuView({ workspaceId }: { workspaceId: string }) {
                       <p className="text-xs font-medium truncate">{e.name}</p>
                       <p className="text-[10px] text-neutral-400">{formatDate(e.date)} · {MEAL_LABELS[e.mealType]}</p>
                     </div>
-                    <button onClick={() => unselectFromMenu(e)} className="text-neutral-400 hover:text-rose-500 shrink-0" title="Вернуть в общий список">
-                      <Trash2 size={12} />
-                    </button>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button onClick={() => setRecipeEntry(e)} className="text-neutral-400 hover:text-amber-600" title="Посмотреть рецепт">
+                        <BookOpen size={12} />
+                      </button>
+                      <button onClick={() => unselectFromMenu(e)} className="text-neutral-400 hover:text-rose-500" title="Вернуть в общий список">
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
