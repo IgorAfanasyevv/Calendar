@@ -15,6 +15,12 @@ import type { SavingsPot, SavingsTransaction } from '../types';
 import { logActivity } from './activityStore';
 import { currencySymbol } from '../lib/currency';
 
+// Firestore выдаёт ошибку, если в документ попадает поле со значением undefined
+// (например, необязательные targetAmount/monthlyContribution).
+function stripUndefined<T extends object>(obj: T): T {
+  return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined)) as T;
+}
+
 interface SavingsState {
   pots: SavingsPot[];
   transactionsByPot: Record<string, SavingsTransaction[]>;
@@ -54,16 +60,19 @@ export const useSavingsStore = create<SavingsState>((set) => ({
     return unsub;
   },
   createPot: async (workspaceId, data, actor) => {
-    await addDoc(collection(db, 'workspaces', workspaceId, 'savingsPots'), {
-      name: '',
-      currency: 'RUB',
-      balance: 0,
-      color: '#6366f1',
-      ...data,
-      workspaceId,
-      createdByName: actor.name,
-      createdAt: Date.now(),
-    });
+    await addDoc(
+      collection(db, 'workspaces', workspaceId, 'savingsPots'),
+      stripUndefined({
+        name: '',
+        currency: 'RUB',
+        balance: 0,
+        color: '#6366f1',
+        ...data,
+        workspaceId,
+        createdByName: actor.name,
+        createdAt: Date.now(),
+      })
+    );
   },
   deletePot: async (pot) => {
     await deleteDoc(doc(db, 'workspaces', pot.workspaceId, 'savingsPots', pot.id));

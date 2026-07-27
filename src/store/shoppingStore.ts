@@ -4,6 +4,12 @@ import { db } from '../lib/firebase';
 import type { ShoppingItem } from '../types';
 import { logActivity } from './activityStore';
 
+// Firestore выдаёт ошибку, если в документ попадает поле со значением undefined
+// (например, необязательная цена, если её не указали).
+function stripUndefined<T extends object>(obj: T): T {
+  return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined)) as T;
+}
+
 interface ShoppingState {
   items: ShoppingItem[];
   loading: boolean;
@@ -25,15 +31,18 @@ export const useShoppingStore = create<ShoppingState>((set, get) => ({
     return unsub;
   },
   addItem: async (workspaceId, item, actor) => {
-    await addDoc(collection(db, 'workspaces', workspaceId, 'shopping'), {
-      name: '',
-      category: 'Продукты',
-      quantity: 1,
-      bought: false,
-      ...item,
-      workspaceId,
-      createdAt: Date.now(),
-    });
+    await addDoc(
+      collection(db, 'workspaces', workspaceId, 'shopping'),
+      stripUndefined({
+        name: '',
+        category: 'Продукты',
+        quantity: 1,
+        bought: false,
+        ...item,
+        workspaceId,
+        createdAt: Date.now(),
+      })
+    );
     logActivity(workspaceId, actor.uid, actor.name, `добавил(а) в покупки «${item.name}»`);
   },
   toggleBought: async (item, actor) => {

@@ -4,6 +4,12 @@ import { db } from '../lib/firebase';
 import type { JournalEntry } from '../types';
 import { logActivity } from './activityStore';
 
+// Firestore выдаёт ошибку, если в документ попадает поле со значением undefined
+// (например, необязательное настроение, если его не выбрали).
+function stripUndefined<T extends object>(obj: T): T {
+  return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined)) as T;
+}
+
 interface JournalState {
   entries: JournalEntry[];
   listen: (workspaceId: string) => () => void;
@@ -21,15 +27,18 @@ export const useJournalStore = create<JournalState>((set) => ({
     return unsub;
   },
   addEntry: async (workspaceId, data, actor) => {
-    await addDoc(collection(db, 'workspaces', workspaceId, 'journal'), {
-      text: '',
-      date: new Date().toISOString().slice(0, 10),
-      ...data,
-      workspaceId,
-      createdBy: actor.uid,
-      createdByName: actor.name,
-      createdAt: Date.now(),
-    });
+    await addDoc(
+      collection(db, 'workspaces', workspaceId, 'journal'),
+      stripUndefined({
+        text: '',
+        date: new Date().toISOString().slice(0, 10),
+        ...data,
+        workspaceId,
+        createdBy: actor.uid,
+        createdByName: actor.name,
+        createdAt: Date.now(),
+      })
+    );
     logActivity(workspaceId, actor.uid, actor.name, 'добавил(а) запись в дневник отношений');
   },
   deleteEntry: async (entry, actor) => {

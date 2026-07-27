@@ -4,6 +4,12 @@ import { db } from '../lib/firebase';
 import type { FoodEntry, FoodPreset } from '../types';
 import { logActivity } from './activityStore';
 
+// Firestore выдаёт ошибку, если в документ попадает поле со значением undefined
+// (например, необязательные белки/жиры/углеводы или planned, если его не передали).
+function stripUndefined<T extends object>(obj: T): T {
+  return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined)) as T;
+}
+
 interface FoodState {
   entries: FoodEntry[];
   presets: FoodPreset[];
@@ -34,16 +40,19 @@ export const useFoodStore = create<FoodState>((set) => ({
     return unsub;
   },
   addEntry: async (workspaceId, entry, actor) => {
-    await addDoc(collection(db, 'workspaces', workspaceId, 'food'), {
-      mealType: 'breakfast',
-      calories: 0,
-      date: new Date().toISOString().slice(0, 10),
-      ...entry,
-      workspaceId,
-      createdBy: actor.uid,
-      createdByName: actor.name,
-      createdAt: Date.now(),
-    });
+    await addDoc(
+      collection(db, 'workspaces', workspaceId, 'food'),
+      stripUndefined({
+        mealType: 'breakfast',
+        calories: 0,
+        date: new Date().toISOString().slice(0, 10),
+        ...entry,
+        workspaceId,
+        createdBy: actor.uid,
+        createdByName: actor.name,
+        createdAt: Date.now(),
+      })
+    );
     if (!entry.planned) {
       logActivity(workspaceId, actor.uid, actor.name, `добавил(а) в дневник питания «${entry.name}» (${entry.calories} ккал)`);
     } else {
@@ -62,12 +71,15 @@ export const useFoodStore = create<FoodState>((set) => ({
     });
   },
   addPreset: async (workspaceId, preset) => {
-    await addDoc(collection(db, 'workspaces', workspaceId, 'foodPresets'), {
-      name: '',
-      calories: 0,
-      ...preset,
-      workspaceId,
-    });
+    await addDoc(
+      collection(db, 'workspaces', workspaceId, 'foodPresets'),
+      stripUndefined({
+        name: '',
+        calories: 0,
+        ...preset,
+        workspaceId,
+      })
+    );
   },
   deletePreset: async (preset) => {
     await deleteDoc(doc(db, 'workspaces', preset.workspaceId, 'foodPresets', preset.id));

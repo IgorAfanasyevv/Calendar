@@ -4,6 +4,12 @@ import { db } from '../lib/firebase';
 import type { WorkoutEntry } from '../types';
 import { logActivity } from './activityStore';
 
+// Firestore выдаёт ошибку, если в документ попадает поле со значением undefined
+// (например, необязательные caloriesBurned/note, если их не заполнили).
+function stripUndefined<T extends object>(obj: T): T {
+  return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined)) as T;
+}
+
 interface WorkoutState {
   entries: WorkoutEntry[];
   listen: (workspaceId: string) => () => void;
@@ -21,15 +27,18 @@ export const useWorkoutStore = create<WorkoutState>((set) => ({
     return unsub;
   },
   addEntry: async (workspaceId, entry, actor) => {
-    await addDoc(collection(db, 'workspaces', workspaceId, 'workouts'), {
-      durationMinutes: 30,
-      date: new Date().toISOString().slice(0, 10),
-      ...entry,
-      workspaceId,
-      createdBy: actor.uid,
-      createdByName: actor.name,
-      createdAt: Date.now(),
-    });
+    await addDoc(
+      collection(db, 'workspaces', workspaceId, 'workouts'),
+      stripUndefined({
+        durationMinutes: 30,
+        date: new Date().toISOString().slice(0, 10),
+        ...entry,
+        workspaceId,
+        createdBy: actor.uid,
+        createdByName: actor.name,
+        createdAt: Date.now(),
+      })
+    );
     logActivity(workspaceId, actor.uid, actor.name, `добавил(а) тренировку «${entry.name}»`);
   },
   deleteEntry: async (entry, actor) => {
