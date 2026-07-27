@@ -159,6 +159,21 @@ export interface ActivityEntry {
   createdAt: number;
 }
 
+export type DateKind = 'birthday' | 'anniversary' | 'holiday' | 'other';
+
+export interface ImportantDate {
+  id: string;
+  workspaceId: string;
+  title: string;
+  date: string; // yyyy-mm-dd — исходная дата (год используется для подсчёта "N лет вместе")
+  kind: DateKind;
+  note?: string;
+  reminderDaysBefore?: number; // за сколько дней напомнить, по умолчанию 7
+  remindedYear?: number; // последний год, за который уже отправили письмо-напоминание
+  createdByName: string;
+  createdAt: number;
+}
+
 export interface UserProfile {
   uid: string;
   email: string;

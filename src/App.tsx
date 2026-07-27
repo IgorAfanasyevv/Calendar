@@ -15,8 +15,10 @@ import GoalsView from './pages/GoalsView';
 import ShoppingView from './pages/ShoppingView';
 import FinanceView from './pages/FinanceView';
 import FitnessView from './pages/FitnessView';
+import ImportantDatesView from './pages/ImportantDatesView';
 import SettingsView from './pages/SettingsView';
 import GlobalAssistant from './components/GlobalAssistant';
+import { useImportantDateStore } from './store/importantDateStore';
 import { Loader2, Heart } from 'lucide-react';
 
 export default function App() {
@@ -26,6 +28,7 @@ export default function App() {
   const { listen: listenGoals } = useGoalStore();
   const { listen: listenShopping } = useShoppingStore();
   const { listen: listenActivity } = useActivityStore();
+  const { listen: listenDates } = useImportantDateStore();
   const [tab, setTab] = useState<Tab>('home');
 
   useEffect(() => {
@@ -52,13 +55,15 @@ export default function App() {
     const unsubGoals = listenGoals(workspace.id);
     const unsubShopping = listenShopping(workspace.id);
     const unsubActivity = listenActivity(workspace.id);
+    const unsubDates = listenDates(workspace.id);
     return () => {
       unsubTasks();
       unsubGoals();
       unsubShopping();
       unsubActivity();
+      unsubDates();
     };
-  }, [workspace?.id, listenTasks, listenGoals, listenShopping, listenActivity]);
+  }, [workspace?.id, listenTasks, listenGoals, listenShopping, listenActivity, listenDates]);
 
   if (loading) {
     return (
@@ -101,6 +106,7 @@ export default function App() {
         {tab === 'shopping' && <ShoppingView workspaceId={workspace.id} />}
         {tab === 'finance' && <FinanceView workspaceId={workspace.id} />}
         {tab === 'fitness' && <FitnessView workspaceId={workspace.id} />}
+        {tab === 'dates' && <ImportantDatesView workspaceId={workspace.id} />}
         {tab === 'settings' && <SettingsView />}
       </Layout>
       <GlobalAssistant />

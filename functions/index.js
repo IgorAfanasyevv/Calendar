@@ -102,6 +102,61 @@ function escapeHtml(s) {
   );
 }
 
+/**
+ * Раз в день проверяет важные даты (дни рождения, годовщины и т.п.) и присылает
+ * письмо обоим участникам пространства, если дата приближается (в пределах
+ * заданного количества дней до неё). Отправляется один раз в год на дату
+ * (remindedYear защищает от повторной отправки в том же году).
+ */
+exports.sendImportantDateReminders = onSchedule('every day 08:00', async () => {
+  const datesSnap = await db.collectionGroup('importantDates').get();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const workspaceCache = new Map();
+
+  for (const dateDoc of datesSnap.docs) {
+    const item = dateDoc.data();
+    if (!item.workspaceId || !item.date) continue;
+
+    try {
+      const [y, m, d] = item.date.split('-').map(Number);
+      const currentYear = today.getFullYear();
+      let next = new Date(currentYear, m - 1, d);
+      if (next < today) next = new Date(currentYear + 1, m - 1, d);
+      const daysUntil = Math.round((next.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+      const reminderDays = item.reminderDaysBefore ?? 7;
+      const targetYear = next.getFullYear();
+
+      if (daysUntil > reminderDays || item.remindedYear === targetYear) continue;
+
+      let workspace = workspaceCache.get(item.workspaceId);
+      if (workspace === undefined) {
+        const wsSnap = await db.collection('workspaces').doc(item.workspaceId).get();
+        workspace = wsSnap.exists ? wsSnap.data() : null;
+        workspaceCache.set(item.workspaceId, workspace);
+      }
+      if (!workspace) continue;
+
+      const recipients = (workspace.members || []).map((mm) => mm.email).filter(Boolean);
+      if (recipients.length > 0) {
+        const when = daysUntil === 0 ? 'сегодня' : daysUntil === 1 ? 'завтра' : `через ${daysUntil} дн.`;
+        await db.collection('mail').add({
+          to: recipients,
+          message: {
+            subject: `Напоминание: ${item.title}`,
+            text: `«${item.title}» — ${when} (${item.date.slice(5)}).`,
+            html: `<p><strong>${escapeHtml(item.title)}</strong> — ${when} (${item.date.slice(5)}).</p>`,
+          },
+        });
+      }
+
+      await dateDoc.ref.update({ remindedYear: targetYear });
+    } catch (err) {
+      logger.error(`Не удалось отправить напоминание по важной дате ${dateDoc.id}`, err);
+    }
+  }
+});
+
 // ---------------------------------------------------------------------------
 // ИИ-помощник по питанию: подсказки меню, авто-меню на неделю, анализ дневника
 // ---------------------------------------------------------------------------
