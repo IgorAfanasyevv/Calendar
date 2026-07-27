@@ -288,14 +288,15 @@ ${goal ? `Дневная цель — ${goal} ккал.` : 'Дневная це�
 
 Составь меню на 7 дней вперёд для ${name}${goal ? `, дневная цель — примерно ${goal} ккал` : ''}.
 На каждый день — завтрак, обед, ужин и один перекус. Простые, разнообразные, реалистичные для готовки дома блюда.
+Для каждого блюда укажи короткий список основных продуктов/ингредиентов, которые для него нужны (2-6 штук, простыми словами, как в списке покупок — например "куриная грудка", "рис", "помидоры").
 
 Ответь СТРОГО в формате JSON без какого-либо текста до или после, вот такой структуры:
-{"days":[{"offset":1,"meals":[{"mealType":"breakfast","name":"...","calories":123,"protein":10,"fat":5,"carbs":20}, ...]}]}
+{"days":[{"offset":1,"meals":[{"mealType":"breakfast","name":"...","calories":123,"protein":10,"fat":5,"carbs":20,"ingredients":["...","..."]}, ...]}]}
 offset — через сколько дней от сегодня (1 = завтра, 7 = через неделю). mealType — один из: breakfast, lunch, dinner, snack.`;
 
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 2000,
+      max_tokens: 2500,
       messages: [{ role: 'user', content: prompt }],
     });
     const raw = msg.content.map((b) => b.text || '').join('\n').trim();
@@ -312,32 +313,61 @@ offset — через сколько дней от сегодня (1 = завт�
 
     const batch = db.batch();
     const foodCol = db.collection('workspaces').doc(workspaceId).collection('food');
+    const shoppingCol = db.collection('workspaces').doc(workspaceId).collection('shopping');
     let count = 0;
+    const ingredientSet = new Set();
+
     (parsed.days || []).forEach((day) => {
       const date = new Date();
       date.setDate(date.getDate() + (day.offset || 0));
       const dateStr = date.toISOString().slice(0, 10);
       (day.meals || []).forEach((meal) => {
         const ref = foodCol.doc();
-        batch.set(ref, {
-          workspaceId,
-          date: dateStr,
-          mealType: meal.mealType || 'snack',
-          name: meal.name || 'Блюдо',
-          calories: Number(meal.calories) || 0,
-          protein: meal.protein ? Number(meal.protein) : undefined,
-          fat: meal.fat ? Number(meal.fat) : undefined,
-          carbs: meal.carbs ? Number(meal.carbs) : undefined,
-          planned: true,
-          createdBy: uid,
-          createdByName: name,
-          createdAt: Date.now(),
-        });
+        batch.set(
+          ref,
+          stripUndefinedFields({
+            workspaceId,
+            date: dateStr,
+            mealType: meal.mealType || 'snack',
+            name: meal.name || 'Блюдо',
+            calories: Number(meal.calories) || 0,
+            protein: meal.protein ? Number(meal.protein) : undefined,
+            fat: meal.fat ? Number(meal.fat) : undefined,
+            carbs: meal.carbs ? Number(meal.carbs) : undefined,
+            planned: true,
+            createdBy: uid,
+            createdByName: name,
+            createdAt: Date.now(),
+          })
+        );
         count++;
+        (meal.ingredients || []).forEach((ing) => {
+          const clean = String(ing).trim();
+          if (clean) ingredientSet.add(clean.charAt(0).toUpperCase() + clean.slice(1));
+        });
       });
     });
+
+    // Уникальные продукты для всего меню сразу добавляем в список покупок,
+    // чтобы не пришлось переписывать их вручную с бумажки.
+    let addedToShopping = 0;
+    ingredientSet.forEach((ingredientName) => {
+      const ref = shoppingCol.doc();
+      batch.set(ref, {
+        workspaceId,
+        name: ingredientName,
+        category: 'Продукты',
+        quantity: 1,
+        bought: false,
+        createdAt: Date.now(),
+      });
+      addedToShopping++;
+    });
+
     await batch.commit();
-    return { text: `Готово! Добавил ${count} приёмов пищи на ближайшую неделю в раздел «Меню».` };
+    return {
+      text: `Готово! Добавил ${count} приёмов пищи на ближайшую неделю в раздел «Меню» и ${addedToShopping} продуктов для них — в «Список покупок».`,
+    };
   }
 
   if (action === 'question') {

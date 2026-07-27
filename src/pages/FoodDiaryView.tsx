@@ -82,7 +82,7 @@ export default function FoodDiaryView({ workspaceId }: { workspaceId: string }) 
                 selectedUid === m.uid ? 'bg-indigo-500 text-white' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500'
               }`}
             >
-              {m.uid === firebaseUser?.uid ? `${m.displayName} (Я)` : m.displayName}
+              {m.displayName}
             </button>
           ))}
         </div>
