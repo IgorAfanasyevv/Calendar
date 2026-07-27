@@ -2,6 +2,7 @@ import { Plus, Clock, MapPin, Check } from 'lucide-react';
 import Modal from './Modal';
 import type { Task } from '../types';
 import { effectiveTime } from '../lib/timezone';
+import { taskColorStyle } from '../lib/taskColor';
 
 const ASSIGNEE_LABEL: Record<Task['assignee'], string> = { me: 'Я', partner: 'Партнёр', together: 'Вместе' };
 
@@ -32,9 +33,9 @@ export default function DayTasksModal({
           <button
             key={task.id}
             onClick={() => onSelectTask(task)}
-            className="w-full text-left rounded-2xl glass p-3 hover:shadow-md transition"
-            style={{ borderLeft: `3px solid ${task.color}` }}
+            className="relative w-full text-left rounded-2xl glass p-3 pl-4 hover:shadow-md transition overflow-hidden"
           >
+            <span className="absolute left-0 top-0 bottom-0 w-1" style={taskColorStyle(task.color)} />
             <div className="flex items-start gap-2">
               <div
                 className={`mt-0.5 w-4.5 h-4.5 rounded-full border flex items-center justify-center shrink-0 ${

@@ -6,8 +6,8 @@ import type { Assignee, ChecklistItem, Priority, Task } from '../types';
 import { useTaskStore } from '../store/taskStore';
 import { useAuthStore } from '../store/authStore';
 import { computeDueAtUtc, effectiveDate, effectiveTime } from '../lib/timezone';
+import { TASK_COLORS, taskColorStyle } from '../lib/taskColor';
 
-const COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444'];
 const CATEGORIES = ['Общее', 'Работа', 'Дом', 'Здоровье', 'Отношения', 'Финансы', 'Путешествия'];
 
 export default function TaskModal({
@@ -34,7 +34,7 @@ export default function TaskModal({
   );
   const [time, setTime] = useState((initial ? effectiveTime(initial) : undefined) || '');
   const [duration, setDuration] = useState(initial?.durationMinutes || 30);
-  const [color, setColor] = useState(initial?.color || COLORS[0]);
+  const [color, setColor] = useState(initial?.color || TASK_COLORS[0]);
   const [category, setCategory] = useState(initial?.category || CATEGORIES[0]);
   const [location, setLocation] = useState(initial?.location || '');
   const [priority, setPriority] = useState<Priority>(initial?.priority || 'medium');
@@ -144,12 +144,13 @@ export default function TaskModal({
 
         <Field label="Цвет">
           <div className="flex gap-2 flex-wrap">
-            {COLORS.map((c) => (
+            {TASK_COLORS.map((c) => (
               <button
                 key={c}
                 onClick={() => setColor(c)}
+                title={c === 'gradient-heart' ? 'Градиент (как в логотипе)' : undefined}
                 className={`w-7 h-7 rounded-full border-2 transition ${color === c ? 'border-neutral-800 dark:border-white scale-110' : 'border-transparent'}`}
-                style={{ backgroundColor: c }}
+                style={taskColorStyle(c)}
               />
             ))}
           </div>

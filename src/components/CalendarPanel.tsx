@@ -11,6 +11,7 @@ import type { Task } from '../types';
 import TaskModal from './TaskModal';
 import DayTasksModal from './DayTasksModal';
 import { computeDueAtUtc, effectiveDate, localDateStr, localTimeStr } from '../lib/timezone';
+import { isGradientColor, solidFallback } from '../lib/taskColor';
 
 export default function CalendarPanel({ workspaceId }: { workspaceId: string }) {
   const { tasks, updateTask } = useTaskStore();
@@ -52,10 +53,11 @@ export default function CalendarPanel({ workspaceId }: { workspaceId: string }) 
             start,
             end,
             allDay: !t.dueAtUtc,
-            backgroundColor: t.color,
-            borderColor: t.color,
+            backgroundColor: solidFallback(t.color),
+            borderColor: solidFallback(t.color),
             textColor: '#fff',
             classNames: t.done ? ['opacity-50'] : [],
+            extendedProps: { isGradient: isGradientColor(t.color) },
           };
         }),
     [tasks]
@@ -99,7 +101,7 @@ export default function CalendarPanel({ workspaceId }: { workspaceId: string }) 
     frame.style.cursor = 'pointer';
     if (!dayTasks || dayTasks.length === 0) return;
 
-    const colors = Array.from(new Set(dayTasks.map((t) => t.color)));
+    const colors = Array.from(new Set(dayTasks.map((t) => solidFallback(t.color))));
 
     if (colors.length === 1) {
       frame.style.backgroundColor = hexToRgba(colors[0], 0.14);
@@ -108,6 +110,14 @@ export default function CalendarPanel({ workspaceId }: { workspaceId: string }) 
       frame.style.background = `linear-gradient(90deg, ${stops.join(', ')})`;
     }
     frame.style.borderRadius = '10px';
+  }
+
+  function handleEventDidMount(arg: { event: { extendedProps: Record<string, unknown> }; el: HTMLElement }) {
+    if (arg.event.extendedProps.isGradient) {
+      arg.el.style.backgroundImage = 'linear-gradient(135deg, #6366f1, #fb7185)';
+      arg.el.style.backgroundColor = 'transparent';
+      arg.el.style.borderColor = 'transparent';
+    }
   }
 
   // Клик по клетке дня (не по самой задаче) — показать список задач на этот день,
@@ -146,6 +156,7 @@ export default function CalendarPanel({ workspaceId }: { workspaceId: string }) 
         eventClick={handleEventClick}
         eventDrop={handleDrop}
         eventResize={handleResize}
+        eventDidMount={handleEventDidMount}
         dayCellDidMount={handleDayCellMount}
         dateClick={handleDateClick}
       />

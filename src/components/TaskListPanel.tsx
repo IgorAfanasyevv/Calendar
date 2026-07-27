@@ -5,6 +5,7 @@ import { useAuthStore } from '../store/authStore';
 import type { Task } from '../types';
 import TaskModal from './TaskModal';
 import { effectiveDate, effectiveTime } from '../lib/timezone';
+import { taskColorStyle } from '../lib/taskColor';
 
 const ASSIGNEE_LABEL: Record<Task['assignee'], string> = { me: 'Я', partner: 'Партнёр', together: 'Вместе' };
 
@@ -85,9 +86,9 @@ export default function TaskListPanel({ workspaceId }: { workspaceId: string }) 
           <div
             key={task.id}
             onClick={() => setEditing(task)}
-            className="group rounded-2xl glass p-3 cursor-pointer hover:shadow-md transition"
-            style={{ borderLeft: `3px solid ${task.color}` }}
+            className="group relative rounded-2xl glass p-3 pl-4 cursor-pointer hover:shadow-md transition overflow-hidden"
           >
+            <span className="absolute left-0 top-0 bottom-0 w-1" style={taskColorStyle(task.color)} />
             <div className="flex items-start gap-2">
               <button
                 onClick={(e) => {
