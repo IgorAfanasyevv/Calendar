@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Calculator } from 'lucide-react';
 import Modal from './Modal';
 import { useWorkspaceStore } from '../store/workspaceStore';
-import { useAuthStore } from '../store/authStore';
 
 type Gender = 'male' | 'female';
 type Activity = 1.2 | 1.375 | 1.55 | 1.725 | 1.9;
@@ -50,8 +49,17 @@ function calculate(gender: Gender, age: number, height: number, weight: number, 
   };
 }
 
-export default function KbjuCalculator({ workspaceId, onClose }: { workspaceId: string; onClose: () => void }) {
-  const { firebaseUser } = useAuthStore();
+export default function KbjuCalculator({
+  workspaceId,
+  targetUid,
+  targetName,
+  onClose,
+}: {
+  workspaceId: string;
+  targetUid: string;
+  targetName?: string;
+  onClose: () => void;
+}) {
   const { setNutritionGoals } = useWorkspaceStore();
   const [gender, setGender] = useState<Gender>('male');
   const [age, setAge] = useState('');
@@ -70,10 +78,10 @@ export default function KbjuCalculator({ workspaceId, onClose }: { workspaceId: 
   }
 
   async function handleUseAsGoal() {
-    if (!result || !firebaseUser) return;
+    if (!result || !targetUid) return;
     setSaving(true);
     try {
-      await setNutritionGoals(workspaceId, firebaseUser.uid, {
+      await setNutritionGoals(workspaceId, targetUid, {
         calorieGoal: result.calories,
         proteinGoal: result.protein,
         fatGoal: result.fat,
@@ -86,7 +94,7 @@ export default function KbjuCalculator({ workspaceId, onClose }: { workspaceId: 
   }
 
   return (
-    <Modal title="Калькулятор КБЖУ" onClose={onClose} wide>
+    <Modal title={targetName ? `Калькулятор КБЖУ — ${targetName}` : 'Калькулятор КБЖУ'} onClose={onClose} wide>
       <div className="space-y-3">
         <p className="text-xs text-neutral-400">
           Общая оценка на основе формулы Миффлина-Сан Жеора — хорошая отправная точка, но не замена консультации
@@ -180,7 +188,7 @@ export default function KbjuCalculator({ workspaceId, onClose }: { workspaceId: 
               disabled={saving}
               className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white font-medium text-sm disabled:opacity-50"
             >
-              Использовать как мою цель
+              Использовать как цель{targetName ? ` для ${targetName}` : ''}
             </button>
           </div>
         )}

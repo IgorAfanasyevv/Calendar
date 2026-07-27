@@ -66,8 +66,8 @@ export default function FoodDiaryView({ workspaceId }: { workspaceId: string }) 
 
   async function saveGoal() {
     const val = Number(goalInput);
-    if (!isNaN(val) && val >= 0 && firebaseUser) {
-      await setCalorieGoal(workspaceId, firebaseUser.uid, val);
+    if (!isNaN(val) && val >= 0 && selectedUid) {
+      await setCalorieGoal(workspaceId, selectedUid, val);
     }
     setEditingGoal(false);
   }
@@ -123,16 +123,14 @@ export default function FoodDiaryView({ workspaceId }: { workspaceId: string }) 
           <span className="flex items-center gap-1.5 text-sm font-semibold text-amber-600 dark:text-amber-400">
             <Flame size={15} /> Калории
           </span>
-          {isMe && (
-            <div className="flex items-center gap-2">
-              <button onClick={() => setShowCalculator(true)} className="text-neutral-400 hover:text-indigo-500" title="Калькулятор КБЖУ">
-                <Calculator size={14} />
-              </button>
-              <button onClick={() => { setGoalInput(String(goal || '')); setEditingGoal(true); }} className="text-neutral-400 hover:text-indigo-500">
-                <Pencil size={13} />
-              </button>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowCalculator(true)} className="text-neutral-400 hover:text-indigo-500" title="Калькулятор КБЖУ">
+              <Calculator size={14} />
+            </button>
+            <button onClick={() => { setGoalInput(String(goal || '')); setEditingGoal(true); }} className="text-neutral-400 hover:text-indigo-500">
+              <Pencil size={13} />
+            </button>
+          </div>
         </div>
 
         {editingGoal ? (
@@ -231,7 +229,14 @@ export default function FoodDiaryView({ workspaceId }: { workspaceId: string }) 
         />
       )}
 
-      {showCalculator && <KbjuCalculator workspaceId={workspaceId} onClose={() => setShowCalculator(false)} />}
+      {showCalculator && (
+        <KbjuCalculator
+          workspaceId={workspaceId}
+          targetUid={selectedUid}
+          targetName={selectedMember?.displayName}
+          onClose={() => setShowCalculator(false)}
+        />
+      )}
     </div>
   );
 }
