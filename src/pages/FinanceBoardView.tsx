@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Plus, Trash2, Wallet, TrendingUp, TrendingDown, PiggyBank, Pencil, Check, CalendarClock, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, Wallet, TrendingUp, TrendingDown, PiggyBank, Pencil, Check, CalendarClock, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 import {
   PieChart,
   Pie,
@@ -97,6 +97,7 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
 
   const [adding, setAdding] = useState(false);
   const [editingBudget, setEditingBudget] = useState(false);
+  const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [budgetInput, setBudgetInput] = useState(String(board.monthlyBudget || ''));
 
   const symbol = currencySymbol(board.currency);
@@ -200,6 +201,30 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
         >
           <ChevronRight size={16} />
         </button>
+        <div className="relative">
+          <button
+            onClick={() => setShowMonthPicker((v) => !v)}
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700"
+            title="Выбрать месяц из календаря"
+          >
+            <Calendar size={15} />
+          </button>
+          {showMonthPicker && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setShowMonthPicker(false)} />
+              <input
+                type="month"
+                autoFocus
+                value={selectedMonth}
+                onChange={(e) => {
+                  if (e.target.value) setSelectedMonth(e.target.value);
+                  setShowMonthPicker(false);
+                }}
+                className="input absolute top-10 right-0 z-20 w-40 shadow-lg"
+              />
+            </>
+          )}
+        </div>
       </div>
 
       {/* Summary cards */}
