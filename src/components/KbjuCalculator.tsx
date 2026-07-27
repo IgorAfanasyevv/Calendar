@@ -69,6 +69,7 @@ export default function KbjuCalculator({
   const [goal, setGoal] = useState<Goal>('maintain');
   const [result, setResult] = useState<Result | null>(null);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const canCalculate = Number(age) > 0 && Number(height) > 0 && Number(weight) > 0;
 
@@ -78,8 +79,13 @@ export default function KbjuCalculator({
   }
 
   async function handleUseAsGoal() {
-    if (!result || !targetUid) return;
+    if (!result) return;
+    if (!targetUid) {
+      setError('Не удалось определить, для кого сохранять цель — попробуйте закрыть окно и открыть заново.');
+      return;
+    }
     setSaving(true);
+    setError(null);
     try {
       await setNutritionGoals(workspaceId, targetUid, {
         calorieGoal: result.calories,
@@ -88,6 +94,8 @@ export default function KbjuCalculator({
         carbsGoal: result.carbs,
       });
       onClose();
+    } catch (e) {
+      setError((e as { message?: string })?.message || 'Не удалось сохранить цель. Попробуйте ещё раз.');
     } finally {
       setSaving(false);
     }
@@ -183,6 +191,7 @@ export default function KbjuCalculator({
                 <div className="text-neutral-400">Углеводы</div>
               </div>
             </div>
+            {error && <p className="text-xs text-rose-500">{error}</p>}
             <button
               onClick={handleUseAsGoal}
               disabled={saving}
