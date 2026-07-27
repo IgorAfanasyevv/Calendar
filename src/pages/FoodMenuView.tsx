@@ -32,7 +32,7 @@ function formatDate(dateStr: string): string {
 }
 
 export default function FoodMenuView({ workspaceId }: { workspaceId: string }) {
-  const { entries, addEntry, deleteEntry, sendIngredientsToShopping, unselectFromMenu } = useFoodStore();
+  const { entries, addEntry, deleteEntry, sendIngredientsToShopping, unselectFromMenu, setIngredients } = useFoodStore();
   const { firebaseUser, profile } = useAuthStore();
   const { workspace } = useWorkspaceStore();
   const actor = { uid: firebaseUser?.uid || '', name: profile?.displayName || '' };
@@ -43,6 +43,7 @@ export default function FoodMenuView({ workspaceId }: { workspaceId: string }) {
   const [recipeEntry, setRecipeEntry] = useState<FoodEntry | null>(null);
   const [selectedUid, setSelectedUid] = useState(firebaseUser?.uid || '');
   const [sendingId, setSendingId] = useState<string | null>(null);
+  const [addingIngredientsFor, setAddingIngredientsFor] = useState<FoodEntry | null>(null);
 
   const members = workspace?.members || [];
 
@@ -143,7 +144,7 @@ export default function FoodMenuView({ workspaceId }: { workspaceId: string }) {
                       <p className="text-sm truncate">{e.name}</p>
                       <p className="text-[11px] text-neutral-400">{e.grams ? `${e.grams} г · ` : ''}{e.calories} ккал</p>
                     </div>
-                    {e.ingredients && e.ingredients.length > 0 && (
+                    {e.ingredients && e.ingredients.length > 0 ? (
                       <button
                         onClick={() => handleSelectForShopping(e)}
                         disabled={sendingId === e.id}
@@ -152,6 +153,13 @@ export default function FoodMenuView({ workspaceId }: { workspaceId: string }) {
                       >
                         {sendingId === e.id ? <Loader2 size={12} className="animate-spin" /> : <ShoppingCart size={12} />}
                         Выбрать
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setAddingIngredientsFor(e)}
+                        className="flex items-center gap-1 text-[11px] font-medium text-neutral-500 hover:text-violet-600 bg-neutral-100 dark:bg-neutral-800 px-2 py-1 rounded-lg shrink-0"
+                      >
+                        <ShoppingCart size={12} /> Добавить продукты
                       </button>
                     )}
                     <button
@@ -234,7 +242,65 @@ export default function FoodMenuView({ workspaceId }: { workspaceId: string }) {
       {recipeEntry && (
         <RecipeModal workspaceId={workspaceId} entry={recipeEntry} onClose={() => setRecipeEntry(null)} />
       )}
+
+      {addingIngredientsFor && (
+        <AddIngredientsModal
+          entry={addingIngredientsFor}
+          onSave={async (ingredients) => {
+            await setIngredients(addingIngredientsFor, ingredients);
+            setAddingIngredientsFor(null);
+          }}
+          onClose={() => setAddingIngredientsFor(null)}
+        />
+      )}
     </div>
+  );
+}
+
+function AddIngredientsModal({
+  entry,
+  onSave,
+  onClose,
+}: {
+  entry: FoodEntry;
+  onSave: (ingredients: string[]) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [text, setText] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    const list = text.split(',').map((s) => s.trim()).filter(Boolean);
+    if (list.length === 0) return;
+    setSaving(true);
+    try {
+      await onSave(list);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal title={`Продукты для «${entry.name}»`} onClose={onClose}>
+      <div className="space-y-3">
+        <input
+          autoFocus
+          className="input"
+          placeholder="Например: курица, рис, помидоры"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+        />
+        <p className="text-xs text-neutral-400">Через запятую — после сохранения появится кнопка "Выбрать".</p>
+        <button
+          onClick={handleSave}
+          disabled={saving || !text.trim()}
+          className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white font-medium text-sm disabled:opacity-50"
+        >
+          Сохранить
+        </button>
+      </div>
+    </Modal>
   );
 }
 

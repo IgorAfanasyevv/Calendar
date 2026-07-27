@@ -35,6 +35,7 @@ export default function AddFoodModal({
   const [carbs, setCarbs] = useState(firstPreset?.carbs ? String(firstPreset.carbs) : '');
   const [saveAsPreset, setSaveAsPreset] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [ingredientsText, setIngredientsText] = useState('');
 
   // Поиск по базам данных питания (USDA / Open Food Facts)
   const [query, setQuery] = useState('');
@@ -134,6 +135,9 @@ export default function AddFoodModal({
         mealType,
         date,
         planned,
+        ingredients: planned && ingredientsText.trim()
+          ? ingredientsText.split(',').map((s) => s.trim()).filter(Boolean)
+          : undefined,
       };
       await onSave(workspaceId, payload, actor);
       if (isNew && saveAsPreset) {
@@ -248,6 +252,23 @@ export default function AddFoodModal({
             <input type="checkbox" checked={saveAsPreset} onChange={(e) => setSaveAsPreset(e.target.checked)} />
             Сохранить как свою еду (для быстрого повторного добавления)
           </label>
+        )}
+
+        {planned && (
+          <div>
+            <label className="block text-xs font-medium text-neutral-500 mb-1">
+              Продукты для этого блюда (через запятую, необязательно)
+            </label>
+            <input
+              className="input"
+              placeholder="Например: курица, рис, помидоры"
+              value={ingredientsText}
+              onChange={(e) => setIngredientsText(e.target.value)}
+            />
+            <p className="text-[11px] text-neutral-400 mt-1">
+              Если укажете — появится кнопка "Выбрать", чтобы отправить эти продукты в покупки одним нажатием.
+            </p>
+          </div>
         )}
 
         <button

@@ -23,6 +23,7 @@ interface FoodState {
   deletePreset: (preset: FoodPreset) => Promise<void>;
   sendIngredientsToShopping: (entry: FoodEntry) => Promise<void>;
   unselectFromMenu: (entry: FoodEntry) => Promise<void>;
+  setIngredients: (entry: FoodEntry, ingredients: string[]) => Promise<void>;
 }
 
 export const useFoodStore = create<FoodState>((set) => ({
@@ -107,5 +108,10 @@ export const useFoodStore = create<FoodState>((set) => ({
   // Вернуть блюдо назад из "Точно буду готовить" в общий список меню
   unselectFromMenu: async (entry) => {
     await updateDoc(doc(db, 'workspaces', entry.workspaceId, 'food', entry.id), { addedToShopping: false });
+  },
+  // Дописать список продуктов задним числом — например, для блюда, добавленного
+  // вручную (без ИИ), у которого изначально не было списка ингредиентов.
+  setIngredients: async (entry, ingredients) => {
+    await updateDoc(doc(db, 'workspaces', entry.workspaceId, 'food', entry.id), { ingredients });
   },
 }));
