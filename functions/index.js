@@ -560,28 +560,82 @@ async function buildAssistantContext(workspaceId, uid, actorName) {
 Последние тренировки: ${JSON.stringify(recentWorkouts)}`;
 }
 
+/**
+ * Переводит "дата+время как их видит человек в своём часовом поясе" в точный
+ * момент времени (epoch ms) — аналог того, что браузер делает автоматически
+ * через `new Date(...)`, но на сервере, где нет своего часового пояса, поэтому
+ * нужно явно передать IANA-зону (например "Asia/Jerusalem").
+ */
+function zonedTimeToUtc(dateStr, timeStr, timeZone) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const [hh, mm] = timeStr.split(':').map(Number);
+  const utcGuess = Date.UTC(y, m - 1, d, hh, mm);
+
+  try {
+    const dtf = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      hour12: false,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+    const parts = {};
+    dtf.formatToParts(new Date(utcGuess)).forEach((p) => {
+      parts[p.type] = p.value;
+    });
+    // hour может прийти как "24" в некоторых окружениях — приводим к 0
+    const hour = Number(parts.hour) % 24;
+    const asUtcInZone = Date.UTC(
+      Number(parts.year),
+      Number(parts.month) - 1,
+      Number(parts.day),
+      hour,
+      Number(parts.minute),
+      Number(parts.second)
+    );
+    const offset = asUtcInZone - utcGuess;
+    return utcGuess - offset;
+  } catch {
+    // Неизвестная/некорректная зона — лучше вернуть примерное время (UTC),
+    // чем совсем не проставить dueAtUtc.
+    return utcGuess;
+  }
+}
+
+/** Firestore (в том числе Admin SDK) не разрешает поля со значением undefined. */
+function stripUndefinedFields(obj) {
+  return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined));
+}
+
 async function executeAssistantTool(name, input, ctx) {
-  const { workspaceId, uid, actorName } = ctx;
+  const { workspaceId, uid, actorName, timezone } = ctx;
 
   if (name === 'create_task') {
+    const dueAtUtc = input.date && input.time && timezone ? zonedTimeToUtc(input.date, input.time, timezone) : undefined;
     const ref = db.collection('workspaces').doc(workspaceId).collection('tasks').doc();
-    await ref.set({
-      title: input.title,
-      description: '',
-      date: input.date || null,
-      time: input.time || null,
-      color: '#6366f1',
-      category: input.category || 'Общее',
-      priority: input.priority || 'medium',
-      repeat: 'none',
-      assignee: input.assignee || 'together',
-      done: false,
-      checklist: [],
-      workspaceId,
-      createdBy: uid,
-      createdByName: actorName,
-      createdAt: Date.now(),
-    });
+    await ref.set(
+      stripUndefinedFields({
+        title: input.title,
+        description: '',
+        date: input.date || null,
+        time: input.time || null,
+        dueAtUtc,
+        color: '#6366f1',
+        category: input.category || 'Общее',
+        priority: input.priority || 'medium',
+        repeat: 'none',
+        assignee: input.assignee || 'together',
+        done: false,
+        checklist: [],
+        workspaceId,
+        createdBy: uid,
+        createdByName: actorName,
+        createdAt: Date.now(),
+      })
+    );
     return { ok: true, created: 'task', title: input.title };
   }
 
@@ -697,7 +751,7 @@ async function handleAssistant(request) {
   const uid = request.auth && request.auth.uid;
   if (!uid) throw new HttpsError('unauthenticated', 'Нужно войти в аккаунт.');
 
-  const { workspaceId, message, history } = request.data || {};
+  const { workspaceId, message, history, timezone } = request.data || {};
   if (!workspaceId || !message) throw new HttpsError('invalid-argument', 'Не хватает параметров.');
 
   const info = await getMember(workspaceId, uid);
@@ -730,7 +784,7 @@ async function handleAssistant(request) {
     for (const block of toolUseBlocks) {
       let result;
       try {
-        result = await executeAssistantTool(block.name, block.input, { workspaceId, uid, actorName });
+        result = await executeAssistantTool(block.name, block.input, { workspaceId, uid, actorName, timezone });
       } catch (err) {
         logger.error('Ошибка инструмента ассистента', err);
         result = { ok: false, error: 'Внутренняя ошибка при выполнении действия' };

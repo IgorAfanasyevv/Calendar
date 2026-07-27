@@ -16,7 +16,7 @@ interface DisplayMessage {
 }
 
 const assistantCall = httpsCallable<
-  { workspaceId: string; message: string; history: AnthropicMessage[] },
+  { workspaceId: string; message: string; history: AnthropicMessage[]; timezone: string },
   { text: string; messages: AnthropicMessage[] }
 >(functions, 'assistant');
 
@@ -46,7 +46,8 @@ export default function GlobalAssistant() {
     setDisplay((d) => [...d, { role: 'user', text }]);
     setLoading(true);
     try {
-      const res = await assistantCall({ workspaceId: workspace!.id, message: text, history });
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const res = await assistantCall({ workspaceId: workspace!.id, message: text, history, timezone });
       setHistory(res.data.messages || []);
       setDisplay((d) => [...d, { role: 'assistant', text: res.data.text }]);
     } catch (e) {
