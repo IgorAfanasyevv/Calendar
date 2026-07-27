@@ -439,16 +439,51 @@ const ASSISTANT_TOOLS = [
       required: ['board_name', 'type', 'amount', 'category'],
     },
   },
+  {
+    name: 'add_food_entry',
+    description: 'Добавить еду в дневник питания текущего пользователя (или в меню, если это план на будущее).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Название еды/блюда' },
+        calories: { type: 'number' },
+        protein: { type: 'number', description: 'Белки, г' },
+        fat: { type: 'number', description: 'Жиры, г' },
+        carbs: { type: 'number', description: 'Углеводы, г' },
+        meal_type: { type: 'string', enum: ['breakfast', 'lunch', 'dinner', 'snack'] },
+        date: { type: 'string', description: 'YYYY-MM-DD, по умолчанию сегодня' },
+        planned: { type: 'boolean', description: 'true, если это план на будущее (в раздел Меню), а не то, что уже съедено' },
+      },
+      required: ['name', 'calories', 'meal_type'],
+    },
+  },
+  {
+    name: 'add_workout',
+    description: 'Добавить тренировку в раздел Фитнес → Тренировки для текущего пользователя.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Например: Бег, зал, йога' },
+        duration_minutes: { type: 'number' },
+        calories_burned: { type: 'number' },
+        date: { type: 'string', description: 'YYYY-MM-DD, по умолчанию сегодня' },
+      },
+      required: ['name', 'duration_minutes'],
+    },
+  },
 ];
 
 async function buildAssistantContext(workspaceId, uid, actorName) {
   const today = todayStr();
 
-  const [tasksSnap, goalsSnap, shoppingSnap, boardsSnap] = await Promise.all([
+  const [tasksSnap, goalsSnap, shoppingSnap, boardsSnap, foodSnap, workoutsSnap, wsSnap] = await Promise.all([
     db.collection('workspaces').doc(workspaceId).collection('tasks').where('done', '==', false).limit(30).get(),
     db.collection('workspaces').doc(workspaceId).collection('goals').limit(20).get(),
     db.collection('workspaces').doc(workspaceId).collection('shopping').where('bought', '==', false).limit(30).get(),
     db.collection('workspaces').doc(workspaceId).collection('financeBoards').get(),
+    db.collection('workspaces').doc(workspaceId).collection('food').where('createdBy', '==', uid).where('date', '==', today).get(),
+    db.collection('workspaces').doc(workspaceId).collection('workouts').where('createdBy', '==', uid).limit(10).get(),
+    db.collection('workspaces').doc(workspaceId).get(),
   ]);
 
   const tasks = tasksSnap.docs.map((d) => {
@@ -496,6 +531,21 @@ async function buildAssistantContext(workspaceId, uid, actorName) {
     });
   }
 
+  const calorieGoal = wsSnap.exists
+    ? ((wsSnap.data().members || []).find((mm) => mm.uid === uid) || {}).calorieGoal || null
+    : null;
+
+  const todaysFood = foodSnap.docs
+    .map((d) => d.data())
+    .filter((e) => !e.planned)
+    .map((e) => ({ name: e.name, calories: e.calories, mealType: e.mealType }));
+  const todaysCalories = todaysFood.reduce((s, e) => s + (e.calories || 0), 0);
+
+  const recentWorkouts = workoutsSnap.docs.map((d) => {
+    const w = d.data();
+    return { name: w.name, date: w.date, durationMinutes: w.durationMinutes, caloriesBurned: w.caloriesBurned || null };
+  });
+
   return `Сегодня ${today}. Текущий пользователь: ${actorName}.
 
 Активные задачи (до 30): ${JSON.stringify(tasks)}
@@ -504,7 +554,10 @@ async function buildAssistantContext(workspaceId, uid, actorName) {
 
 Список покупок (не куплено): ${JSON.stringify(shopping)}
 
-Вкладки финансов (доходы/расходы за этот месяц, без учёта запланированных): ${JSON.stringify(boards)}`;
+Вкладки финансов (доходы/расходы за этот месяц, без учёта запланированных): ${JSON.stringify(boards)}
+
+Фитнес — дневная цель по калориям: ${calorieGoal || 'не задана'}. Съедено сегодня: ${todaysCalories} ккал (${JSON.stringify(todaysFood)}).
+Последние тренировки: ${JSON.stringify(recentWorkouts)}`;
 }
 
 async function executeAssistantTool(name, input, ctx) {
@@ -591,6 +644,40 @@ async function executeAssistantTool(name, input, ctx) {
       createdByName: actorName,
     });
     return { ok: true, created: 'finance_entry', board: targetBoard.data().name, amount: input.amount };
+  }
+
+  if (name === 'add_food_entry') {
+    const ref = db.collection('workspaces').doc(workspaceId).collection('food').doc();
+    await ref.set({
+      name: input.name,
+      calories: input.calories,
+      protein: input.protein || null,
+      fat: input.fat || null,
+      carbs: input.carbs || null,
+      mealType: input.meal_type,
+      date: input.date || todayStr(),
+      planned: !!input.planned,
+      workspaceId,
+      createdBy: uid,
+      createdByName: actorName,
+      createdAt: Date.now(),
+    });
+    return { ok: true, created: 'food_entry', name: input.name, planned: !!input.planned };
+  }
+
+  if (name === 'add_workout') {
+    const ref = db.collection('workspaces').doc(workspaceId).collection('workouts').doc();
+    await ref.set({
+      name: input.name,
+      durationMinutes: input.duration_minutes,
+      caloriesBurned: input.calories_burned || null,
+      date: input.date || todayStr(),
+      workspaceId,
+      createdBy: uid,
+      createdByName: actorName,
+      createdAt: Date.now(),
+    });
+    return { ok: true, created: 'workout', name: input.name };
   }
 
   return { ok: false, error: `Неизвестный инструмент: ${name}` };
