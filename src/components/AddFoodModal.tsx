@@ -257,11 +257,11 @@ export default function AddFoodModal({
         {planned && (
           <div>
             <label className="block text-xs font-medium text-neutral-500 mb-1">
-              Продукты для этого блюда (через запятую, необязательно)
+              Продукты для этого блюда (через запятую, с граммовкой/количеством, необязательно)
             </label>
             <input
               className="input"
-              placeholder="Например: курица, рис, помидоры"
+              placeholder="Например: курица 300г, рис 150г, помидоры 2шт"
               value={ingredientsText}
               onChange={(e) => setIngredientsText(e.target.value)}
             />

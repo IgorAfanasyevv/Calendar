@@ -286,12 +286,12 @@ function AddIngredientsModal({
         <input
           autoFocus
           className="input"
-          placeholder="Например: курица, рис, помидоры"
+          placeholder="Например: курица 300г, рис 150г, помидоры 2шт"
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSave()}
         />
-        <p className="text-xs text-neutral-400">Через запятую — после сохранения появится кнопка "Выбрать".</p>
+        <p className="text-xs text-neutral-400">Через запятую, с граммовкой/количеством — после сохранения появится кнопка "Выбрать".</p>
         <button
           onClick={handleSave}
           disabled={saving || !text.trim()}
