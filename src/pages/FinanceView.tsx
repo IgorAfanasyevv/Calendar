@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Plus, PieChart as PieChartIcon, X, Pencil } from 'lucide-react';
+import { Plus, PieChart as PieChartIcon, PiggyBank, X, Pencil } from 'lucide-react';
 import { useFinanceBoardStore } from '../store/financeBoardStore';
 import { useFinanceStore } from '../store/financeStore';
 import { useAuthStore } from '../store/authStore';
 import FinanceBoardView from './FinanceBoardView';
 import FinanceOverview from './FinanceOverview';
+import SavingsView from './SavingsView';
 
 export default function FinanceView({ workspaceId }: { workspaceId: string }) {
   const { boards, listen: listenBoards, createBoard, renameBoard, deleteBoard } = useFinanceBoardStore();
@@ -28,7 +29,7 @@ export default function FinanceView({ workspaceId }: { workspaceId: string }) {
   useEffect(() => {
     // Если выбранная вкладка вдруг пропала (например, была единственной и почему-то
     // удалена), возвращаемся к общему обзору, чтобы не показывать пустой экран.
-    if (selected !== 'overview' && !boards.some((b) => b.id === selected)) {
+    if (selected !== 'overview' && selected !== 'savings' && !boards.some((b) => b.id === selected)) {
       setSelected('overview');
     }
   }, [boards, selected]);
@@ -72,6 +73,14 @@ export default function FinanceView({ workspaceId }: { workspaceId: string }) {
           }`}
         >
           <PieChartIcon size={14} /> Все вместе
+        </button>
+        <button
+          onClick={() => setSelected('savings')}
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition ${
+            selected === 'savings' ? 'bg-indigo-500 text-white' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500'
+          }`}
+        >
+          <PiggyBank size={14} /> Копилки
         </button>
         {boards.map((b) =>
           renamingId === b.id ? (
@@ -156,6 +165,8 @@ export default function FinanceView({ workspaceId }: { workspaceId: string }) {
         </p>
       ) : selected === 'overview' ? (
         <FinanceOverview boards={boards} />
+      ) : selected === 'savings' ? (
+        <SavingsView workspaceId={workspaceId} />
       ) : activeBoard ? (
         <FinanceBoardView workspaceId={workspaceId} board={activeBoard} />
       ) : null}

@@ -210,6 +210,31 @@ export interface JournalEntry {
   createdAt: number;
 }
 
+export interface SavingsPot {
+  id: string;
+  workspaceId: string;
+  name: string;
+  currency: string;
+  targetAmount?: number;
+  monthlyContribution?: number;
+  balance: number;
+  color: string;
+  createdByName: string;
+  createdAt: number;
+}
+
+export interface SavingsTransaction {
+  id: string;
+  workspaceId: string;
+  potId: string;
+  type: 'deposit' | 'withdrawal';
+  amount: number;
+  note?: string;
+  date: string;
+  createdByName: string;
+  createdAt: number;
+}
+
 export interface UserProfile {
   uid: string;
   email: string;
