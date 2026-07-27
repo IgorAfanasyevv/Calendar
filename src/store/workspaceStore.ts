@@ -12,7 +12,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import type { Workspace, WorkspaceMember } from '../types';
+import type { DietPreferences, Workspace, WorkspaceMember } from '../types';
 
 interface WorkspaceState {
   workspace: Workspace | null;
@@ -23,6 +23,7 @@ interface WorkspaceState {
   joinWorkspace: (inviteCode: string, member: WorkspaceMember) => Promise<string>;
   removeMember: (workspaceId: string, uid: string) => Promise<void>;
   setCalorieGoal: (workspaceId: string, uid: string, goal: number) => Promise<void>;
+  setDietPreferences: (workspaceId: string, uid: string, prefs: DietPreferences) => Promise<void>;
   clearError: () => void;
 }
 
@@ -112,6 +113,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const current = get().workspace;
     if (!current) return;
     const members = current.members.map((m) => (m.uid === uid ? { ...m, calorieGoal: goal } : m));
+    await updateDoc(doc(db, 'workspaces', workspaceId), { members });
+  },
+
+  // Анкета предпочтений в питании — тоже хранится внутри members[], чтобы сервер
+  // (Cloud Function) мог прочитать её при генерации меню без доступа к users/{uid}.
+  setDietPreferences: async (workspaceId, uid, prefs) => {
+    const current = get().workspace;
+    if (!current) return;
+    const members = current.members.map((m) => (m.uid === uid ? { ...m, dietPreferences: prefs } : m));
     await updateDoc(doc(db, 'workspaces', workspaceId), { members });
   },
 }));

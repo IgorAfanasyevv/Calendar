@@ -59,12 +59,20 @@ export interface ShoppingItem {
   createdAt: number;
 }
 
+export interface DietPreferences {
+  restrictions?: string; // аллергии/диета: веган, без глютена и т.п.
+  dislikes?: string; // нелюбимые продукты
+  cuisine?: string; // предпочитаемая кухня
+  cookingTime?: 'quick' | 'standard' | 'any'; // сколько готовы тратить времени на готовку
+}
+
 export interface WorkspaceMember {
   uid: string;
   displayName: string;
   email: string;
   role: 'me' | 'partner';
   calorieGoal?: number;
+  dietPreferences?: DietPreferences;
 }
 
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';

@@ -204,6 +204,18 @@ async function handleFitnessAssistant(request) {
   const { member } = info;
   const goal = (member && member.calorieGoal) || null;
   const name = (member && member.displayName) || 'Пользователь';
+  const prefs = (member && member.dietPreferences) || {};
+  const cookingTimeLabel =
+    prefs.cookingTime === 'quick' ? 'быстрые блюда, до 20 минут готовки' : prefs.cookingTime === 'standard' ? 'обычное время готовки' : null;
+  const prefsLines = [
+    prefs.restrictions ? `Ограничения/диета/аллергии: ${prefs.restrictions}.` : null,
+    prefs.dislikes ? `Не любит: ${prefs.dislikes}.` : null,
+    prefs.cuisine ? `Предпочитаемая кухня: ${prefs.cuisine}.` : null,
+    cookingTimeLabel ? `Время на готовку: ${cookingTimeLabel}.` : null,
+  ].filter(Boolean);
+  const prefsText = prefsLines.length
+    ? `Учитывай личные вкусы и ограничения пользователя:\n${prefsLines.join('\n')}\n`
+    : '';
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -222,7 +234,7 @@ async function handleFitnessAssistant(request) {
     const remaining = goal ? Math.max(0, goal - consumed) : null;
 
     const prompt = `${SAFETY_NOTE}
-
+${prefsText}
 Сегодня ${name} уже съел(а): ${eaten.length ? eaten.map((e) => `${e.name} (${e.calories} ккал)`).join(', ') : 'пока ничего'}.
 Уже употреблено калорий: ${consumed}${goal ? ` из дневной цели ${goal}` : ' (дневная цель калорий не задана)'}.
 ${remaining !== null ? `Осталось примерно ${remaining} ккал на оставшиеся приёмы пищи.` : ''}
@@ -285,9 +297,9 @@ ${goal ? `Дневная цель — ${goal} ккал.` : 'Дневная це�
 
   if (action === 'weekly_menu') {
     const prompt = `${SAFETY_NOTE}
-
+${prefsText}
 Составь меню на 7 дней вперёд для ${name}${goal ? `, дневная цель — примерно ${goal} ккал` : ''}.
-На каждый день — завтрак, обед, ужин и один перекус. Простые, разнообразные, реалистичные для готовки дома блюда.
+На каждый день — завтрак, обед, ужин и один перекус. Простые, разнообразные, реалистичные для готовки дома блюда, но старайся, чтобы было по-настоящему вкусно и не однообразно — избегай повторения одних и тех же блюд в течение недели.
 Для каждого блюда укажи короткий список основных продуктов/ингредиентов, которые для него нужны (2-6 штук, простыми словами, как в списке покупок — например "куриная грудка", "рис", "помидоры").
 
 Ответь СТРОГО в формате JSON без какого-либо текста до или после, вот такой структуры:
@@ -296,7 +308,7 @@ offset — через сколько дней от сегодня (1 = завт�
 
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 2500,
+      max_tokens: 4096,
       messages: [{ role: 'user', content: prompt }],
     });
     const raw = msg.content.map((b) => b.text || '').join('\n').trim();
@@ -307,7 +319,19 @@ offset — через сколько дней от сегодня (1 = завт�
       const jsonEnd = raw.lastIndexOf('}');
       parsed = JSON.parse(raw.slice(jsonStart, jsonEnd + 1));
     } catch (e) {
-      logger.error('Не удалось разобрать JSON меню от модели', e, raw);
+      logger.error('Не удалось разобрать JSON меню от модели', {
+        error: e.message,
+        stopReason: msg.stop_reason,
+        rawLength: raw.length,
+        rawPreview: raw.slice(0, 200),
+        rawEnd: raw.slice(-200),
+      });
+      if (msg.stop_reason === 'max_tokens') {
+        throw new HttpsError(
+          'internal',
+          'Ответ модели получился слишком длинным и обрезался. Попробуйте ещё раз — иногда со второго раза получается короче.'
+        );
+      }
       throw new HttpsError('internal', 'Не получилось разобрать ответ модели. Попробуйте ещё раз.');
     }
 
@@ -373,7 +397,7 @@ offset — через сколько дней от сегодня (1 = завт�
   if (action === 'question') {
     if (!question || !question.trim()) throw new HttpsError('invalid-argument', 'Пустой вопрос.');
     const prompt = `${SAFETY_NOTE}
-
+${prefsText}
 ${goal ? `Дневная цель ${name} по калориям: ${goal} ккал.` : ''}
 
 Вопрос от ${name}: ${question.trim()}`;
