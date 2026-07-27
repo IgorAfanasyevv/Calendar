@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Trash2, Calendar, CheckSquare, Check } from 'lucide-react';
+import { Plus, Trash2, Calendar, CheckSquare, Check, Pencil } from 'lucide-react';
 import { useGoalStore } from '../store/goalStore';
 import { useAuthStore } from '../store/authStore';
 import { useTaskStore } from '../store/taskStore';
@@ -38,7 +38,8 @@ export default function GoalsView({ workspaceId }: { workspaceId: string }) {
 
       {creating && (
         <Modal title="Новая цель" onClose={() => setCreating(false)}>
-          <NewGoalForm
+          <GoalForm
+            submitLabel="Создать цель"
             onSave={async (data) => {
               await addGoal(workspaceId, data, actor);
               setCreating(false);
@@ -66,6 +67,7 @@ function GoalCard({
   const { firebaseUser, profile } = useAuthStore();
   const [addingTask, setAddingTask] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | undefined>(undefined);
+  const [editingGoal, setEditingGoal] = useState(false);
 
   const linkedTasks = tasks.filter((t) => t.goalId === goal.id);
   const actor = { uid: firebaseUser?.uid || '', name: profile?.displayName || '' };
@@ -87,9 +89,14 @@ function GoalCard({
     <div className="rounded-2xl glass p-5">
       <div className="flex items-start justify-between mb-2">
         <h3 className="font-semibold">{goal.title}</h3>
-        <button onClick={() => onDelete(goal.id, actor)} className="text-neutral-400 hover:text-rose-500">
-          <Trash2 size={15} />
-        </button>
+        <div className="flex items-center gap-1 shrink-0">
+          <button onClick={() => setEditingGoal(true)} className="text-neutral-400 hover:text-indigo-500">
+            <Pencil size={14} />
+          </button>
+          <button onClick={() => onDelete(goal.id, actor)} className="text-neutral-400 hover:text-rose-500">
+            <Trash2 size={15} />
+          </button>
+        </div>
       </div>
       {goal.description && <p className="text-xs text-neutral-500 mb-3">{goal.description}</p>}
       {goal.deadline && (
@@ -175,14 +182,34 @@ function GoalCard({
       {editingTask && (
         <TaskModal workspaceId={workspaceId} initial={editingTask} onClose={() => setEditingTask(undefined)} />
       )}
+      {editingGoal && (
+        <Modal title="Редактировать цель" onClose={() => setEditingGoal(false)}>
+          <GoalForm
+            initial={goal}
+            submitLabel="Сохранить"
+            onSave={async (data) => {
+              onUpdate(goal.id, data);
+              setEditingGoal(false);
+            }}
+          />
+        </Modal>
+      )}
     </div>
   );
 }
 
-function NewGoalForm({ onSave }: { onSave: (data: Partial<Goal>) => Promise<void> }) {
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [deadline, setDeadline] = useState('');
+function GoalForm({
+  initial,
+  submitLabel,
+  onSave,
+}: {
+  initial?: Goal;
+  submitLabel: string;
+  onSave: (data: Partial<Goal>) => Promise<void>;
+}) {
+  const [title, setTitle] = useState(initial?.title || '');
+  const [description, setDescription] = useState(initial?.description || '');
+  const [deadline, setDeadline] = useState(initial?.deadline || '');
 
   return (
     <div className="space-y-3">
@@ -194,7 +221,7 @@ function NewGoalForm({ onSave }: { onSave: (data: Partial<Goal>) => Promise<void
         onClick={() => onSave({ title, description, deadline })}
         className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white font-medium text-sm disabled:opacity-50"
       >
-        Создать цель
+        {submitLabel}
       </button>
     </div>
   );

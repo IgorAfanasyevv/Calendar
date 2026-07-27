@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, PieChart as PieChartIcon, X } from 'lucide-react';
+import { Plus, PieChart as PieChartIcon, X, Pencil } from 'lucide-react';
 import { useFinanceBoardStore } from '../store/financeBoardStore';
 import { useFinanceStore } from '../store/financeStore';
 import { useAuthStore } from '../store/authStore';
@@ -7,12 +7,14 @@ import FinanceBoardView from './FinanceBoardView';
 import FinanceOverview from './FinanceOverview';
 
 export default function FinanceView({ workspaceId }: { workspaceId: string }) {
-  const { boards, listen: listenBoards, createBoard, deleteBoard } = useFinanceBoardStore();
+  const { boards, listen: listenBoards, createBoard, renameBoard, deleteBoard } = useFinanceBoardStore();
   const { listenBoard } = useFinanceStore();
   const { profile } = useAuthStore();
   const [selected, setSelected] = useState<string>('overview');
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameInput, setRenameInput] = useState('');
 
   useEffect(() => listenBoards(workspaceId), [workspaceId, listenBoards]);
 
@@ -47,6 +49,17 @@ export default function FinanceView({ workspaceId }: { workspaceId: string }) {
     }
   }
 
+  function startRename(e: React.MouseEvent, boardId: string, name: string) {
+    e.stopPropagation();
+    setRenamingId(boardId);
+    setRenameInput(name);
+  }
+
+  async function confirmRename() {
+    if (renamingId) await renameBoard(workspaceId, renamingId, renameInput);
+    setRenamingId(null);
+  }
+
   const activeBoard = boards.find((b) => b.id === selected);
 
   return (
@@ -60,28 +73,55 @@ export default function FinanceView({ workspaceId }: { workspaceId: string }) {
         >
           <PieChartIcon size={14} /> Все вместе
         </button>
-        {boards.map((b) => (
-          <button
-            key={b.id}
-            onClick={() => setSelected(b.id)}
-            className={`group flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition ${
-              selected === b.id ? 'bg-indigo-500 text-white' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500'
-            }`}
-          >
-            {b.name}
-            <span
-              onClick={(e) => handleDelete(e, b.id, b.name)}
-              className={`rounded-full p-0.5 transition ${
-                selected === b.id
-                  ? 'hover:bg-white/20 text-white/70 hover:text-white'
-                  : 'text-neutral-400 hover:bg-neutral-300 dark:hover:bg-neutral-600 hover:text-neutral-700 dark:hover:text-neutral-200'
+        {boards.map((b) =>
+          renamingId === b.id ? (
+            <div key={b.id} className="flex items-center gap-1 shrink-0">
+              <input
+                autoFocus
+                className="input py-2 text-sm w-32"
+                value={renameInput}
+                onChange={(e) => setRenameInput(e.target.value)}
+                onBlur={confirmRename}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') confirmRename();
+                  if (e.key === 'Escape') setRenamingId(null);
+                }}
+              />
+            </div>
+          ) : (
+            <button
+              key={b.id}
+              onClick={() => setSelected(b.id)}
+              className={`group flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition ${
+                selected === b.id ? 'bg-indigo-500 text-white' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500'
               }`}
-              title="Удалить вкладку"
             >
-              <X size={12} />
-            </span>
-          </button>
-        ))}
+              {b.name}
+              <span
+                onClick={(e) => startRename(e, b.id, b.name)}
+                className={`rounded-full p-0.5 transition ${
+                  selected === b.id
+                    ? 'hover:bg-white/20 text-white/70 hover:text-white'
+                    : 'text-neutral-400 hover:bg-neutral-300 dark:hover:bg-neutral-600 hover:text-neutral-700 dark:hover:text-neutral-200'
+                }`}
+                title="Переименовать"
+              >
+                <Pencil size={11} />
+              </span>
+              <span
+                onClick={(e) => handleDelete(e, b.id, b.name)}
+                className={`rounded-full p-0.5 transition ${
+                  selected === b.id
+                    ? 'hover:bg-white/20 text-white/70 hover:text-white'
+                    : 'text-neutral-400 hover:bg-neutral-300 dark:hover:bg-neutral-600 hover:text-neutral-700 dark:hover:text-neutral-200'
+                }`}
+                title="Удалить вкладку"
+              >
+                <X size={12} />
+              </span>
+            </button>
+          )
+        )}
 
         {creating ? (
           <div className="flex items-center gap-1.5 shrink-0">

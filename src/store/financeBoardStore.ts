@@ -22,6 +22,7 @@ interface FinanceBoardState {
   loading: boolean;
   listen: (workspaceId: string) => () => void;
   createBoard: (workspaceId: string, name: string, actor: { name: string }) => Promise<string>;
+  renameBoard: (workspaceId: string, boardId: string, name: string) => Promise<void>;
   deleteBoard: (workspaceId: string, boardId: string) => Promise<void>;
   setBudget: (workspaceId: string, boardId: string, amount: number) => Promise<void>;
   setCurrency: (workspaceId: string, boardId: string, currency: string) => Promise<void>;
@@ -50,6 +51,10 @@ export const useFinanceBoardStore = create<FinanceBoardState>((set) => ({
       createdByName: actor.name,
     });
     return ref.id;
+  },
+  renameBoard: async (workspaceId, boardId, name) => {
+    if (!name.trim()) return;
+    await updateDoc(doc(db, 'workspaces', workspaceId, 'financeBoards', boardId), { name: name.trim() });
   },
   deleteBoard: async (workspaceId, boardId) => {
     const entriesSnap = await getDocs(collection(db, 'workspaces', workspaceId, 'financeBoards', boardId, 'entries'));
