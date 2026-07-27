@@ -5,11 +5,13 @@ import { useWorkspaceStore } from '../store/workspaceStore';
 import { useFinanceBoardStore } from '../store/financeBoardStore';
 import { useAuthStore } from '../store/authStore';
 import { CURRENCIES, currencySymbol } from '../lib/currency';
+import Modal from '../components/Modal';
+import type { ShoppingItem } from '../types';
 
 const CATEGORIES = ['Продукты', 'Дом', 'Одежда', 'Электроника', 'Подарки', 'Другое'];
 
 export default function ShoppingView({ workspaceId }: { workspaceId: string }) {
-  const { items, addItem, toggleBought, deleteItem } = useShoppingStore();
+  const { items, addItem, toggleBought, markBoughtWithPrice, deleteItem } = useShoppingStore();
   const { workspace, setShoppingFinanceBoard } = useWorkspaceStore();
   const { boards } = useFinanceBoardStore();
   const { firebaseUser, profile } = useAuthStore();
@@ -17,11 +19,10 @@ export default function ShoppingView({ workspaceId }: { workspaceId: string }) {
   const defaultCurrency = workspace?.currency || 'RUB';
   const [name, setName] = useState('');
   const [category, setCategory] = useState(CATEGORIES[0]);
-  const [price, setPrice] = useState('');
-  const [currency, setCurrency] = useState(defaultCurrency);
   const [quantity, setQuantity] = useState(1);
   const [hideBought, setHideBought] = useState(true);
   const [selectedUid, setSelectedUid] = useState(firebaseUser?.uid || '');
+  const [pricingItem, setPricingItem] = useState<ShoppingItem | null>(null);
 
   const members = workspace?.members || [];
   const isMe = selectedUid === firebaseUser?.uid;
@@ -60,14 +61,19 @@ export default function ShoppingView({ workspaceId }: { workspaceId: string }) {
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
-    await addItem(
-      workspaceId,
-      { name: name.trim(), category, price: price ? Number(price) : undefined, currency, quantity },
-      actor
-    );
+    await addItem(workspaceId, { name: name.trim(), category, quantity }, actor);
     setName('');
-    setPrice('');
     setQuantity(1);
+  }
+
+  function handleCheckboxChange(item: ShoppingItem) {
+    if (item.bought) {
+      // Снимаем галочку — без лишних вопросов
+      toggleBought(item, actor);
+    } else {
+      // Отмечаем купленным — сначала спросим цену (именно в момент покупки видна реальная цена)
+      setPricingItem(item);
+    }
   }
 
   return (
@@ -129,7 +135,7 @@ export default function ShoppingView({ workspaceId }: { workspaceId: string }) {
       </div>
 
       {isMe && (
-        <form onSubmit={handleAdd} className="rounded-2xl glass p-4 mb-6 grid grid-cols-2 sm:grid-cols-6 gap-2">
+        <form onSubmit={handleAdd} className="rounded-2xl glass p-4 mb-6 grid grid-cols-2 sm:grid-cols-4 gap-2">
           <input
             className="input sm:col-span-2"
             placeholder="Что купить?"
@@ -139,18 +145,6 @@ export default function ShoppingView({ workspaceId }: { workspaceId: string }) {
           <select className="input" value={category} onChange={(e) => setCategory(e.target.value)}>
             {CATEGORIES.map((c) => (
               <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
-          <input
-            className="input"
-            type="number"
-            placeholder="Цена"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-          />
-          <select className="input" value={currency} onChange={(e) => setCurrency(e.target.value)}>
-            {Object.entries(CURRENCIES).map(([code, c]) => (
-              <option key={code} value={code}>{c.symbol} {code}</option>
             ))}
           </select>
           <div className="flex gap-2">
@@ -175,7 +169,7 @@ export default function ShoppingView({ workspaceId }: { workspaceId: string }) {
             <div className="space-y-1.5">
               {list.map((item) => (
                 <div key={item.id} className="flex items-center gap-3 rounded-xl glass px-3 py-2.5">
-                  <input type="checkbox" checked={item.bought} onChange={() => toggleBought(item, actor)} />
+                  <input type="checkbox" checked={item.bought} onChange={() => handleCheckboxChange(item)} />
                   <span className={`text-sm flex-1 ${item.bought ? 'line-through text-neutral-400' : ''}`}>
                     {item.name} {item.quantity > 1 && <span className="text-neutral-400">× {item.quantity}</span>}
                   </span>
@@ -196,6 +190,97 @@ export default function ShoppingView({ workspaceId }: { workspaceId: string }) {
           <p className="text-sm text-neutral-400 text-center py-12">Список пуст 🛒</p>
         )}
       </div>
+
+      {pricingItem && (
+        <PriceModal
+          item={pricingItem}
+          defaultCurrency={defaultCurrency}
+          onSkip={async () => {
+            await markBoughtWithPrice(pricingItem, undefined, undefined, actor);
+            setPricingItem(null);
+          }}
+          onConfirm={async (price, currency) => {
+            await markBoughtWithPrice(pricingItem, price, currency, actor);
+            setPricingItem(null);
+          }}
+          onClose={() => setPricingItem(null)}
+        />
+      )}
     </div>
+  );
+}
+
+function PriceModal({
+  item,
+  defaultCurrency,
+  onSkip,
+  onConfirm,
+  onClose,
+}: {
+  item: ShoppingItem;
+  defaultCurrency: string;
+  onSkip: () => Promise<void>;
+  onConfirm: (price: number, currency: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [price, setPrice] = useState(item.price ? String(item.price) : '');
+  const [currency, setCurrency] = useState(item.currency || defaultCurrency);
+  const [saving, setSaving] = useState(false);
+
+  async function handleConfirm() {
+    const val = Number(price);
+    if (!val || val <= 0) return;
+    setSaving(true);
+    try {
+      await onConfirm(val, currency);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSkip() {
+    setSaving(true);
+    try {
+      await onSkip();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal title={`Сколько стоило «${item.name}»?`} onClose={onClose}>
+      <div className="space-y-3">
+        <div className="flex gap-2">
+          <input
+            autoFocus
+            type="number"
+            className="input flex-1 text-lg font-semibold"
+            placeholder="Цена"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleConfirm()}
+          />
+          <select className="input w-28" value={currency} onChange={(e) => setCurrency(e.target.value)}>
+            {Object.entries(CURRENCIES).map(([code, c]) => (
+              <option key={code} value={code}>{c.symbol} {code}</option>
+            ))}
+          </select>
+        </div>
+        <button
+          onClick={handleConfirm}
+          disabled={saving || !price}
+          className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white font-medium text-sm disabled:opacity-50"
+        >
+          Отметить купленным
+        </button>
+        <button
+          onClick={handleSkip}
+          disabled={saving}
+          className="w-full py-2 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-xs font-medium text-neutral-500 disabled:opacity-50"
+        >
+          Пропустить (без цены)
+        </button>
+      </div>
+    </Modal>
   );
 }
