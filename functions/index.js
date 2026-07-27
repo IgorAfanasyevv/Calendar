@@ -453,6 +453,10 @@ const ASSISTANT_TOOLS = [
         meal_type: { type: 'string', enum: ['breakfast', 'lunch', 'dinner', 'snack'] },
         date: { type: 'string', description: 'YYYY-MM-DD, по умолчанию сегодня' },
         planned: { type: 'boolean', description: 'true, если это план на будущее (в раздел Меню), а не то, что уже съедено' },
+        save_as_preset: {
+          type: 'boolean',
+          description: 'true, если пользователь просит запомнить/сохранить это блюдо для быстрого повторного добавления в будущем ("своя еда")',
+        },
       },
       required: ['name', 'calories', 'meal_type'],
     },
@@ -716,7 +720,24 @@ async function executeAssistantTool(name, input, ctx) {
       createdByName: actorName,
       createdAt: Date.now(),
     });
-    return { ok: true, created: 'food_entry', name: input.name, planned: !!input.planned };
+
+    let savedPreset = false;
+    if (input.save_as_preset) {
+      const presetRef = db.collection('workspaces').doc(workspaceId).collection('foodPresets').doc();
+      await presetRef.set(
+        stripUndefinedFields({
+          name: input.name,
+          calories: input.calories,
+          protein: input.protein || undefined,
+          fat: input.fat || undefined,
+          carbs: input.carbs || undefined,
+          workspaceId,
+        })
+      );
+      savedPreset = true;
+    }
+
+    return { ok: true, created: 'food_entry', name: input.name, planned: !!input.planned, savedAsPreset: savedPreset };
   }
 
   if (name === 'add_workout') {
