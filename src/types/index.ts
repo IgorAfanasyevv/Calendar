@@ -84,6 +84,7 @@ export interface FoodEntry {
   mealType: MealType;
   name: string;
   calories: number;
+  grams?: number;
   protein?: number;
   fat?: number;
   carbs?: number;
@@ -98,6 +99,7 @@ export interface FoodPreset {
   workspaceId: string;
   name: string;
   calories: number;
+  grams?: number;
   protein?: number;
   fat?: number;
   carbs?: number;

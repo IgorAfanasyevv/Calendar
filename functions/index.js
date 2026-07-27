@@ -196,7 +196,7 @@ async function handleFitnessAssistant(request) {
   const uid = request.auth && request.auth.uid;
   if (!uid) throw new HttpsError('unauthenticated', 'Нужно войти в аккаунт.');
 
-  const { workspaceId, action, question } = request.data || {};
+  const { workspaceId, action, question, entryId, preference } = request.data || {};
   if (!workspaceId || !action) throw new HttpsError('invalid-argument', 'Не хватает параметров.');
 
   const info = await getMember(workspaceId, uid);
@@ -303,8 +303,8 @@ ${prefsText}
 Для каждого блюда укажи короткий список основных продуктов/ингредиентов, которые для него нужны (2-6 штук, простыми словами, как в списке покупок — например "куриная грудка", "рис", "помидоры").
 
 Ответь СТРОГО в формате JSON без какого-либо текста до или после, вот такой структуры:
-{"days":[{"offset":1,"meals":[{"mealType":"breakfast","name":"...","calories":123,"protein":10,"fat":5,"carbs":20,"ingredients":["...","..."]}, ...]}]}
-offset — через сколько дней от сегодня (1 = завтра, 7 = через неделю). mealType — один из: breakfast, lunch, dinner, snack.`;
+{"days":[{"offset":1,"meals":[{"mealType":"breakfast","name":"...","calories":123,"grams":250,"protein":10,"fat":5,"carbs":20,"ingredients":["...","..."]}, ...]}]}
+offset — через сколько дней от сегодня (1 = завтра, 7 = через неделю). mealType — один из: breakfast, lunch, dinner, snack. grams — примерный вес порции в граммах.`;
 
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
@@ -355,6 +355,7 @@ offset — через сколько дней от сегодня (1 = завт�
             mealType: meal.mealType || 'snack',
             name: meal.name || 'Блюдо',
             calories: Number(meal.calories) || 0,
+            grams: meal.grams ? Number(meal.grams) : undefined,
             protein: meal.protein ? Number(meal.protein) : undefined,
             fat: meal.fat ? Number(meal.fat) : undefined,
             carbs: meal.carbs ? Number(meal.carbs) : undefined,
@@ -392,6 +393,54 @@ offset — через сколько дней от сегодня (1 = завт�
     return {
       text: `Готово! Добавил ${count} приёмов пищи на ближайшую неделю в раздел «Меню» и ${addedToShopping} продуктов для них — в «Список покупок».`,
     };
+  }
+
+  if (action === 'replace_meal') {
+    if (!entryId) throw new HttpsError('invalid-argument', 'Не хватает параметров.');
+    const entryRef = db.collection('workspaces').doc(workspaceId).collection('food').doc(entryId);
+    const entrySnap = await entryRef.get();
+    if (!entrySnap.exists) throw new HttpsError('not-found', 'Блюдо не найдено — возможно, уже удалено.');
+    const current = entrySnap.data();
+
+    const mealTypeLabels = { breakfast: 'завтрак', lunch: 'обед', dinner: 'ужин', snack: 'перекус' };
+    const prompt = `${SAFETY_NOTE}
+${prefsText}
+Нужно заменить блюдо на ${mealTypeLabels[current.mealType] || current.mealType} в меню ${name}.
+Текущее блюдо: «${current.name}» (примерно ${current.calories} ккал${current.grams ? `, ${current.grams} г` : ''}).
+${preference && preference.trim() ? `Пожелание по замене: ${preference.trim()}.` : 'Пользователь не указал конкретное пожелание — подбери хорошую разнообразную альтернативу.'}
+
+Предложи ОДНО блюдо на замену, максимально близкое по калорийности к текущему (в пределах ~15%). Ответь СТРОГО в формате JSON без текста до/после:
+{"name":"...","calories":123,"grams":250,"protein":10,"fat":5,"carbs":20}`;
+
+    const msg = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 400,
+      messages: [{ role: 'user', content: prompt }],
+    });
+    const raw = msg.content.map((b) => b.text || '').join('\n').trim();
+
+    let meal;
+    try {
+      const jsonStart = raw.indexOf('{');
+      const jsonEnd = raw.lastIndexOf('}');
+      meal = JSON.parse(raw.slice(jsonStart, jsonEnd + 1));
+    } catch (e) {
+      logger.error('Не удалось разобрать JSON замены блюда', e, raw);
+      throw new HttpsError('internal', 'Не получилось разобрать ответ модели. Попробуйте ещё раз.');
+    }
+
+    await entryRef.update(
+      stripUndefinedFields({
+        name: meal.name || current.name,
+        calories: Number(meal.calories) || current.calories,
+        grams: meal.grams ? Number(meal.grams) : undefined,
+        protein: meal.protein ? Number(meal.protein) : undefined,
+        fat: meal.fat ? Number(meal.fat) : undefined,
+        carbs: meal.carbs ? Number(meal.carbs) : undefined,
+      })
+    );
+
+    return { text: `Заменил(а) «${current.name}» на «${meal.name}».` };
   }
 
   if (action === 'question') {

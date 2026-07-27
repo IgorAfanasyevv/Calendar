@@ -228,7 +228,7 @@ function FoodRow({ entry, onDelete, canDelete }: { entry: FoodEntry; onDelete: (
   return (
     <div className="flex items-center gap-2 text-sm py-1">
       <span className="flex-1 truncate">{entry.name}</span>
-      <span className="text-xs text-neutral-400 shrink-0">{entry.calories} ккал</span>
+      <span className="text-xs text-neutral-400 shrink-0">{entry.grams ? `${entry.grams} г · ` : ''}{entry.calories} ккал</span>
       {canDelete && (
         <button onClick={onDelete} className="text-neutral-400 hover:text-rose-500 shrink-0">
           <Trash2 size={13} />

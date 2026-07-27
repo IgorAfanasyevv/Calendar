@@ -26,6 +26,7 @@ export default function AddFoodModal({
   const firstPreset = presets.length > 0 ? presets[0] : undefined;
   const [selected, setSelected] = useState(firstPreset ? firstPreset.id : NEW_FOOD);
   const [name, setName] = useState(firstPreset?.name || '');
+  const [grams, setGrams] = useState(firstPreset?.grams ? String(firstPreset.grams) : '');
   const [calories, setCalories] = useState(firstPreset ? String(firstPreset.calories) : '');
   const [protein, setProtein] = useState(firstPreset?.protein ? String(firstPreset.protein) : '');
   const [fat, setFat] = useState(firstPreset?.fat ? String(firstPreset.fat) : '');
@@ -41,6 +42,7 @@ export default function AddFoodModal({
       const p = presets.find((x) => x.id === value);
       if (p) {
         setName(p.name);
+        setGrams(p.grams ? String(p.grams) : '');
         setCalories(String(p.calories));
         setProtein(p.protein ? String(p.protein) : '');
         setFat(p.fat ? String(p.fat) : '');
@@ -48,6 +50,7 @@ export default function AddFoodModal({
       }
     } else {
       setName('');
+      setGrams('');
       setCalories('');
       setProtein('');
       setFat('');
@@ -62,6 +65,7 @@ export default function AddFoodModal({
       const payload: Partial<FoodEntry> = {
         name: name.trim(),
         calories: Number(calories) || 0,
+        grams: grams ? Number(grams) : undefined,
         protein: protein ? Number(protein) : undefined,
         fat: fat ? Number(fat) : undefined,
         carbs: carbs ? Number(carbs) : undefined,
@@ -74,6 +78,7 @@ export default function AddFoodModal({
         await addPreset(workspaceId, {
           name: name.trim(),
           calories: Number(calories) || 0,
+          grams: grams ? Number(grams) : undefined,
           protein: protein ? Number(protein) : undefined,
           fat: fat ? Number(fat) : undefined,
           carbs: carbs ? Number(carbs) : undefined,
@@ -91,7 +96,7 @@ export default function AddFoodModal({
         {presets.length > 0 && (
           <select className="input" value={selected} onChange={(e) => handleSelectChange(e.target.value)}>
             {presets.map((p) => (
-              <option key={p.id} value={p.id}>{p.name} — {p.calories} ккал</option>
+              <option key={p.id} value={p.id}>{p.name} — {p.calories} ккал{p.grams ? ` (${p.grams} г)` : ''}</option>
             ))}
             <option value={NEW_FOOD}>+ Своя еда...</option>
           </select>
@@ -113,6 +118,13 @@ export default function AddFoodModal({
             value={calories}
             onChange={(e) => setCalories(e.target.value)}
             
+          />
+          <input
+            type="number"
+            className="input"
+            placeholder="Граммовка, г"
+            value={grams}
+            onChange={(e) => setGrams(e.target.value)}
           />
           <input
             type="number"

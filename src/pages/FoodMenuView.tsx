@@ -1,9 +1,17 @@
 import { useMemo, useState } from 'react';
-import { Plus, Trash2, Check, CalendarRange } from 'lucide-react';
+import { httpsCallable } from 'firebase/functions';
+import { Plus, Trash2, Check, CalendarRange, RefreshCw, Loader2 } from 'lucide-react';
 import { useFoodStore } from '../store/foodStore';
 import { useAuthStore } from '../store/authStore';
+import { functions } from '../lib/firebase';
+import Modal from '../components/Modal';
 import type { FoodEntry, MealType } from '../types';
 import AddFoodModal from '../components/AddFoodModal';
+
+const replaceMealCall = httpsCallable<
+  { workspaceId: string; action: 'replace_meal'; entryId: string; preference?: string },
+  { text: string }
+>(functions, 'fitnessAssistant');
 
 const MEAL_LABELS: Record<MealType, string> = {
   breakfast: 'Завтрак',
@@ -24,6 +32,7 @@ export default function FoodMenuView({ workspaceId }: { workspaceId: string }) {
   const [adding, setAdding] = useState<{ date: string; mealType: MealType } | null>(null);
   const [newDate, setNewDate] = useState(new Date().toISOString().slice(0, 10));
   const [newMeal, setNewMeal] = useState<MealType>('breakfast');
+  const [replacingEntry, setReplacingEntry] = useState<FoodEntry | null>(null);
 
   const plannedEntries = useMemo(
     () => entries.filter((e) => e.planned).sort((a, b) => a.date.localeCompare(b.date)),
@@ -78,8 +87,14 @@ export default function FoodMenuView({ workspaceId }: { workspaceId: string }) {
                   <span className="text-xs font-medium text-neutral-500 shrink-0 w-16">{MEAL_LABELS[e.mealType]}</span>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm truncate">{e.name}</p>
-                    <p className="text-[11px] text-neutral-400">{e.calories} ккал</p>
+                    <p className="text-[11px] text-neutral-400">{e.grams ? `${e.grams} г · ` : ''}{e.calories} ккал</p>
                   </div>
+                  <button
+                    onClick={() => setReplacingEntry(e)}
+                    className="flex items-center gap-1 text-[11px] font-medium text-indigo-600 hover:text-indigo-700 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-1 rounded-lg shrink-0"
+                  >
+                    <RefreshCw size={12} /> Заменить
+                  </button>
                   <button
                     onClick={() => markEaten(e)}
                     className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 hover:text-emerald-700 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-1 rounded-lg shrink-0"
@@ -110,6 +125,68 @@ export default function FoodMenuView({ workspaceId }: { workspaceId: string }) {
           onClose={() => setAdding(null)}
         />
       )}
+
+      {replacingEntry && (
+        <ReplaceMealModal
+          workspaceId={workspaceId}
+          entry={replacingEntry}
+          onClose={() => setReplacingEntry(null)}
+        />
+      )}
     </div>
+  );
+}
+
+function ReplaceMealModal({
+  workspaceId,
+  entry,
+  onClose,
+}: {
+  workspaceId: string;
+  entry: FoodEntry;
+  onClose: () => void;
+}) {
+  const [preference, setPreference] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleReplace() {
+    setLoading(true);
+    setError(null);
+    try {
+      await replaceMealCall({ workspaceId, action: 'replace_meal', entryId: entry.id, preference: preference.trim() || undefined });
+      onClose();
+    } catch (e) {
+      setError((e as { message?: string })?.message || 'Не удалось заменить блюдо. Попробуйте ещё раз.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Modal title={`Заменить «${entry.name}»`} onClose={onClose}>
+      <div className="space-y-3">
+        <p className="text-xs text-neutral-400">
+          {MEAL_LABELS[entry.mealType]}, примерно {entry.calories} ккал — ИИ подберёт замену похожей калорийности.
+        </p>
+        <input
+          autoFocus
+          className="input"
+          placeholder="Предпочтительное блюдо (необязательно), например: что-то с курицей"
+          value={preference}
+          onChange={(e) => setPreference(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleReplace()}
+        />
+        {error && <p className="text-xs text-rose-500">{error}</p>}
+        <button
+          onClick={handleReplace}
+          disabled={loading}
+          className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white font-medium text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          {loading && <Loader2 size={15} className="animate-spin" />}
+          Заменить блюдо
+        </button>
+      </div>
+    </Modal>
   );
 }
