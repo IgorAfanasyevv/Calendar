@@ -3,6 +3,7 @@ import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, updateD
 import { db } from '../lib/firebase';
 import type { FoodEntry, FoodPreset } from '../types';
 import { logActivity } from './activityStore';
+import { useShoppingStore } from './shoppingStore';
 
 // Firestore выдаёт ошибку, если в документ попадает поле со значением undefined
 // (например, необязательные белки/жиры/углеводы или planned, если его не передали).
@@ -20,6 +21,7 @@ interface FoodState {
   markEaten: (entry: FoodEntry) => Promise<void>;
   addPreset: (workspaceId: string, preset: Partial<FoodPreset>) => Promise<void>;
   deletePreset: (preset: FoodPreset) => Promise<void>;
+  sendIngredientsToShopping: (entry: FoodEntry) => Promise<void>;
 }
 
 export const useFoodStore = create<FoodState>((set) => ({
@@ -83,5 +85,22 @@ export const useFoodStore = create<FoodState>((set) => ({
   },
   deletePreset: async (preset) => {
     await deleteDoc(doc(db, 'workspaces', preset.workspaceId, 'foodPresets', preset.id));
+  },
+  // "Выбрать" в меню — продукты блюда уходят в список покупок ТОГО, кто создал
+  // это блюдо в меню (а не текущего пользователя), как и было задумано.
+  sendIngredientsToShopping: async (entry) => {
+    const ingredients = entry.ingredients || [];
+    if (ingredients.length === 0) return;
+    const owner = { uid: entry.createdBy, name: entry.createdByName };
+    await Promise.all(
+      ingredients.map((ingredientName) =>
+        useShoppingStore.getState().addItem(
+          entry.workspaceId,
+          { name: ingredientName, category: 'Продукты', quantity: 1, createdBy: entry.createdBy, createdByName: entry.createdByName },
+          owner
+        )
+      )
+    );
+    await updateDoc(doc(db, 'workspaces', entry.workspaceId, 'food', entry.id), { addedToShopping: true });
   },
 }));

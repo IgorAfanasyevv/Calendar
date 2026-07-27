@@ -41,6 +41,8 @@ export const useShoppingStore = create<ShoppingState>((set, get) => ({
         category: 'Продукты',
         quantity: 1,
         bought: false,
+        createdBy: actor.uid,
+        createdByName: actor.name,
         ...item,
         workspaceId,
         createdAt: Date.now(),

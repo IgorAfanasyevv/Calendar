@@ -57,6 +57,8 @@ export interface ShoppingItem {
   currency?: string; // ISO код валюты этой конкретной покупки, по умолчанию — валюта пространства
   quantity: number;
   bought: boolean;
+  createdBy: string;
+  createdByName: string;
   createdAt: number;
 }
 
@@ -93,6 +95,8 @@ export interface FoodEntry {
   fat?: number;
   carbs?: number;
   planned?: boolean; // true = запланировано в меню, ещё не съедено
+  ingredients?: string[]; // продукты для этого блюда (из ИИ-меню), для добавления в покупки вручную
+  addedToShopping?: boolean;
   createdBy: string;
   createdByName: string;
   createdAt: number;

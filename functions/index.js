@@ -337,9 +337,7 @@ offset — через сколько дней от сегодня (1 = завт�
 
     const batch = db.batch();
     const foodCol = db.collection('workspaces').doc(workspaceId).collection('food');
-    const shoppingCol = db.collection('workspaces').doc(workspaceId).collection('shopping');
     let count = 0;
-    const ingredientSet = new Set();
 
     (parsed.days || []).forEach((day) => {
       const date = new Date();
@@ -347,6 +345,10 @@ offset — через сколько дней от сегодня (1 = завт�
       const dateStr = date.toISOString().slice(0, 10);
       (day.meals || []).forEach((meal) => {
         const ref = foodCol.doc();
+        const ingredients = (meal.ingredients || [])
+          .map((ing) => String(ing).trim())
+          .filter(Boolean)
+          .map((ing) => ing.charAt(0).toUpperCase() + ing.slice(1));
         batch.set(
           ref,
           stripUndefinedFields({
@@ -359,6 +361,7 @@ offset — через сколько дней от сегодня (1 = завт�
             protein: meal.protein ? Number(meal.protein) : undefined,
             fat: meal.fat ? Number(meal.fat) : undefined,
             carbs: meal.carbs ? Number(meal.carbs) : undefined,
+            ingredients: ingredients.length ? ingredients : undefined,
             planned: true,
             createdBy: uid,
             createdByName: name,
@@ -366,32 +369,12 @@ offset — через сколько дней от сегодня (1 = завт�
           })
         );
         count++;
-        (meal.ingredients || []).forEach((ing) => {
-          const clean = String(ing).trim();
-          if (clean) ingredientSet.add(clean.charAt(0).toUpperCase() + clean.slice(1));
-        });
       });
-    });
-
-    // Уникальные продукты для всего меню сразу добавляем в список покупок,
-    // чтобы не пришлось переписывать их вручную с бумажки.
-    let addedToShopping = 0;
-    ingredientSet.forEach((ingredientName) => {
-      const ref = shoppingCol.doc();
-      batch.set(ref, {
-        workspaceId,
-        name: ingredientName,
-        category: 'Продукты',
-        quantity: 1,
-        bought: false,
-        createdAt: Date.now(),
-      });
-      addedToShopping++;
     });
 
     await batch.commit();
     return {
-      text: `Готово! Добавил ${count} приёмов пищи на ближайшую неделю в раздел «Меню» и ${addedToShopping} продуктов для них — в «Список покупок».`,
+      text: `Готово! Добавил ${count} приёмов пищи на ближайшую неделю в раздел «Меню». Продукты в покупки пока не отправлял — просмотрите меню, при необходимости замените блюда, а затем нажмите «Выбрать» на нужных, чтобы их продукты попали в ваш список покупок.`,
     };
   }
 
@@ -409,8 +392,8 @@ ${prefsText}
 Текущее блюдо: «${current.name}» (примерно ${current.calories} ккал${current.grams ? `, ${current.grams} г` : ''}).
 ${preference && preference.trim() ? `Пожелание по замене: ${preference.trim()}.` : 'Пользователь не указал конкретное пожелание — подбери хорошую разнообразную альтернативу.'}
 
-Предложи ОДНО блюдо на замену, максимально близкое по калорийности к текущему (в пределах ~15%). Ответь СТРОГО в формате JSON без текста до/после:
-{"name":"...","calories":123,"grams":250,"protein":10,"fat":5,"carbs":20}`;
+Предложи ОДНО блюдо на замену, максимально близкое по калорийности к текущему (в пределах ~15%), и короткий список продуктов/ингредиентов для него (2-6 штук). Ответь СТРОГО в формате JSON без текста до/после:
+{"name":"...","calories":123,"grams":250,"protein":10,"fat":5,"carbs":20,"ingredients":["...","..."]}`;
 
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
@@ -429,6 +412,11 @@ ${preference && preference.trim() ? `Пожелание по замене: ${pre
       throw new HttpsError('internal', 'Не получилось разобрать ответ модели. Попробуйте ещё раз.');
     }
 
+    const newIngredients = (meal.ingredients || [])
+      .map((ing) => String(ing).trim())
+      .filter(Boolean)
+      .map((ing) => ing.charAt(0).toUpperCase() + ing.slice(1));
+
     await entryRef.update(
       stripUndefinedFields({
         name: meal.name || current.name,
@@ -437,6 +425,8 @@ ${preference && preference.trim() ? `Пожелание по замене: ${pre
         protein: meal.protein ? Number(meal.protein) : undefined,
         fat: meal.fat ? Number(meal.fat) : undefined,
         carbs: meal.carbs ? Number(meal.carbs) : undefined,
+        ingredients: newIngredients.length ? newIngredients : undefined,
+        addedToShopping: false,
       })
     );
 
@@ -755,6 +745,8 @@ async function executeAssistantTool(name, input, ctx) {
       quantity: input.quantity || 1,
       bought: false,
       workspaceId,
+      createdBy: uid,
+      createdByName: actorName,
       createdAt: Date.now(),
     });
     return { ok: true, created: 'shopping_item', name: input.name };

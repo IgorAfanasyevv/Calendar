@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { httpsCallable } from 'firebase/functions';
-import { Plus, Trash2, Check, CalendarRange, RefreshCw, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Check, CalendarRange, RefreshCw, Loader2, ShoppingCart } from 'lucide-react';
 import { useFoodStore } from '../store/foodStore';
 import { useAuthStore } from '../store/authStore';
+import { useWorkspaceStore } from '../store/workspaceStore';
 import { functions } from '../lib/firebase';
 import Modal from '../components/Modal';
 import type { FoodEntry, MealType } from '../types';
@@ -26,17 +27,29 @@ function formatDate(dateStr: string): string {
 }
 
 export default function FoodMenuView({ workspaceId }: { workspaceId: string }) {
-  const { entries, addEntry, deleteEntry, markEaten } = useFoodStore();
+  const { entries, addEntry, deleteEntry, markEaten, sendIngredientsToShopping } = useFoodStore();
   const { firebaseUser, profile } = useAuthStore();
+  const { workspace } = useWorkspaceStore();
   const actor = { uid: firebaseUser?.uid || '', name: profile?.displayName || '' };
   const [adding, setAdding] = useState<{ date: string; mealType: MealType } | null>(null);
   const [newDate, setNewDate] = useState(new Date().toISOString().slice(0, 10));
   const [newMeal, setNewMeal] = useState<MealType>('breakfast');
   const [replacingEntry, setReplacingEntry] = useState<FoodEntry | null>(null);
+  const [selectedUid, setSelectedUid] = useState(firebaseUser?.uid || '');
+  const [sendingId, setSendingId] = useState<string | null>(null);
+
+  const members = workspace?.members || [];
+
+  useEffect(() => {
+    if (firebaseUser && !selectedUid) setSelectedUid(firebaseUser.uid);
+  }, [firebaseUser, selectedUid]);
 
   const plannedEntries = useMemo(
-    () => entries.filter((e) => e.planned).sort((a, b) => a.date.localeCompare(b.date)),
-    [entries]
+    () =>
+      entries
+        .filter((e) => e.planned && e.createdBy === selectedUid)
+        .sort((a, b) => a.date.localeCompare(b.date)),
+    [entries, selectedUid]
   );
 
   const grouped = useMemo(() => {
@@ -47,6 +60,15 @@ export default function FoodMenuView({ workspaceId }: { workspaceId: string }) {
     });
     return Object.entries(map);
   }, [plannedEntries]);
+
+  async function handleSelectForShopping(entry: FoodEntry) {
+    setSendingId(entry.id);
+    try {
+      await sendIngredientsToShopping(entry);
+    } finally {
+      setSendingId(null);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -64,6 +86,23 @@ export default function FoodMenuView({ workspaceId }: { workspaceId: string }) {
           <Plus size={15} /> Запланировать
         </button>
       </div>
+
+      {/* Переключатель "Я" / партнёр — у каждого своё меню */}
+      {members.length > 1 && (
+        <div className="flex gap-2">
+          {members.map((m) => (
+            <button
+              key={m.uid}
+              onClick={() => setSelectedUid(m.uid)}
+              className={`flex-1 py-2 rounded-xl text-sm font-medium transition ${
+                selectedUid === m.uid ? 'bg-indigo-500 text-white' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500'
+              }`}
+            >
+              {m.displayName}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Быстрый выбор даты/приёма для новой записи */}
       <div className="rounded-2xl glass p-4 flex flex-wrap gap-2 items-center">
@@ -89,6 +128,21 @@ export default function FoodMenuView({ workspaceId }: { workspaceId: string }) {
                     <p className="text-sm truncate">{e.name}</p>
                     <p className="text-[11px] text-neutral-400">{e.grams ? `${e.grams} г · ` : ''}{e.calories} ккал</p>
                   </div>
+                  {e.ingredients && e.ingredients.length > 0 && (
+                    <button
+                      onClick={() => handleSelectForShopping(e)}
+                      disabled={e.addedToShopping || sendingId === e.id}
+                      className={`flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-lg shrink-0 ${
+                        e.addedToShopping
+                          ? 'text-neutral-400 bg-neutral-100 dark:bg-neutral-800'
+                          : 'text-violet-600 hover:text-violet-700 bg-violet-50 dark:bg-violet-500/10'
+                      }`}
+                      title={e.ingredients.join(', ')}
+                    >
+                      {sendingId === e.id ? <Loader2 size={12} className="animate-spin" /> : <ShoppingCart size={12} />}
+                      {e.addedToShopping ? 'Добавлено' : 'Выбрать'}
+                    </button>
+                  )}
                   <button
                     onClick={() => setReplacingEntry(e)}
                     className="flex items-center gap-1 text-[11px] font-medium text-indigo-600 hover:text-indigo-700 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-1 rounded-lg shrink-0"

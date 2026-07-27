@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plus, Trash2, EyeOff, Eye, Wallet } from 'lucide-react';
 import { useShoppingStore } from '../store/shoppingStore';
 import { useWorkspaceStore } from '../store/workspaceStore';
@@ -21,28 +21,41 @@ export default function ShoppingView({ workspaceId }: { workspaceId: string }) {
   const [currency, setCurrency] = useState(defaultCurrency);
   const [quantity, setQuantity] = useState(1);
   const [hideBought, setHideBought] = useState(true);
+  const [selectedUid, setSelectedUid] = useState(firebaseUser?.uid || '');
+
+  const members = workspace?.members || [];
+  const isMe = selectedUid === firebaseUser?.uid;
+
+  useEffect(() => {
+    if (firebaseUser && !selectedUid) setSelectedUid(firebaseUser.uid);
+  }, [firebaseUser, selectedUid]);
+
+  const myItems = useMemo(
+    () => items.filter((i) => !i.createdBy || i.createdBy === selectedUid),
+    [items, selectedUid]
+  );
 
   const grouped = useMemo(() => {
-    const visible = hideBought ? items.filter((i) => !i.bought) : items;
+    const visible = hideBought ? myItems.filter((i) => !i.bought) : myItems;
     const map: Record<string, typeof items> = {};
     visible.forEach((i) => {
       map[i.category] = map[i.category] || [];
       map[i.category].push(i);
     });
     return map;
-  }, [items, hideBought]);
+  }, [myItems, hideBought]);
 
   // Считаем итог отдельно по каждой валюте — товары могут быть куплены в разных валютах
   const totalsByCurrency = useMemo(() => {
     const totals: Record<string, number> = {};
-    items
+    myItems
       .filter((i) => !i.bought)
       .forEach((i) => {
         const cur = i.currency || defaultCurrency;
         totals[cur] = (totals[cur] || 0) + (i.price || 0) * i.quantity;
       });
     return Object.entries(totals).filter(([, sum]) => sum > 0);
-  }, [items, defaultCurrency]);
+  }, [myItems, defaultCurrency]);
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
@@ -77,6 +90,23 @@ export default function ShoppingView({ workspaceId }: { workspaceId: string }) {
         </button>
       </div>
 
+      {/* Переключатель "Я" / партнёр — у каждого свой список покупок */}
+      {members.length > 1 && (
+        <div className="flex gap-2 mb-4">
+          {members.map((m) => (
+            <button
+              key={m.uid}
+              onClick={() => setSelectedUid(m.uid)}
+              className={`flex-1 py-2 rounded-xl text-sm font-medium transition ${
+                selectedUid === m.uid ? 'bg-indigo-500 text-white' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500'
+              }`}
+            >
+              {m.displayName}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="rounded-2xl glass p-3 mb-4 flex items-center gap-2 flex-wrap">
         <span className="flex items-center gap-1.5 text-xs font-medium text-neutral-500 shrink-0">
           <Wallet size={13} /> Учитывать покупки в финансах:
@@ -98,43 +128,45 @@ export default function ShoppingView({ workspaceId }: { workspaceId: string }) {
         )}
       </div>
 
-      <form onSubmit={handleAdd} className="rounded-2xl glass p-4 mb-6 grid grid-cols-2 sm:grid-cols-6 gap-2">
-        <input
-          className="input sm:col-span-2"
-          placeholder="Что купить?"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        <select className="input" value={category} onChange={(e) => setCategory(e.target.value)}>
-          {CATEGORIES.map((c) => (
-            <option key={c} value={c}>{c}</option>
-          ))}
-        </select>
-        <input
-          className="input"
-          type="number"
-          placeholder="Цена"
-          value={price}
-          onChange={(e) => setPrice(e.target.value)}
-        />
-        <select className="input" value={currency} onChange={(e) => setCurrency(e.target.value)}>
-          {Object.entries(CURRENCIES).map(([code, c]) => (
-            <option key={code} value={code}>{c.symbol} {code}</option>
-          ))}
-        </select>
-        <div className="flex gap-2">
+      {isMe && (
+        <form onSubmit={handleAdd} className="rounded-2xl glass p-4 mb-6 grid grid-cols-2 sm:grid-cols-6 gap-2">
           <input
-            className="input w-16"
-            type="number"
-            min={1}
-            value={quantity}
-            onChange={(e) => setQuantity(Number(e.target.value))}
+            className="input sm:col-span-2"
+            placeholder="Что купить?"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
           />
-          <button type="submit" className="flex-1 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white flex items-center justify-center">
-            <Plus size={16} />
-          </button>
-        </div>
-      </form>
+          <select className="input" value={category} onChange={(e) => setCategory(e.target.value)}>
+            {CATEGORIES.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+          <input
+            className="input"
+            type="number"
+            placeholder="Цена"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+          />
+          <select className="input" value={currency} onChange={(e) => setCurrency(e.target.value)}>
+            {Object.entries(CURRENCIES).map(([code, c]) => (
+              <option key={code} value={code}>{c.symbol} {code}</option>
+            ))}
+          </select>
+          <div className="flex gap-2">
+            <input
+              className="input w-16"
+              type="number"
+              min={1}
+              value={quantity}
+              onChange={(e) => setQuantity(Number(e.target.value))}
+            />
+            <button type="submit" className="flex-1 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white flex items-center justify-center">
+              <Plus size={16} />
+            </button>
+          </div>
+        </form>
+      )}
 
       <div className="space-y-5">
         {Object.entries(grouped).map(([cat, list]) => (
