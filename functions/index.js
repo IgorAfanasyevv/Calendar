@@ -932,7 +932,7 @@ async function handleAssistant(request) {
   });
 
   let iterations = 0;
-  while (response.stop_reason === 'tool_use' && iterations < 3) {
+  while (response.stop_reason === 'tool_use' && iterations < 6) {
     const toolUseBlocks = response.content.filter((b) => b.type === 'tool_use');
     const toolResults = [];
     for (const block of toolUseBlocks) {
@@ -957,6 +957,15 @@ async function handleAssistant(request) {
     iterations++;
   }
 
-  const finalText = response.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
-  return { text: finalText || 'Готово.', messages: messages.concat([{ role: 'assistant', content: response.content }]) };
+  // Важно: если после лимита попыток модель всё ещё пытается вызвать инструмент
+  // (stop_reason снова 'tool_use'), нельзя сохранять такой ответ в историю —
+  // Anthropic требует, чтобы за tool_use сразу шёл tool_result, а тут его нет.
+  // Берём только текстовые блоки и, если текста нет вообще, не добавляем этот
+  // ход в историю (чтобы следующее сообщение не сломалось ошибкой 400).
+  const finalTextBlocks = response.content.filter((b) => b.type === 'text');
+  const finalText = finalTextBlocks.map((b) => b.text).join('\n');
+  const updatedMessages =
+    finalTextBlocks.length > 0 ? messages.concat([{ role: 'assistant', content: finalTextBlocks }]) : messages;
+
+  return { text: finalText || 'Готово.', messages: updatedMessages };
 }
