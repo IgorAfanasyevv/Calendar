@@ -254,13 +254,13 @@ function PriceModal({
           <input
             autoFocus
             type="number"
-            className="input flex-1 text-lg font-semibold"
+            className="input flex-1 min-w-0 text-lg font-semibold"
             placeholder="Цена"
             value={price}
             onChange={(e) => setPrice(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleConfirm()}
           />
-          <select className="input w-28" value={currency} onChange={(e) => setCurrency(e.target.value)}>
+          <select className="input w-24 shrink-0 px-1.5" value={currency} onChange={(e) => setCurrency(e.target.value)}>
             {Object.entries(CURRENCIES).map(([code, c]) => (
               <option key={code} value={code}>{c.symbol} {code}</option>
             ))}
