@@ -23,12 +23,13 @@ export default function AddFoodModal({
   onClose: () => void;
 }) {
   const { presets, addPreset } = useFoodStore();
-  const [selected, setSelected] = useState(presets.length > 0 ? presets[0].id : NEW_FOOD);
-  const [name, setName] = useState('');
-  const [calories, setCalories] = useState('');
-  const [protein, setProtein] = useState('');
-  const [fat, setFat] = useState('');
-  const [carbs, setCarbs] = useState('');
+  const firstPreset = presets.length > 0 ? presets[0] : undefined;
+  const [selected, setSelected] = useState(firstPreset ? firstPreset.id : NEW_FOOD);
+  const [name, setName] = useState(firstPreset?.name || '');
+  const [calories, setCalories] = useState(firstPreset ? String(firstPreset.calories) : '');
+  const [protein, setProtein] = useState(firstPreset?.protein ? String(firstPreset.protein) : '');
+  const [fat, setFat] = useState(firstPreset?.fat ? String(firstPreset.fat) : '');
+  const [carbs, setCarbs] = useState(firstPreset?.carbs ? String(firstPreset.carbs) : '');
   const [saveAsPreset, setSaveAsPreset] = useState(false);
   const [saving, setSaving] = useState(false);
 
