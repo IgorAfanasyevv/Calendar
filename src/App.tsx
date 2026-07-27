@@ -17,10 +17,12 @@ import FinanceView from './pages/FinanceView';
 import FitnessView from './pages/FitnessView';
 import ImportantDatesView from './pages/ImportantDatesView';
 import HabitsView from './pages/HabitsView';
+import JournalView from './pages/JournalView';
 import SettingsView from './pages/SettingsView';
 import GlobalAssistant from './components/GlobalAssistant';
 import { useImportantDateStore } from './store/importantDateStore';
 import { useHabitStore } from './store/habitStore';
+import { useJournalStore } from './store/journalStore';
 import { Loader2, Heart } from 'lucide-react';
 
 export default function App() {
@@ -32,6 +34,7 @@ export default function App() {
   const { listen: listenActivity } = useActivityStore();
   const { listen: listenDates } = useImportantDateStore();
   const { listenHabits, listenLogs } = useHabitStore();
+  const { listen: listenJournal } = useJournalStore();
   const [tab, setTab] = useState<Tab>('home');
 
   useEffect(() => {
@@ -61,6 +64,7 @@ export default function App() {
     const unsubDates = listenDates(workspace.id);
     const unsubHabits = listenHabits(workspace.id);
     const unsubHabitLogs = listenLogs(workspace.id);
+    const unsubJournal = listenJournal(workspace.id);
     return () => {
       unsubTasks();
       unsubGoals();
@@ -69,8 +73,19 @@ export default function App() {
       unsubDates();
       unsubHabits();
       unsubHabitLogs();
+      unsubJournal();
     };
-  }, [workspace?.id, listenTasks, listenGoals, listenShopping, listenActivity, listenDates, listenHabits, listenLogs]);
+  }, [
+    workspace?.id,
+    listenTasks,
+    listenGoals,
+    listenShopping,
+    listenActivity,
+    listenDates,
+    listenHabits,
+    listenLogs,
+    listenJournal,
+  ]);
 
   if (loading) {
     return (
@@ -115,6 +130,7 @@ export default function App() {
         {tab === 'fitness' && <FitnessView workspaceId={workspace.id} />}
         {tab === 'dates' && <ImportantDatesView workspaceId={workspace.id} />}
         {tab === 'habits' && <HabitsView workspaceId={workspace.id} />}
+        {tab === 'journal' && <JournalView workspaceId={workspace.id} />}
         {tab === 'settings' && <SettingsView />}
       </Layout>
       <GlobalAssistant />

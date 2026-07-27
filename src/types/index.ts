@@ -196,6 +196,20 @@ export interface HabitLog {
   createdAt: number;
 }
 
+export type Mood = 'great' | 'good' | 'okay' | 'bad' | 'awful';
+
+export interface JournalEntry {
+  id: string;
+  workspaceId: string;
+  date: string; // yyyy-mm-dd
+  text: string;
+  mood?: Mood;
+  isMemory?: boolean; // отметить как особое воспоминание/достижение
+  createdBy: string;
+  createdByName: string;
+  createdAt: number;
+}
+
 export interface UserProfile {
   uid: string;
   email: string;

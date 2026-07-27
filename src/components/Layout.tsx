@@ -7,6 +7,7 @@ import {
   Dumbbell,
   CalendarHeart,
   Flame,
+  BookHeart,
   Settings as SettingsIcon,
   Moon,
   Sun,
@@ -20,7 +21,7 @@ import { useWorkspaceStore } from '../store/workspaceStore';
 import { useThemeStore } from '../store/themeStore';
 import { usePresence } from '../hooks/usePresence';
 
-export type Tab = 'home' | 'goals' | 'shopping' | 'finance' | 'fitness' | 'dates' | 'habits' | 'settings';
+export type Tab = 'home' | 'goals' | 'shopping' | 'finance' | 'fitness' | 'dates' | 'habits' | 'journal' | 'settings';
 
 const NAV: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { id: 'home', label: 'Обзор', icon: LayoutDashboard },
@@ -30,6 +31,7 @@ const NAV: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { id: 'fitness', label: 'Фитнес', icon: Dumbbell },
   { id: 'habits', label: 'Привычки', icon: Flame },
   { id: 'dates', label: 'Даты', icon: CalendarHeart },
+  { id: 'journal', label: 'Дневник', icon: BookHeart },
   { id: 'settings', label: 'Настройки', icon: SettingsIcon },
 ];
 
