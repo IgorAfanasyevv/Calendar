@@ -20,6 +20,8 @@ import { useAuthStore } from '../store/authStore';
 import { useWorkspaceStore } from '../store/workspaceStore';
 import { useThemeStore } from '../store/themeStore';
 import { usePresence } from '../hooks/usePresence';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
+import { WifiOff } from 'lucide-react';
 
 export type Tab = 'home' | 'goals' | 'shopping' | 'finance' | 'fitness' | 'dates' | 'habits' | 'journal' | 'settings';
 
@@ -48,6 +50,7 @@ export default function Layout({
   const { workspace } = useWorkspaceStore();
   const { dark, toggle } = useThemeStore();
   const { isOnline } = usePresence(workspace?.id, firebaseUser?.uid);
+  const browserOnline = useOnlineStatus();
   const [copied, setCopied] = useState(false);
 
   const partner = workspace?.members.find((m) => m.uid !== firebaseUser?.uid);
@@ -138,7 +141,15 @@ export default function Layout({
         ))}
       </div>
 
-      <main className="flex-1 min-w-0 pb-20 md:pb-0 overflow-y-auto h-screen">{children}</main>
+      <main className="flex-1 min-w-0 pb-20 md:pb-0 overflow-y-auto h-screen">
+        {!browserOnline && (
+          <div className="sticky top-0 z-20 flex items-center justify-center gap-2 bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 text-xs font-medium py-2 px-4">
+            <WifiOff size={13} />
+            Нет связи с интернетом — изменения сохранятся и отправятся, когда связь вернётся
+          </div>
+        )}
+        {children}
+      </main>
     </div>
   );
 }

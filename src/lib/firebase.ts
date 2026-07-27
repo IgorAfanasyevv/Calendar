@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 import { getFunctions } from 'firebase/functions';
 
 // Эти значения берутся из .env (см. .env.example).
@@ -16,7 +16,17 @@ const firebaseConfig = {
 
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+
+// Офлайн-режим: Firestore хранит копию данных на устройстве (IndexedDB).
+// Без интернета приложение продолжает показывать последние загруженные данные
+// и позволяет добавлять/менять задачи, покупки и т.д. — изменения складываются
+// в очередь и сами отправляются на сервер, как только связь появится снова.
+// persistentMultipleTabManager — чтобы это работало, даже если открыто
+// несколько вкладок сайта одновременно.
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+});
+
 export const functions = getFunctions(app);
 
 // Явно закрепляем сессию в браузере (localStorage), чтобы имя и пространство
