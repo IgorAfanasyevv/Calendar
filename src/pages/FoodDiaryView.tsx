@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
-import { Plus, Trash2, ChevronLeft, ChevronRight, Flame, Pencil } from 'lucide-react';
+import { Plus, Trash2, ChevronLeft, ChevronRight, Flame, Pencil, Calculator } from 'lucide-react';
 import { useFoodStore } from '../store/foodStore';
 import { useWorkspaceStore } from '../store/workspaceStore';
 import { useAuthStore } from '../store/authStore';
 import type { FoodEntry, MealType } from '../types';
 import AddFoodModal from '../components/AddFoodModal';
 import FitnessAssistant from '../components/FitnessAssistant';
+import KbjuCalculator from '../components/KbjuCalculator';
 
 const MEAL_LABELS: Record<MealType, string> = {
   breakfast: 'Завтрак',
@@ -42,10 +43,14 @@ export default function FoodDiaryView({ workspaceId }: { workspaceId: string }) 
   const [addingMeal, setAddingMeal] = useState<MealType | null>(null);
   const [editingGoal, setEditingGoal] = useState(false);
   const [goalInput, setGoalInput] = useState('');
+  const [showCalculator, setShowCalculator] = useState(false);
 
   const members = workspace?.members || [];
   const selectedMember = members.find((m) => m.uid === selectedUid) || members[0];
   const goal = selectedMember?.calorieGoal || 0;
+  const proteinGoal = selectedMember?.proteinGoal || 0;
+  const fatGoal = selectedMember?.fatGoal || 0;
+  const carbsGoal = selectedMember?.carbsGoal || 0;
 
   const dayEntries = useMemo(
     () => entries.filter((e) => !e.planned && e.date === selectedDate && e.createdBy === selectedUid),
@@ -119,9 +124,14 @@ export default function FoodDiaryView({ workspaceId }: { workspaceId: string }) 
             <Flame size={15} /> Калории
           </span>
           {isMe && (
-            <button onClick={() => { setGoalInput(String(goal || '')); setEditingGoal(true); }} className="text-neutral-400 hover:text-indigo-500">
-              <Pencil size={13} />
-            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setShowCalculator(true)} className="text-neutral-400 hover:text-indigo-500" title="Калькулятор КБЖУ">
+                <Calculator size={14} />
+              </button>
+              <button onClick={() => { setGoalInput(String(goal || '')); setEditingGoal(true); }} className="text-neutral-400 hover:text-indigo-500">
+                <Pencil size={13} />
+              </button>
+            </div>
           )}
         </div>
 
@@ -157,18 +167,18 @@ export default function FoodDiaryView({ workspaceId }: { workspaceId: string }) 
           </div>
         )}
 
-        {(totalProtein > 0 || totalFat > 0 || totalCarbs > 0) && (
+        {(totalProtein > 0 || totalFat > 0 || totalCarbs > 0 || proteinGoal > 0) && (
           <div className="grid grid-cols-3 gap-2 text-center text-xs">
             <div className="rounded-xl bg-neutral-100 dark:bg-neutral-800 py-2">
-              <div className="font-semibold">{totalProtein.toFixed(0)}г</div>
+              <div className="font-semibold">{totalProtein.toFixed(0)}{proteinGoal > 0 ? `/${proteinGoal}` : ''}г</div>
               <div className="text-neutral-400">Белки</div>
             </div>
             <div className="rounded-xl bg-neutral-100 dark:bg-neutral-800 py-2">
-              <div className="font-semibold">{totalFat.toFixed(0)}г</div>
+              <div className="font-semibold">{totalFat.toFixed(0)}{fatGoal > 0 ? `/${fatGoal}` : ''}г</div>
               <div className="text-neutral-400">Жиры</div>
             </div>
             <div className="rounded-xl bg-neutral-100 dark:bg-neutral-800 py-2">
-              <div className="font-semibold">{totalCarbs.toFixed(0)}г</div>
+              <div className="font-semibold">{totalCarbs.toFixed(0)}{carbsGoal > 0 ? `/${carbsGoal}` : ''}г</div>
               <div className="text-neutral-400">Углеводы</div>
             </div>
           </div>
@@ -220,6 +230,8 @@ export default function FoodDiaryView({ workspaceId }: { workspaceId: string }) 
           onClose={() => setAddingMeal(null)}
         />
       )}
+
+      {showCalculator && <KbjuCalculator workspaceId={workspaceId} onClose={() => setShowCalculator(false)} />}
     </div>
   );
 }

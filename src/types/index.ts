@@ -72,6 +72,9 @@ export interface WorkspaceMember {
   email: string;
   role: 'me' | 'partner';
   calorieGoal?: number;
+  proteinGoal?: number;
+  fatGoal?: number;
+  carbsGoal?: number;
   dietPreferences?: DietPreferences;
 }
 
@@ -156,6 +159,7 @@ export interface Workspace {
   memberUids: string[];
   monthlyBudget?: number;
   currency?: string; // ISO code, e.g. 'RUB', 'USD', 'EUR'
+  shoppingFinanceBoardId?: string; // если задано — покупки с ценой автоматически попадают в эту вкладку финансов
   createdAt: number;
 }
 

@@ -3,6 +3,9 @@ import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, updateD
 import { db } from '../lib/firebase';
 import type { ShoppingItem } from '../types';
 import { logActivity } from './activityStore';
+import { useWorkspaceStore } from './workspaceStore';
+import { useFinanceBoardStore } from './financeBoardStore';
+import { useFinanceStore } from './financeStore';
 
 // Firestore выдаёт ошибку, если в документ попадает поле со значением undefined
 // (например, необязательная цена, если её не указали).
@@ -50,6 +53,31 @@ export const useShoppingStore = create<ShoppingState>((set, get) => ({
     await updateDoc(doc(db, 'workspaces', item.workspaceId, 'shopping', item.id), { bought });
     if (bought) {
       logActivity(item.workspaceId, actor.uid, actor.name, `отметил(а) покупку «${item.name}» купленной`);
+
+      // Если настроена целевая вкладка финансов и у товара указана цена —
+      // сразу добавляем это как расход с той же категорией, что и в покупках.
+      if (item.price) {
+        const workspace = useWorkspaceStore.getState().workspace;
+        const boardId = workspace?.shoppingFinanceBoardId;
+        if (boardId) {
+          const board = useFinanceBoardStore.getState().boards.find((b) => b.id === boardId);
+          if (board) {
+            await useFinanceStore.getState().addEntry(
+              item.workspaceId,
+              boardId,
+              {
+                type: 'expense',
+                amount: item.price * item.quantity,
+                category: item.category,
+                note: `Покупка: ${item.name}`,
+                date: new Date().toISOString().slice(0, 10),
+              },
+              actor,
+              board.currency
+            );
+          }
+        }
+      }
     }
   },
   deleteItem: async (id, actor) => {

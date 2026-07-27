@@ -23,7 +23,13 @@ interface WorkspaceState {
   joinWorkspace: (inviteCode: string, member: WorkspaceMember) => Promise<string>;
   removeMember: (workspaceId: string, uid: string) => Promise<void>;
   setCalorieGoal: (workspaceId: string, uid: string, goal: number) => Promise<void>;
+  setNutritionGoals: (
+    workspaceId: string,
+    uid: string,
+    goals: { calorieGoal: number; proteinGoal?: number; fatGoal?: number; carbsGoal?: number }
+  ) => Promise<void>;
   setDietPreferences: (workspaceId: string, uid: string, prefs: DietPreferences) => Promise<void>;
+  setShoppingFinanceBoard: (workspaceId: string, boardId: string | null) => Promise<void>;
   clearError: () => void;
 }
 
@@ -116,6 +122,24 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     await updateDoc(doc(db, 'workspaces', workspaceId), { members });
   },
 
+  // Из калькулятора КБЖУ — сохраняет сразу цель по калориям и по макросам.
+  setNutritionGoals: async (workspaceId, uid, goals) => {
+    const current = get().workspace;
+    if (!current) return;
+    const members = current.members.map((m) =>
+      m.uid === uid
+        ? {
+            ...m,
+            calorieGoal: goals.calorieGoal,
+            proteinGoal: goals.proteinGoal,
+            fatGoal: goals.fatGoal,
+            carbsGoal: goals.carbsGoal,
+          }
+        : m
+    );
+    await updateDoc(doc(db, 'workspaces', workspaceId), { members });
+  },
+
   // Анкета предпочтений в питании — тоже хранится внутри members[], чтобы сервер
   // (Cloud Function) мог прочитать её при генерации меню без доступа к users/{uid}.
   setDietPreferences: async (workspaceId, uid, prefs) => {
@@ -123,5 +147,11 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     if (!current) return;
     const members = current.members.map((m) => (m.uid === uid ? { ...m, dietPreferences: prefs } : m));
     await updateDoc(doc(db, 'workspaces', workspaceId), { members });
+  },
+
+  // Какая вкладка финансов автоматически получает расходы из купленных товаров
+  // в списке покупок (если у товара указана цена). null — отключить автоучёт.
+  setShoppingFinanceBoard: async (workspaceId, boardId) => {
+    await updateDoc(doc(db, 'workspaces', workspaceId), { shoppingFinanceBoardId: boardId });
   },
 }));

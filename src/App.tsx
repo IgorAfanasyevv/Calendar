@@ -23,6 +23,7 @@ import GlobalAssistant from './components/GlobalAssistant';
 import { useImportantDateStore } from './store/importantDateStore';
 import { useHabitStore } from './store/habitStore';
 import { useJournalStore } from './store/journalStore';
+import { useFinanceBoardStore } from './store/financeBoardStore';
 import { Loader2, Heart } from 'lucide-react';
 
 export default function App() {
@@ -35,6 +36,7 @@ export default function App() {
   const { listen: listenDates } = useImportantDateStore();
   const { listenHabits, listenLogs } = useHabitStore();
   const { listen: listenJournal } = useJournalStore();
+  const { listen: listenFinanceBoards } = useFinanceBoardStore();
   const [tab, setTab] = useState<Tab>('home');
 
   useEffect(() => {
@@ -65,6 +67,7 @@ export default function App() {
     const unsubHabits = listenHabits(workspace.id);
     const unsubHabitLogs = listenLogs(workspace.id);
     const unsubJournal = listenJournal(workspace.id);
+    const unsubFinanceBoards = listenFinanceBoards(workspace.id);
     return () => {
       unsubTasks();
       unsubGoals();
@@ -74,6 +77,7 @@ export default function App() {
       unsubHabits();
       unsubHabitLogs();
       unsubJournal();
+      unsubFinanceBoards();
     };
   }, [
     workspace?.id,
@@ -85,6 +89,7 @@ export default function App() {
     listenHabits,
     listenLogs,
     listenJournal,
+    listenFinanceBoards,
   ]);
 
   if (loading) {

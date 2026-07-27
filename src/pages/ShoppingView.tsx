@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
-import { Plus, Trash2, EyeOff, Eye } from 'lucide-react';
+import { Plus, Trash2, EyeOff, Eye, Wallet } from 'lucide-react';
 import { useShoppingStore } from '../store/shoppingStore';
 import { useWorkspaceStore } from '../store/workspaceStore';
+import { useFinanceBoardStore } from '../store/financeBoardStore';
 import { useAuthStore } from '../store/authStore';
 import { currencySymbol } from '../lib/currency';
 
@@ -9,7 +10,8 @@ const CATEGORIES = ['Продукты', 'Дом', 'Одежда', 'Электр�
 
 export default function ShoppingView({ workspaceId }: { workspaceId: string }) {
   const { items, addItem, toggleBought, deleteItem } = useShoppingStore();
-  const { workspace } = useWorkspaceStore();
+  const { workspace, setShoppingFinanceBoard } = useWorkspaceStore();
+  const { boards } = useFinanceBoardStore();
   const { firebaseUser, profile } = useAuthStore();
   const actor = { uid: firebaseUser?.uid || '', name: profile?.displayName || '' };
   const symbol = currencySymbol(workspace?.currency);
@@ -54,6 +56,27 @@ export default function ShoppingView({ workspaceId }: { workspaceId: string }) {
           {hideBought ? <Eye size={14} /> : <EyeOff size={14} />}
           {hideBought ? 'Показать купленное' : 'Скрыть купленное'}
         </button>
+      </div>
+
+      <div className="rounded-2xl glass p-3 mb-4 flex items-center gap-2 flex-wrap">
+        <span className="flex items-center gap-1.5 text-xs font-medium text-neutral-500 shrink-0">
+          <Wallet size={13} /> Учитывать покупки в финансах:
+        </span>
+        <select
+          className="input flex-1 min-w-[160px] py-1.5 text-xs"
+          value={workspace?.shoppingFinanceBoardId || ''}
+          onChange={(e) => setShoppingFinanceBoard(workspaceId, e.target.value || null)}
+        >
+          <option value="">Не учитывать</option>
+          {boards.map((b) => (
+            <option key={b.id} value={b.id}>{b.name}</option>
+          ))}
+        </select>
+        {workspace?.shoppingFinanceBoardId && (
+          <p className="w-full text-[11px] text-neutral-400">
+            Купленные товары с указанной ценой автоматически попадут туда как расход, с той же категорией.
+          </p>
+        )}
       </div>
 
       <form onSubmit={handleAdd} className="rounded-2xl glass p-4 mb-6 grid grid-cols-2 sm:grid-cols-5 gap-2">
