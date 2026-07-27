@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { httpsCallable } from 'firebase/functions';
-import { Plus, Trash2, Check, CalendarRange, RefreshCw, Loader2, ShoppingCart } from 'lucide-react';
+import { Plus, Trash2, Check, CalendarRange, RefreshCw, Loader2, ShoppingCart, BookOpen } from 'lucide-react';
 import { useFoodStore } from '../store/foodStore';
 import { useAuthStore } from '../store/authStore';
 import { useWorkspaceStore } from '../store/workspaceStore';
@@ -11,6 +11,11 @@ import AddFoodModal from '../components/AddFoodModal';
 
 const replaceMealCall = httpsCallable<
   { workspaceId: string; action: 'replace_meal'; entryId: string; preference?: string },
+  { text: string }
+>(functions, 'fitnessAssistant');
+
+const recipeCall = httpsCallable<
+  { workspaceId: string; action: 'get_recipe'; entryId: string },
   { text: string }
 >(functions, 'fitnessAssistant');
 
@@ -35,6 +40,7 @@ export default function FoodMenuView({ workspaceId }: { workspaceId: string }) {
   const [newDate, setNewDate] = useState(new Date().toISOString().slice(0, 10));
   const [newMeal, setNewMeal] = useState<MealType>('breakfast');
   const [replacingEntry, setReplacingEntry] = useState<FoodEntry | null>(null);
+  const [recipeEntry, setRecipeEntry] = useState<FoodEntry | null>(null);
   const [selectedUid, setSelectedUid] = useState(firebaseUser?.uid || '');
   const [sendingId, setSendingId] = useState<string | null>(null);
 
@@ -144,6 +150,12 @@ export default function FoodMenuView({ workspaceId }: { workspaceId: string }) {
                     </button>
                   )}
                   <button
+                    onClick={() => setRecipeEntry(e)}
+                    className="flex items-center gap-1 text-[11px] font-medium text-amber-600 hover:text-amber-700 bg-amber-50 dark:bg-amber-500/10 px-2 py-1 rounded-lg shrink-0"
+                  >
+                    <BookOpen size={12} /> Рецепт
+                  </button>
+                  <button
                     onClick={() => setReplacingEntry(e)}
                     className="flex items-center gap-1 text-[11px] font-medium text-indigo-600 hover:text-indigo-700 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-1 rounded-lg shrink-0"
                   >
@@ -187,7 +199,63 @@ export default function FoodMenuView({ workspaceId }: { workspaceId: string }) {
           onClose={() => setReplacingEntry(null)}
         />
       )}
+
+      {recipeEntry && (
+        <RecipeModal workspaceId={workspaceId} entry={recipeEntry} onClose={() => setRecipeEntry(null)} />
+      )}
     </div>
+  );
+}
+
+function RecipeModal({
+  workspaceId,
+  entry,
+  onClose,
+}: {
+  workspaceId: string;
+  entry: FoodEntry;
+  onClose: () => void;
+}) {
+  const [recipe, setRecipe] = useState<string | null>(entry.recipe || null);
+  const [loading, setLoading] = useState(!entry.recipe);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (entry.recipe) return;
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    recipeCall({ workspaceId, action: 'get_recipe', entryId: entry.id })
+      .then((res) => {
+        if (!cancelled) setRecipe(res.data.text);
+      })
+      .catch((e) => {
+        if (!cancelled) setError((e as { message?: string })?.message || 'Не удалось получить рецепт. Попробуйте ещё раз.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entry.id]);
+
+  return (
+    <Modal title={`Рецепт: ${entry.name}`} onClose={onClose} wide>
+      <div className="space-y-3">
+        <p className="text-xs text-neutral-400">
+          {entry.grams ? `${entry.grams} г · ` : ''}{entry.calories} ккал
+        </p>
+        {loading && (
+          <div className="flex items-center gap-2 text-sm text-neutral-400 py-8 justify-center">
+            <Loader2 size={16} className="animate-spin" /> Готовлю рецепт...
+          </div>
+        )}
+        {error && <p className="text-xs text-rose-500">{error}</p>}
+        {recipe && <div className="text-sm whitespace-pre-wrap leading-relaxed">{recipe}</div>}
+      </div>
+    </Modal>
   );
 }
 

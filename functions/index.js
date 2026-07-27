@@ -299,7 +299,11 @@ ${goal ? `Дневная цель — ${goal} ккал.` : 'Дневная це�
     const prompt = `${SAFETY_NOTE}
 ${prefsText}
 Составь меню на 7 дней вперёд для ${name}${goal ? `, дневная цель — примерно ${goal} ккал` : ''}.
-На каждый день — завтрак, обед, ужин и один перекус. Простые, разнообразные, реалистичные для готовки дома блюда, но старайся, чтобы было по-настоящему вкусно и не однообразно — избегай повторения одних и тех же блюд в течение недели.
+На каждый день — завтрак, обед, ужин и один перекус. Простые, реалистичные для готовки дома блюда, но по-настоящему вкусные и разнообразные — это важно:
+- Ни одно блюдо не должно повторяться в течение недели
+- Меняй основной источник белка от приёма к приёму (курица, рыба, говядина, индейка, яйца, бобовые/тофу, творог) — не бери один и тот же белок больше 2 раз за все 7 дней
+- Меняй способ приготовления (варка, запекание, жарка на сковороде, гриль, тушение, сырые салаты) — избегай подряд идущих одинаковых способов
+- Меняй стиль/кухню от блюда к блюду, если это не противоречит указанным вкусам пользователя (например разные обеды: паста, боул, суп, запеканка, а не 7 одинаковых "куриная грудка с рисом")
 Для каждого блюда укажи короткий список основных продуктов/ингредиентов, которые для него нужны (2-6 штук, простыми словами, как в списке покупок — например "куриная грудка", "рис", "помидоры").
 
 Ответь СТРОГО в формате JSON без какого-либо текста до или после, вот такой структуры:
@@ -378,6 +382,39 @@ offset — через сколько дней от сегодня (1 = завт�
     };
   }
 
+  if (action === 'get_recipe') {
+    if (!entryId) throw new HttpsError('invalid-argument', 'Не хватает параметров.');
+    const entryRef = db.collection('workspaces').doc(workspaceId).collection('food').doc(entryId);
+    const entrySnap = await entryRef.get();
+    if (!entrySnap.exists) throw new HttpsError('not-found', 'Блюдо не найдено — возможно, уже удалено.');
+    const current = entrySnap.data();
+
+    // Рецепт кешируется на самом блюде — повторное открытие ничего не стоит
+    // и не делает запрос к ИИ заново.
+    if (current.recipe) {
+      return { text: current.recipe };
+    }
+
+    const prompt = `${SAFETY_NOTE}
+${prefsText}
+Напиши подробный пошаговый рецепт для блюда «${current.name}»${current.grams ? ` на порцию ~${current.grams} г` : ''}${current.calories ? ` (примерно ${current.calories} ккал)` : ''}.
+${current.ingredients && current.ingredients.length ? `Используй эти продукты как основу: ${current.ingredients.join(', ')}.` : ''}
+
+Формат ответа (обычный текст, без markdown-заголовков и звёздочек):
+Сначала список ингредиентов с точной граммовкой/количеством на эту порцию (каждый с новой строки, например "Куриная грудка — 200 г").
+Затем пустая строка, затем пронумерованные шаги приготовления (коротко и по делу, разумное количество шагов для домашней готовки).`;
+
+    const msg = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 800,
+      messages: [{ role: 'user', content: prompt }],
+    });
+    const recipeText = msg.content.map((b) => b.text || '').join('\n').trim();
+
+    await entryRef.update({ recipe: recipeText });
+    return { text: recipeText };
+  }
+
   if (action === 'replace_meal') {
     if (!entryId) throw new HttpsError('invalid-argument', 'Не хватает параметров.');
     const entryRef = db.collection('workspaces').doc(workspaceId).collection('food').doc(entryId);
@@ -427,6 +464,7 @@ ${preference && preference.trim() ? `Пожелание по замене: ${pre
         carbs: meal.carbs ? Number(meal.carbs) : undefined,
         ingredients: newIngredients.length ? newIngredients : undefined,
         addedToShopping: false,
+        recipe: null,
       })
     );
 
