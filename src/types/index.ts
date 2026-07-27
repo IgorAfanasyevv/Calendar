@@ -174,6 +174,28 @@ export interface ImportantDate {
   createdAt: number;
 }
 
+export interface Habit {
+  id: string;
+  workspaceId: string;
+  name: string;
+  icon: string; // lucide icon name, e.g. 'Droplet', 'BookOpen', 'Dumbbell'
+  color: string;
+  createdBy: string;
+  createdByName: string;
+  createdAt: number;
+  archived?: boolean;
+}
+
+/** Один документ на отметку выполнения привычки в конкретный день конкретным человеком. */
+export interface HabitLog {
+  id: string;
+  workspaceId: string;
+  habitId: string;
+  date: string; // yyyy-mm-dd
+  uid: string;
+  createdAt: number;
+}
+
 export interface UserProfile {
   uid: string;
   email: string;
