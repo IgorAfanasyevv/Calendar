@@ -62,6 +62,14 @@ export const useShoppingStore = create<ShoppingState>((set, get) => ({
         if (boardId) {
           const board = useFinanceBoardStore.getState().boards.find((b) => b.id === boardId);
           if (board) {
+            // Если валюта товара отличается от валюты вкладки финансов — сумма
+            // добавляется как есть (без конвертации), но помечаем это в заметке,
+            // чтобы не запутаться при просмотре истории операций.
+            const itemCurrency = item.currency;
+            const mismatch = itemCurrency && itemCurrency !== board.currency;
+            const note = mismatch
+              ? `Покупка: ${item.name} (цена указана в ${itemCurrency}, без конвертации)`
+              : `Покупка: ${item.name}`;
             await useFinanceStore.getState().addEntry(
               item.workspaceId,
               boardId,
@@ -69,7 +77,7 @@ export const useShoppingStore = create<ShoppingState>((set, get) => ({
                 type: 'expense',
                 amount: item.price * item.quantity,
                 category: item.category,
-                note: `Покупка: ${item.name}`,
+                note,
                 date: new Date().toISOString().slice(0, 10),
               },
               actor,

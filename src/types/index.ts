@@ -54,6 +54,7 @@ export interface ShoppingItem {
   name: string;
   category: string;
   price?: number;
+  currency?: string; // ISO код валюты этой конкретной покупки, по умолчанию — валюта пространства
   quantity: number;
   bought: boolean;
   createdAt: number;

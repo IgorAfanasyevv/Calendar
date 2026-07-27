@@ -4,7 +4,7 @@ import { useShoppingStore } from '../store/shoppingStore';
 import { useWorkspaceStore } from '../store/workspaceStore';
 import { useFinanceBoardStore } from '../store/financeBoardStore';
 import { useAuthStore } from '../store/authStore';
-import { currencySymbol } from '../lib/currency';
+import { CURRENCIES, currencySymbol } from '../lib/currency';
 
 const CATEGORIES = ['Продукты', 'Дом', 'Одежда', 'Электроника', 'Подарки', 'Другое'];
 
@@ -14,10 +14,11 @@ export default function ShoppingView({ workspaceId }: { workspaceId: string }) {
   const { boards } = useFinanceBoardStore();
   const { firebaseUser, profile } = useAuthStore();
   const actor = { uid: firebaseUser?.uid || '', name: profile?.displayName || '' };
-  const symbol = currencySymbol(workspace?.currency);
+  const defaultCurrency = workspace?.currency || 'RUB';
   const [name, setName] = useState('');
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [price, setPrice] = useState('');
+  const [currency, setCurrency] = useState(defaultCurrency);
   const [quantity, setQuantity] = useState(1);
   const [hideBought, setHideBought] = useState(true);
 
@@ -31,12 +32,26 @@ export default function ShoppingView({ workspaceId }: { workspaceId: string }) {
     return map;
   }, [items, hideBought]);
 
-  const total = items.filter((i) => !i.bought).reduce((sum, i) => sum + (i.price || 0) * i.quantity, 0);
+  // Считаем итог отдельно по каждой валюте — товары могут быть куплены в разных валютах
+  const totalsByCurrency = useMemo(() => {
+    const totals: Record<string, number> = {};
+    items
+      .filter((i) => !i.bought)
+      .forEach((i) => {
+        const cur = i.currency || defaultCurrency;
+        totals[cur] = (totals[cur] || 0) + (i.price || 0) * i.quantity;
+      });
+    return Object.entries(totals).filter(([, sum]) => sum > 0);
+  }, [items, defaultCurrency]);
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
-    await addItem(workspaceId, { name: name.trim(), category, price: price ? Number(price) : undefined, quantity }, actor);
+    await addItem(
+      workspaceId,
+      { name: name.trim(), category, price: price ? Number(price) : undefined, currency, quantity },
+      actor
+    );
     setName('');
     setPrice('');
     setQuantity(1);
@@ -47,7 +62,11 @@ export default function ShoppingView({ workspaceId }: { workspaceId: string }) {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-semibold">Список покупок</h1>
-          <p className="text-sm text-neutral-400">Осталось купить на {total.toLocaleString('ru-RU')} {symbol}</p>
+          <p className="text-sm text-neutral-400">
+            {totalsByCurrency.length > 0
+              ? `Осталось купить на ${totalsByCurrency.map(([cur, sum]) => `${sum.toLocaleString('ru-RU')} ${currencySymbol(cur)}`).join(' + ')}`
+              : 'Осталось купить на 0'}
+          </p>
         </div>
         <button
           onClick={() => setHideBought(!hideBought)}
@@ -79,7 +98,7 @@ export default function ShoppingView({ workspaceId }: { workspaceId: string }) {
         )}
       </div>
 
-      <form onSubmit={handleAdd} className="rounded-2xl glass p-4 mb-6 grid grid-cols-2 sm:grid-cols-5 gap-2">
+      <form onSubmit={handleAdd} className="rounded-2xl glass p-4 mb-6 grid grid-cols-2 sm:grid-cols-6 gap-2">
         <input
           className="input sm:col-span-2"
           placeholder="Что купить?"
@@ -98,6 +117,11 @@ export default function ShoppingView({ workspaceId }: { workspaceId: string }) {
           value={price}
           onChange={(e) => setPrice(e.target.value)}
         />
+        <select className="input" value={currency} onChange={(e) => setCurrency(e.target.value)}>
+          {Object.entries(CURRENCIES).map(([code, c]) => (
+            <option key={code} value={code}>{c.symbol} {code}</option>
+          ))}
+        </select>
         <div className="flex gap-2">
           <input
             className="input w-16"
@@ -124,7 +148,9 @@ export default function ShoppingView({ workspaceId }: { workspaceId: string }) {
                     {item.name} {item.quantity > 1 && <span className="text-neutral-400">× {item.quantity}</span>}
                   </span>
                   {item.price !== undefined && (
-                    <span className="text-xs text-neutral-400">{item.price * item.quantity} {symbol}</span>
+                    <span className="text-xs text-neutral-400">
+                      {item.price * item.quantity} {currencySymbol(item.currency || defaultCurrency)}
+                    </span>
                   )}
                   <button onClick={() => deleteItem(item.id, actor)} className="text-neutral-400 hover:text-rose-500">
                     <Trash2 size={14} />
