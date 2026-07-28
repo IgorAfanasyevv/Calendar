@@ -5,6 +5,7 @@ import Modal from './Modal';
 import type { Assignee, ChecklistItem, Priority, Task } from '../types';
 import { useTaskStore } from '../store/taskStore';
 import { useAuthStore } from '../store/authStore';
+import { useWorkspaceStore } from '../store/workspaceStore';
 import { computeDueAtUtc, effectiveDate, effectiveTime, localDateStr } from '../lib/timezone';
 import { TASK_COLORS, taskColorStyle } from '../lib/taskColor';
 
@@ -25,6 +26,9 @@ export default function TaskModal({
 }) {
   const { addTask, updateTask, deleteTask } = useTaskStore();
   const { firebaseUser, profile } = useAuthStore();
+  const { workspace } = useWorkspaceStore();
+  const myName = profile?.displayName || 'Я';
+  const partnerName = workspace?.members.find((m) => m.uid !== firebaseUser?.uid)?.displayName || 'Партнёр';
   const [title, setTitle] = useState(initial?.title || '');
   const [description, setDescription] = useState(initial?.description || '');
   // Показываем дату/время в часовом поясе ТЕКУЩЕГО пользователя (даже если задачу
@@ -190,8 +194,8 @@ export default function TaskModal({
         <Field label="Кто выполняет">
           <div className="flex gap-2">
             {([
-              ['me', 'Я'],
-              ['partner', 'Партнёр'],
+              ['me', myName],
+              ['partner', partnerName],
               ['together', 'Вместе'],
             ] as [Assignee, string][]).map(([val, label]) => (
               <button

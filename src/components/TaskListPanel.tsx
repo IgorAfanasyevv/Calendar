@@ -2,16 +2,25 @@ import { useMemo, useState } from 'react';
 import { Plus, Search, Check, Clock, MapPin } from 'lucide-react';
 import { useTaskStore } from '../store/taskStore';
 import { useAuthStore } from '../store/authStore';
+import { useWorkspaceStore } from '../store/workspaceStore';
 import type { Task } from '../types';
 import TaskModal from './TaskModal';
 import { effectiveDate, effectiveTime } from '../lib/timezone';
 import { taskColorStyle } from '../lib/taskColor';
 
-const ASSIGNEE_LABEL: Record<Task['assignee'], string> = { me: 'Я', partner: 'Партнёр', together: 'Вместе' };
+function assigneeLabel(task: Task, members: { uid: string; displayName: string }[]): string {
+  if (task.assignee === 'together') return 'Вместе';
+  if (task.assignee === 'me') return task.createdByName;
+  // 'partner' — тот участник пространства, кто НЕ создавал эту задачу
+  const other = members.find((m) => m.uid !== task.createdBy);
+  return other?.displayName || 'Партнёр';
+}
 
 export default function TaskListPanel({ workspaceId }: { workspaceId: string }) {
   const { tasks, toggleDone } = useTaskStore();
   const { firebaseUser, profile } = useAuthStore();
+  const { workspace } = useWorkspaceStore();
+  const members = workspace?.members || [];
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<'date' | 'priority'>('date');
   const [filter, setFilter] = useState<'all' | 'active' | 'done'>('active');
@@ -119,7 +128,7 @@ export default function TaskListPanel({ workspaceId }: { workspaceId: string }) 
                     </span>
                   )}
                   <span className="px-1.5 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-700">
-                    {ASSIGNEE_LABEL[task.assignee]}
+                    {assigneeLabel(task, members)}
                   </span>
                   <span className="px-1.5 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-700">{task.category}</span>
                 </div>

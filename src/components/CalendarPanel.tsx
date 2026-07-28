@@ -151,6 +151,7 @@ export default function CalendarPanel({ workspaceId }: { workspaceId: string }) 
         eventResizableFromStart
         events={events}
         eventDisplay="block"
+        displayEventTime={false}
         dayMaxEventRows={3}
         moreLinkText={(n) => `+ ещё ${n}`}
         eventClick={handleEventClick}

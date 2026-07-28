@@ -3,8 +3,14 @@ import Modal from './Modal';
 import type { Task } from '../types';
 import { effectiveTime } from '../lib/timezone';
 import { taskColorStyle } from '../lib/taskColor';
+import { useWorkspaceStore } from '../store/workspaceStore';
 
-const ASSIGNEE_LABEL: Record<Task['assignee'], string> = { me: 'Я', partner: 'Партнёр', together: 'Вместе' };
+function assigneeLabel(task: Task, members: { uid: string; displayName: string }[]): string {
+  if (task.assignee === 'together') return 'Вместе';
+  if (task.assignee === 'me') return task.createdByName;
+  const other = members.find((m) => m.uid !== task.createdBy);
+  return other?.displayName || 'Партнёр';
+}
 
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00');
@@ -25,6 +31,8 @@ export default function DayTasksModal({
   onClose: () => void;
 }) {
   const sorted = [...tasks].sort((a, b) => (effectiveTime(a) || '').localeCompare(effectiveTime(b) || ''));
+  const { workspace } = useWorkspaceStore();
+  const members = workspace?.members || [];
 
   return (
     <Modal title={formatDate(date)} onClose={onClose}>
@@ -64,7 +72,7 @@ export default function DayTasksModal({
                     </span>
                   )}
                   <span className="px-1.5 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-700">
-                    {ASSIGNEE_LABEL[task.assignee]}
+                    {assigneeLabel(task, members)}
                   </span>
                   <span className="px-1.5 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-700">{task.category}</span>
                 </div>
