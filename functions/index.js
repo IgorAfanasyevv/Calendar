@@ -348,7 +348,7 @@ offset — через сколько дней от сегодня (0 = сего�
 
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 3000,
+      max_tokens: 8000,
       messages: [{ role: 'user', content: prompt }],
     });
     const raw = msg.content.map((b) => b.text || '').join('\n').trim();
@@ -415,7 +415,7 @@ offset — через сколько дней от сегодня (1 = завт�
 
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 4096,
+      max_tokens: 8000,
       messages: [{ role: 'user', content: prompt }],
     });
     const raw = msg.content.map((b) => b.text || '').join('\n').trim();
