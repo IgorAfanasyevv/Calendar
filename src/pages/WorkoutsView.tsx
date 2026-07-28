@@ -53,6 +53,7 @@ export default function WorkoutsView({ workspaceId }: { workspaceId: string }) {
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [photoSuccess, setPhotoSuccess] = useState<string | null>(null);
   const [howToExercise, setHowToExercise] = useState<string | null>(null);
+  const [viewingPlanned, setViewingPlanned] = useState<WorkoutEntry | null>(null);
   const [addingMeasurement, setAddingMeasurement] = useState(false);
   const [selectedUid, setSelectedUid] = useState(firebaseUser?.uid || '');
 
@@ -214,10 +215,10 @@ export default function WorkoutsView({ workspaceId }: { workspaceId: string }) {
           <div className="space-y-1.5">
             {plannedEntries.map((e) => (
               <div key={e.id} className="flex items-center gap-3 rounded-xl bg-amber-50/60 dark:bg-amber-500/10 px-3 py-2.5">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm truncate">{e.name}</p>
-                  <p className="text-[11px] text-neutral-400">{formatDate(e.date)} · {e.durationMinutes} мин</p>
-                </div>
+                <button onClick={() => setViewingPlanned(e)} className="min-w-0 flex-1 text-left">
+                  <p className="text-sm truncate hover:text-indigo-500 transition">{e.name}</p>
+                  <p className="text-[11px] text-neutral-400">{formatDate(e.date)} · {e.durationMinutes} мин{e.exercises?.length ? ` · ${e.exercises.length} упр.` : ''}</p>
+                </button>
                 <button
                   onClick={() => markDone(e)}
                   className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 hover:text-emerald-700 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-1 rounded-lg shrink-0"
@@ -403,7 +404,74 @@ export default function WorkoutsView({ workspaceId }: { workspaceId: string }) {
       {howToExercise && (
         <HowToModal workspaceId={workspaceId} exerciseName={howToExercise} onClose={() => setHowToExercise(null)} />
       )}
+
+      {viewingPlanned && (
+        <ViewPlannedModal
+          entry={viewingPlanned}
+          onMarkDone={() => {
+            markDone(viewingPlanned);
+            setViewingPlanned(null);
+          }}
+          onHowTo={(exerciseName) => setHowToExercise(exerciseName)}
+          onClose={() => setViewingPlanned(null)}
+        />
+      )}
     </div>
+  );
+}
+
+function ViewPlannedModal({
+  entry,
+  onMarkDone,
+  onHowTo,
+  onClose,
+}: {
+  entry: WorkoutEntry;
+  onMarkDone: () => void;
+  onHowTo: (exerciseName: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <Modal title={entry.name} onClose={onClose} wide>
+      <div className="space-y-3">
+        <p className="text-xs text-neutral-400">
+          {formatDate(entry.date)} · {entry.durationMinutes} мин{entry.type ? ` · ${TYPE_LABELS[entry.type]}` : ''}
+        </p>
+
+        {entry.exercises && entry.exercises.length > 0 ? (
+          <div className="space-y-2">
+            {entry.exercises.map((ex, i) => (
+              <div key={i} className="rounded-xl bg-neutral-100 dark:bg-neutral-800 p-3 flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{ex.name}</p>
+                  <p className="text-xs text-neutral-400">
+                    {ex.sets.length > 0
+                      ? ex.sets.map((s) => `${s.reps || '-'}×${s.weight ? `${s.weight}кг` : '-'}`).join(', ')
+                      : 'Без деталей подходов'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => onHowTo(ex.name)}
+                  className="text-neutral-400 hover:text-indigo-500 shrink-0"
+                  title="Как делать это упражнение"
+                >
+                  <HelpCircle size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-neutral-400">Список упражнений не указан.</p>
+        )}
+
+        <button
+          onClick={onMarkDone}
+          className="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-medium text-sm flex items-center justify-center gap-2"
+        >
+          <Check size={15} /> Отметить выполненной
+        </button>
+      </div>
+    </Modal>
   );
 }
 
