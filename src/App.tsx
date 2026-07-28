@@ -24,6 +24,9 @@ import { useImportantDateStore } from './store/importantDateStore';
 import { useHabitStore } from './store/habitStore';
 import { useJournalStore } from './store/journalStore';
 import { useFinanceBoardStore } from './store/financeBoardStore';
+import { useWorkoutStore } from './store/workoutStore';
+import { useFoodStore } from './store/foodStore';
+import ReminderPopup from './components/ReminderPopup';
 import { Loader2, Heart } from 'lucide-react';
 
 export default function App() {
@@ -37,6 +40,8 @@ export default function App() {
   const { listenHabits, listenLogs } = useHabitStore();
   const { listen: listenJournal } = useJournalStore();
   const { listen: listenFinanceBoards } = useFinanceBoardStore();
+  const { listen: listenWorkouts } = useWorkoutStore();
+  const { listen: listenFood } = useFoodStore();
   const [tab, setTab] = useState<Tab>('home');
 
   useEffect(() => {
@@ -68,6 +73,8 @@ export default function App() {
     const unsubHabitLogs = listenLogs(workspace.id);
     const unsubJournal = listenJournal(workspace.id);
     const unsubFinanceBoards = listenFinanceBoards(workspace.id);
+    const unsubWorkouts = listenWorkouts(workspace.id);
+    const unsubFood = listenFood(workspace.id);
     return () => {
       unsubTasks();
       unsubGoals();
@@ -78,6 +85,8 @@ export default function App() {
       unsubHabitLogs();
       unsubJournal();
       unsubFinanceBoards();
+      unsubWorkouts();
+      unsubFood();
     };
   }, [
     workspace?.id,
@@ -90,6 +99,8 @@ export default function App() {
     listenLogs,
     listenJournal,
     listenFinanceBoards,
+    listenWorkouts,
+    listenFood,
   ]);
 
   if (loading) {
@@ -138,6 +149,7 @@ export default function App() {
         {tab === 'journal' && <JournalView workspaceId={workspace.id} />}
         {tab === 'settings' && <SettingsView />}
       </Layout>
+      <ReminderPopup workspaceId={workspace.id} />
       <GlobalAssistant />
     </>
   );
