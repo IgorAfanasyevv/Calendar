@@ -295,6 +295,109 @@ ${goal ? `Дневная цель — ${goal} ккал.` : 'Дневная це�
     return { text: msg.content.map((b) => b.text || '').join('\n') };
   }
 
+  if (action === 'workout_today' || action === 'workout_week') {
+    const fitnessPrefs = (member && member.fitnessPreferences) || {};
+    const levelLabel = { beginner: 'новичок', intermediate: 'средний уровень', advanced: 'продвинутый уровень' }[fitnessPrefs.level] || null;
+    const goalLabel =
+      { strength: 'сила', cardio: 'выносливость', weight_loss: 'похудение', flexibility: 'растяжка', general: 'общая форма' }[
+        fitnessPrefs.goal
+      ] || null;
+    const fitnessLines = [
+      levelLabel ? `Уровень подготовки: ${levelLabel}.` : null,
+      goalLabel ? `Цель: ${goalLabel}.` : null,
+      fitnessPrefs.equipment ? `Доступное оборудование: ${fitnessPrefs.equipment}.` : null,
+      fitnessPrefs.limitations ? `Ограничения/травмы (обязательно учитывай!): ${fitnessPrefs.limitations}.` : null,
+      fitnessPrefs.sessionMinutes ? `Время на тренировку: примерно ${fitnessPrefs.sessionMinutes} минут.` : null,
+    ].filter(Boolean);
+    const fitnessText = fitnessLines.length ? `Параметры пользователя:\n${fitnessLines.join('\n')}\n` : '';
+
+    if (action === 'workout_today') {
+      const recentWorkoutsSnap = await db
+        .collection('workspaces')
+        .doc(workspaceId)
+        .collection('workouts')
+        .where('createdBy', '==', uid)
+        .where('planned', '==', false)
+        .limit(5)
+        .get();
+      const recent = recentWorkoutsSnap.docs.map((d) => d.data().name).filter(Boolean);
+
+      const prompt = `${SAFETY_NOTE}
+${fitnessText}
+Последние тренировки ${name}: ${recent.length ? recent.join(', ') : 'пока не было'}.
+
+Предложи ОДНУ тренировку на сегодня — с конкретными упражнениями, подходами и повторениями (или временем для кардио). Учитывай ограничения по здоровью, если они указаны — никогда не советуй упражнения, которые могут навредить при заявленной травме. Коротко, по пунктам.`;
+
+      const msg = await anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 700,
+        messages: [{ role: 'user', content: prompt }],
+      });
+      return { text: msg.content.map((b) => b.text || '').join('\n') };
+    }
+
+    // workout_week — как "Меню на неделю", но для тренировок: сразу создаёт
+    // запланированные тренировки (planned: true) на 7 дней вперёд.
+    const prompt = `${SAFETY_NOTE}
+${fitnessText}
+Составь план тренировок на 7 дней вперёд для ${name}. Учитывай дни отдыха между интенсивными тренировками (не планируй одну и ту же группу мышц два дня подряд при силовой цели). Если ограничения/травмы указаны — обязательно учти их при выборе упражнений.
+
+Ответь СТРОГО в формате JSON без текста до/после:
+{"days":[{"offset":1,"name":"Название тренировки","type":"strength","durationMinutes":45,"exercises":[{"name":"Приседания","sets":3,"reps":10}]}, ...]}
+offset — через сколько дней от сегодня (0 = сегодня, 6 = через неделю). Если в этот день отдых — не включай его в список days. type — один из: strength, cardio, flexibility, sport, other.`;
+
+    const msg = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 3000,
+      messages: [{ role: 'user', content: prompt }],
+    });
+    const raw = msg.content.map((b) => b.text || '').join('\n').trim();
+
+    let parsed;
+    try {
+      const jsonStart = raw.indexOf('{');
+      const jsonEnd = raw.lastIndexOf('}');
+      parsed = JSON.parse(raw.slice(jsonStart, jsonEnd + 1));
+    } catch (e) {
+      logger.error('Не удалось разобрать JSON плана тренировок', { error: e.message, stopReason: msg.stop_reason });
+      if (msg.stop_reason === 'max_tokens') {
+        throw new HttpsError('internal', 'Ответ модели получился слишком длинным и обрезался. Попробуйте ещё раз.');
+      }
+      throw new HttpsError('internal', 'Не получилось разобрать ответ модели. Попробуйте ещё раз.');
+    }
+
+    const batch = db.batch();
+    const workoutsCol = db.collection('workspaces').doc(workspaceId).collection('workouts');
+    let count = 0;
+    (parsed.days || []).forEach((day) => {
+      const date = new Date();
+      date.setDate(date.getDate() + (day.offset || 0));
+      const dateStr = date.toISOString().slice(0, 10);
+      const ref = workoutsCol.doc();
+      batch.set(
+        ref,
+        stripUndefinedFields({
+          workspaceId,
+          date: dateStr,
+          name: day.name || 'Тренировка',
+          type: day.type || 'other',
+          durationMinutes: Number(day.durationMinutes) || 30,
+          exercises: (day.exercises || []).map((ex) => ({
+            name: ex.name,
+            sets: Array.from({ length: Number(ex.sets) || 1 }, () => ({ reps: ex.reps ? Number(ex.reps) : undefined })),
+          })),
+          planned: true,
+          createdBy: uid,
+          createdByName: name,
+          createdAt: Date.now(),
+        })
+      );
+      count++;
+    });
+    await batch.commit();
+    return { text: `Готово! Добавил ${count} тренировок на ближайшую неделю.` };
+  }
+
   if (action === 'weekly_menu') {
     const prompt = `${SAFETY_NOTE}
 ${prefsText}

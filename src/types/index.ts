@@ -79,6 +79,7 @@ export interface WorkspaceMember {
   fatGoal?: number;
   carbsGoal?: number;
   dietPreferences?: DietPreferences;
+  fitnessPreferences?: FitnessPreferences;
 }
 
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
@@ -114,17 +115,62 @@ export interface FoodPreset {
   carbs?: number;
 }
 
+export type WorkoutType = 'strength' | 'cardio' | 'flexibility' | 'sport' | 'other';
+
+export interface ExerciseSet {
+  reps?: number;
+  weight?: number; // кг
+}
+
+export interface WorkoutExercise {
+  name: string;
+  sets: ExerciseSet[];
+}
+
 export interface WorkoutEntry {
   id: string;
   workspaceId: string;
   date: string;
   name: string;
+  type?: WorkoutType;
   durationMinutes: number;
   caloriesBurned?: number;
+  exercises?: WorkoutExercise[];
+  planned?: boolean;
   note?: string;
   createdBy: string;
   createdByName: string;
   createdAt: number;
+}
+
+export interface WorkoutTemplate {
+  id: string;
+  workspaceId: string;
+  name: string;
+  type?: WorkoutType;
+  exercises: { name: string; targetSets?: number; targetReps?: number }[];
+  createdByName: string;
+  createdAt: number;
+}
+
+export interface BodyMeasurement {
+  id: string;
+  workspaceId: string;
+  uid: string;
+  date: string;
+  weight?: number; // кг
+  bodyFatPct?: number;
+  note?: string;
+  createdAt: number;
+}
+
+export interface FitnessPreferences {
+  level?: 'beginner' | 'intermediate' | 'advanced';
+  goal?: 'strength' | 'cardio' | 'weight_loss' | 'flexibility' | 'general';
+  equipment?: string;
+  limitations?: string;
+  daysPerWeek?: number;
+  sessionMinutes?: number;
 }
 
 export type FinanceType = 'income' | 'expense';

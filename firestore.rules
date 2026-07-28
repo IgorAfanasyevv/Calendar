@@ -77,6 +77,12 @@ service cloud.firestore {
       match /workouts/{entryId} {
         allow read, write: if isMember(workspaceId);
       }
+      match /workoutTemplates/{templateId} {
+        allow read, write: if isMember(workspaceId);
+      }
+      match /bodyMeasurements/{measurementId} {
+        allow read, write: if isMember(workspaceId);
+      }
       match /importantDates/{dateId} {
         allow read, write: if isMember(workspaceId);
       }
