@@ -196,7 +196,7 @@ async function handleFitnessAssistant(request) {
   const uid = request.auth && request.auth.uid;
   if (!uid) throw new HttpsError('unauthenticated', 'Нужно войти в аккаунт.');
 
-  const { workspaceId, action, question, entryId, preference } = request.data || {};
+  const { workspaceId, action, question, entryId, preference, exerciseName, imageBase64, imageMediaType } = request.data || {};
   if (!workspaceId || !action) throw new HttpsError('invalid-argument', 'Не хватает параметров.');
 
   const info = await getMember(workspaceId, uid);
@@ -516,6 +516,61 @@ ${current.ingredients && current.ingredients.length ? `Используй эти
 
     await entryRef.update({ recipe: recipeText });
     return { text: recipeText };
+  }
+
+  if (action === 'exercise_howto') {
+    if (!exerciseName || !exerciseName.trim()) throw new HttpsError('invalid-argument', 'Не указано упражнение.');
+    const prompt = `${SAFETY_NOTE}
+
+Объясни, как правильно выполнять упражнение «${exerciseName.trim()}»: техника выполнения по шагам, на что обратить внимание,
+частые ошибки. Коротко и по делу, без воды. Если для упражнения важна безопасность (например, работа со свободным весом) — упомяни это.`;
+
+    const msg = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 600,
+      messages: [{ role: 'user', content: prompt }],
+    });
+    return { text: msg.content.map((b) => b.text || '').join('\n') };
+  }
+
+  if (action === 'parse_workout_photo') {
+    if (!imageBase64 || !imageMediaType) throw new HttpsError('invalid-argument', 'Не передано изображение.');
+
+    const prompt = `${SAFETY_NOTE}
+
+На фото — рукописная (или напечатанная) запись тренировки из тетради/блокнота пользователя. Распознай упражнения,
+подходы, повторения и вес (если указан), и название/тип тренировки, если понятно из контекста.
+
+Ответь СТРОГО в формате JSON без текста до/после:
+{"name":"Название тренировки","type":"strength","durationMinutes":45,"exercises":[{"name":"Приседания","sets":[{"reps":10,"weight":60},{"reps":8,"weight":65}]}]}
+type — один из: strength, cardio, flexibility, sport, other. Если что-то не удаётся разобрать — оставь разумное значение по умолчанию, не выдумывай числа, которых не видно на фото.`;
+
+    const msg = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 2000,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: imageMediaType, data: imageBase64 } },
+            { type: 'text', text: prompt },
+          ],
+        },
+      ],
+    });
+    const raw = msg.content.map((b) => b.text || '').join('\n').trim();
+
+    let parsed;
+    try {
+      const jsonStart = raw.indexOf('{');
+      const jsonEnd = raw.lastIndexOf('}');
+      parsed = JSON.parse(raw.slice(jsonStart, jsonEnd + 1));
+    } catch (e) {
+      logger.error('Не удалось разобрать JSON тренировки с фото', { error: e.message, raw: raw.slice(0, 300) });
+      throw new HttpsError('internal', 'Не получилось разобрать фото. Попробуйте более чёткое фото или другой ракурс.');
+    }
+
+    return { parsed };
   }
 
   if (action === 'replace_meal') {

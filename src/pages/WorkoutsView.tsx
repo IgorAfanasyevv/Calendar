@@ -1,15 +1,23 @@
 import { localDateStr } from '../lib/timezone';
+import { resizeImageToBase64 } from '../lib/imageResize';
 import { useEffect, useMemo, useState } from 'react';
+import { httpsCallable } from 'firebase/functions';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import {
-  Plus, Trash2, Dumbbell, Clock, Flame, Bookmark, Trophy, TrendingUp, Scale, Check, X,
+  Plus, Trash2, Dumbbell, Clock, Flame, Bookmark, Trophy, TrendingUp, Scale, Check, X, HelpCircle, Camera, Loader2,
 } from 'lucide-react';
 import { useWorkoutStore } from '../store/workoutStore';
 import { useAuthStore } from '../store/authStore';
 import { useWorkspaceStore } from '../store/workspaceStore';
+import { functions } from '../lib/firebase';
 import Modal from '../components/Modal';
 import WorkoutAssistant from '../components/WorkoutAssistant';
 import type { BodyMeasurement, ExerciseSet, WorkoutEntry, WorkoutExercise, WorkoutTemplate, WorkoutType } from '../types';
+
+const fitnessAssistantCall = httpsCallable<
+  { workspaceId: string; action: string; exerciseName?: string; imageBase64?: string; imageMediaType?: string },
+  { text?: string; parsed?: { name?: string; type?: WorkoutType; durationMinutes?: number; exercises?: WorkoutExercise[] } }
+>(functions, 'fitnessAssistant');
 
 const TYPE_LABELS: Record<WorkoutType, string> = {
   strength: 'Силовая',
@@ -41,6 +49,10 @@ export default function WorkoutsView({ workspaceId }: { workspaceId: string }) {
   const actor = { uid: firebaseUser?.uid || '', name: profile?.displayName || '' };
   const [adding, setAdding] = useState(false);
   const [startFromTemplate, setStartFromTemplate] = useState<WorkoutTemplate | null>(null);
+  const [photoParsed, setPhotoParsed] = useState<Partial<WorkoutEntry> | null>(null);
+  const [importingPhoto, setImportingPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const [howToExercise, setHowToExercise] = useState<string | null>(null);
   const [addingMeasurement, setAddingMeasurement] = useState(false);
   const [selectedExercise, setSelectedExercise] = useState<string>('');
   const [selectedUid, setSelectedUid] = useState(firebaseUser?.uid || '');
@@ -120,19 +132,51 @@ export default function WorkoutsView({ workspaceId }: { workspaceId: string }) {
     [myMeasurements]
   );
 
+  async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setImportingPhoto(true);
+    setPhotoError(null);
+    try {
+      const { base64, mediaType } = await resizeImageToBase64(file);
+      const res = await fitnessAssistantCall({
+        workspaceId,
+        action: 'parse_workout_photo',
+        imageBase64: base64,
+        imageMediaType: mediaType,
+      });
+      if (res.data.parsed) {
+        setPhotoParsed(res.data.parsed);
+      }
+    } catch (err) {
+      setPhotoError((err as { message?: string })?.message || 'Не получилось распознать фото. Попробуйте другое.');
+    } finally {
+      setImportingPhoto(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <h2 className="text-lg font-semibold flex items-center gap-2">
           <Dumbbell size={18} /> Тренировки
         </h2>
-        <button
-          onClick={() => setAdding(true)}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white text-sm font-medium shadow-lg shadow-indigo-500/25"
-        >
-          <Plus size={15} /> Добавить тренировку
-        </button>
+        <div className="flex items-center gap-2">
+          <label className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-sm font-medium cursor-pointer hover:bg-neutral-200 dark:hover:bg-neutral-700">
+            {importingPhoto ? <Loader2 size={15} className="animate-spin" /> : <Camera size={15} />}
+            <span className="hidden sm:inline">{importingPhoto ? 'Распознаю...' : 'Фото тренировки'}</span>
+            <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} disabled={importingPhoto} />
+          </label>
+          <button
+            onClick={() => setAdding(true)}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white text-sm font-medium shadow-lg shadow-indigo-500/25"
+          >
+            <Plus size={15} /> Добавить тренировку
+          </button>
+        </div>
       </div>
+      {photoError && <p className="text-xs text-rose-500">{photoError}</p>}
 
       {members.length > 1 && (
         <div className="flex gap-2">
@@ -331,10 +375,19 @@ export default function WorkoutsView({ workspaceId }: { workspaceId: string }) {
                   {e.exercises && e.exercises.length > 0 && (
                     <div className="mt-2 pl-1 space-y-1">
                       {e.exercises.map((ex, i) => (
-                        <p key={i} className="text-[11px] text-neutral-500">
-                          <span className="font-medium">{ex.name}:</span>{' '}
-                          {ex.sets.map((s) => `${s.reps || '-'}×${s.weight || 0}кг`).join(', ')}
-                        </p>
+                        <div key={i} className="flex items-center gap-1.5">
+                          <p className="text-[11px] text-neutral-500">
+                            <span className="font-medium">{ex.name}:</span>{' '}
+                            {ex.sets.map((s) => `${s.reps || '-'}×${s.weight || 0}кг`).join(', ')}
+                          </p>
+                          <button
+                            onClick={() => setHowToExercise(ex.name)}
+                            className="text-neutral-400 hover:text-indigo-500 shrink-0"
+                            title="Как делать это упражнение"
+                          >
+                            <HelpCircle size={12} />
+                          </button>
+                        </div>
                       ))}
                     </div>
                   )}
@@ -346,16 +399,31 @@ export default function WorkoutsView({ workspaceId }: { workspaceId: string }) {
         {grouped.length === 0 && <p className="text-sm text-neutral-400 text-center py-12">Пока нет тренировок 💪</p>}
       </div>
 
-      {(adding || startFromTemplate) && (
+      {(adding || startFromTemplate || photoParsed) && (
         <AddWorkoutModal
           workspaceId={workspaceId}
           actor={actor}
-          template={startFromTemplate}
+          initial={
+            startFromTemplate
+              ? {
+                  name: startFromTemplate.name,
+                  type: startFromTemplate.type,
+                  exercises: startFromTemplate.exercises.map((ex) => ({
+                    name: ex.name,
+                    sets: [{ reps: ex.targetReps, weight: undefined }],
+                  })),
+                }
+              : photoParsed
+                ? photoParsed
+                : null
+          }
+          title={startFromTemplate ? `Тренировка по шаблону «${startFromTemplate.name}»` : photoParsed ? 'Тренировка с фото' : undefined}
           onSave={addEntry}
           onSaveTemplate={(t) => addTemplate(workspaceId, t, actor)}
           onClose={() => {
             setAdding(false);
             setStartFromTemplate(null);
+            setPhotoParsed(null);
           }}
         />
       )}
@@ -368,6 +436,10 @@ export default function WorkoutsView({ workspaceId }: { workspaceId: string }) {
           }}
           onClose={() => setAddingMeasurement(false)}
         />
+      )}
+
+      {howToExercise && (
+        <HowToModal workspaceId={workspaceId} exerciseName={howToExercise} onClose={() => setHowToExercise(null)} />
       )}
     </div>
   );
@@ -416,29 +488,30 @@ function AddMeasurementModal({
 function AddWorkoutModal({
   workspaceId,
   actor,
-  template,
+  initial,
+  title,
   onSave,
   onSaveTemplate,
   onClose,
 }: {
   workspaceId: string;
   actor: { uid: string; name: string };
-  template: WorkoutTemplate | null;
+  initial?: Partial<WorkoutEntry> | null;
+  title?: string;
   onSave: (workspaceId: string, entry: Partial<WorkoutEntry>, actor: { uid: string; name: string }) => Promise<void>;
   onSaveTemplate: (template: Partial<WorkoutTemplate>) => Promise<void>;
   onClose: () => void;
 }) {
-  const [name, setName] = useState(template?.name || '');
-  const [type, setType] = useState<WorkoutType>(template?.type || 'strength');
-  const [duration, setDuration] = useState('30');
+  const [name, setName] = useState(initial?.name || '');
+  const [type, setType] = useState<WorkoutType>(initial?.type || 'strength');
+  const [duration, setDuration] = useState(initial?.durationMinutes ? String(initial.durationMinutes) : '30');
   const [calories, setCalories] = useState('');
   const [date, setDate] = useState(localDateStr(Date.now()));
   const [note, setNote] = useState('');
-  const [exercises, setExercises] = useState<WorkoutExercise[]>(
-    template ? template.exercises.map((ex) => ({ name: ex.name, sets: [{ reps: ex.targetReps, weight: undefined }] })) : []
-  );
+  const [exercises, setExercises] = useState<WorkoutExercise[]>(initial?.exercises || []);
   const [saveAsTemplate, setSaveAsTemplate] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [howToExercise, setHowToExercise] = useState<string | null>(null);
 
   function addExercise() {
     setExercises((prev) => [...prev, { name: '', sets: [{ reps: undefined, weight: undefined }] }]);
@@ -503,7 +576,7 @@ function AddWorkoutModal({
   }
 
   return (
-    <Modal title={template ? `Тренировка по шаблону «${template.name}»` : 'Новая тренировка'} onClose={onClose} wide>
+    <Modal title={title || 'Новая тренировка'} onClose={onClose} wide>
       <div className="space-y-3">
         <input className="input" placeholder="Например: Бег, зал, йога" value={name} onChange={(e) => setName(e.target.value)} />
 
@@ -545,6 +618,15 @@ function AddWorkoutModal({
                     value={ex.name}
                     onChange={(e) => updateExerciseName(i, e.target.value)}
                   />
+                  {ex.name.trim() && (
+                    <button
+                      onClick={() => setHowToExercise(ex.name.trim())}
+                      className="text-neutral-400 hover:text-indigo-500 shrink-0"
+                      title="Как делать это упражнение"
+                    >
+                      <HelpCircle size={15} />
+                    </button>
+                  )}
                   <button onClick={() => removeExercise(i)} className="text-neutral-400 hover:text-rose-500 shrink-0">
                     <Trash2 size={13} />
                   </button>
@@ -594,6 +676,53 @@ function AddWorkoutModal({
           Сохранить
         </button>
       </div>
+
+      {howToExercise && <HowToModal workspaceId={workspaceId} exerciseName={howToExercise} onClose={() => setHowToExercise(null)} />}
+    </Modal>
+  );
+}
+
+function HowToModal({
+  workspaceId,
+  exerciseName,
+  onClose,
+}: {
+  workspaceId: string;
+  exerciseName: string;
+  onClose: () => void;
+}) {
+  const [text, setText] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    fitnessAssistantCall({ workspaceId, action: 'exercise_howto', exerciseName })
+      .then((res) => {
+        if (!cancelled) setText(res.data.text || '');
+      })
+      .catch((e) => {
+        if (!cancelled) setError((e as { message?: string })?.message || 'Не получилось загрузить инструкцию.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceId, exerciseName]);
+
+  return (
+    <Modal title={`Как делать: ${exerciseName}`} onClose={onClose}>
+      {loading && (
+        <div className="flex items-center gap-2 text-sm text-neutral-400 py-6 justify-center">
+          <Loader2 size={16} className="animate-spin" /> Загружаю...
+        </div>
+      )}
+      {error && <p className="text-sm text-rose-500">{error}</p>}
+      {text && <p className="text-sm whitespace-pre-wrap">{text}</p>}
     </Modal>
   );
 }
