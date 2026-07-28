@@ -149,7 +149,11 @@ function MemoryModal({ entry, onClose }: { entry: JournalEntry; onClose: () => v
     <Modal title={formatDate(entry.date)} onClose={onClose} wide>
       <div className="space-y-3">
         {entry.photoUrl && (
-          <img src={entry.photoUrl} alt="" className="w-full max-h-96 object-cover rounded-2xl" />
+          <img
+            src={entry.photoUrl}
+            alt=""
+            className="w-full max-h-[70vh] object-contain rounded-2xl bg-neutral-100 dark:bg-neutral-800"
+          />
         )}
         <div className="flex items-center gap-2">
           {mood && (
