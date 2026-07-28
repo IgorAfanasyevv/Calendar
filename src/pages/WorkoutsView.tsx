@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { httpsCallable } from 'firebase/functions';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import {
-  Plus, Trash2, Dumbbell, Clock, Flame, Bookmark, Trophy, TrendingUp, Scale, Check, X, HelpCircle, Camera, Loader2,
+  Plus, Trash2, Dumbbell, Clock, Flame, Bookmark, Trophy, Scale, Check, X, HelpCircle, Camera, Loader2,
 } from 'lucide-react';
 import { useWorkoutStore } from '../store/workoutStore';
 import { useAuthStore } from '../store/authStore';
@@ -54,7 +54,6 @@ export default function WorkoutsView({ workspaceId }: { workspaceId: string }) {
   const [photoSuccess, setPhotoSuccess] = useState<string | null>(null);
   const [howToExercise, setHowToExercise] = useState<string | null>(null);
   const [addingMeasurement, setAddingMeasurement] = useState(false);
-  const [selectedExercise, setSelectedExercise] = useState<string>('');
   const [selectedUid, setSelectedUid] = useState(firebaseUser?.uid || '');
 
   const members = workspace?.members || [];
@@ -109,24 +108,6 @@ export default function WorkoutsView({ workspaceId }: { workspaceId: string }) {
     return Object.entries(best).sort(([, a], [, b]) => b.weight - a.weight);
   }, [myEntries]);
 
-  const exerciseNames = useMemo(() => {
-    const names = new Set<string>();
-    myEntries.forEach((e) => (e.exercises || []).forEach((ex) => names.add(ex.name)));
-    return Array.from(names);
-  }, [myEntries]);
-
-  const progressData = useMemo(() => {
-    if (!selectedExercise) return [];
-    return myEntries
-      .filter((e) => (e.exercises || []).some((ex) => ex.name === selectedExercise))
-      .map((e) => {
-        const ex = e.exercises!.find((x) => x.name === selectedExercise)!;
-        const maxWeight = Math.max(0, ...ex.sets.map((s) => s.weight || 0));
-        return { date: formatDate(e.date), sortKey: e.date, weight: maxWeight };
-      })
-      .sort((a, b) => a.sortKey.localeCompare(b.sortKey));
-  }, [myEntries, selectedExercise]);
-
   const weightData = useMemo(
     () => myMeasurements.filter((m) => m.weight != null).map((m) => ({ date: formatDate(m.date), sortKey: m.date, weight: m.weight! })),
     [myMeasurements]
@@ -157,10 +138,11 @@ export default function WorkoutsView({ workspaceId }: { workspaceId: string }) {
             durationMinutes: p.durationMinutes || 30,
             exercises: p.exercises,
             date: localDateStr(Date.now()),
+            planned: true,
           },
           actor
         );
-        setPhotoSuccess(`Добавлено в «Мои тренировки»: ${p.name || 'Тренировка с фото'}`);
+        setPhotoSuccess(`Добавлено в предстоящие: «${p.name || 'Тренировка с фото'}» — отметьте выполненной, когда сделаете`);
       }
     } catch (err) {
       setPhotoError((err as { message?: string })?.message || 'Не получилось распознать фото. Попробуйте другое.');
@@ -228,7 +210,7 @@ export default function WorkoutsView({ workspaceId }: { workspaceId: string }) {
       {/* Предстоящие (ИИ-план на неделю) */}
       {plannedEntries.length > 0 && (
         <div className="rounded-2xl glass p-4">
-          <h3 className="text-sm font-semibold mb-2">План на неделю</h3>
+          <h3 className="text-sm font-semibold mb-2">Предстоящие тренировки</h3>
           <div className="space-y-1.5">
             {plannedEntries.map((e) => (
               <div key={e.id} className="flex items-center gap-3 rounded-xl bg-amber-50/60 dark:bg-amber-500/10 px-3 py-2.5">
@@ -288,38 +270,6 @@ export default function WorkoutsView({ workspaceId }: { workspaceId: string }) {
               </div>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* Прогресс по упражнению */}
-      {exerciseNames.length > 0 && (
-        <div className="rounded-2xl glass p-4">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-semibold flex items-center gap-1.5">
-              <TrendingUp size={14} /> Прогресс
-            </h3>
-            <select className="input py-1 text-xs w-40" value={selectedExercise} onChange={(e) => setSelectedExercise(e.target.value)}>
-              <option value="">Выберите упражнение</option>
-              {exerciseNames.map((n) => (
-                <option key={n} value={n}>{n}</option>
-              ))}
-            </select>
-          </div>
-          {progressData.length > 1 ? (
-            <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={progressData}>
-                <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
-                <XAxis dataKey="date" fontSize={11} />
-                <YAxis fontSize={11} />
-                <Tooltip formatter={(v) => `${v} кг`} />
-                <Line type="monotone" dataKey="weight" stroke="#6366f1" strokeWidth={2} dot={{ r: 3 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          ) : (
-            <p className="text-xs text-neutral-400 text-center py-8">
-              {selectedExercise ? 'Пока мало данных для графика — нужно хотя бы 2 тренировки' : 'Выберите упражнение выше'}
-            </p>
-          )}
         </div>
       )}
 
@@ -417,6 +367,7 @@ export default function WorkoutsView({ workspaceId }: { workspaceId: string }) {
         <AddWorkoutModal
           workspaceId={workspaceId}
           actor={actor}
+          existingTemplates={templates}
           initial={
             startFromTemplate
               ? {
@@ -501,6 +452,7 @@ function AddWorkoutModal({
   actor,
   initial,
   title,
+  existingTemplates,
   onSave,
   onSaveTemplate,
   onClose,
@@ -509,6 +461,7 @@ function AddWorkoutModal({
   actor: { uid: string; name: string };
   initial?: Partial<WorkoutEntry> | null;
   title?: string;
+  existingTemplates: WorkoutTemplate[];
   onSave: (workspaceId: string, entry: Partial<WorkoutEntry>, actor: { uid: string; name: string }) => Promise<void>;
   onSaveTemplate: (template: Partial<WorkoutTemplate>) => Promise<void>;
   onClose: () => void;
@@ -520,7 +473,6 @@ function AddWorkoutModal({
   const [date, setDate] = useState(localDateStr(Date.now()));
   const [note, setNote] = useState('');
   const [exercises, setExercises] = useState<WorkoutExercise[]>(initial?.exercises || []);
-  const [saveAsTemplate, setSaveAsTemplate] = useState(false);
   const [saving, setSaving] = useState(false);
   const [howToExercise, setHowToExercise] = useState<string | null>(null);
 
@@ -569,7 +521,10 @@ function AddWorkoutModal({
         },
         actor
       );
-      if (saveAsTemplate) {
+      if (
+        cleanExercises.length > 0 &&
+        !existingTemplates.some((t) => t.name.trim().toLowerCase() === name.trim().toLowerCase())
+      ) {
         await onSaveTemplate({
           name: name.trim(),
           type,
@@ -673,11 +628,6 @@ function AddWorkoutModal({
             ))}
           </div>
         </div>
-
-        <label className="flex items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400 px-1">
-          <input type="checkbox" checked={saveAsTemplate} onChange={(e) => setSaveAsTemplate(e.target.checked)} />
-          Сохранить как шаблон программы
-        </label>
 
         <button
           onClick={handleSave}
