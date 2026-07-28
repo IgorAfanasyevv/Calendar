@@ -357,11 +357,17 @@ offset — через сколько дней от сегодня (0 = сего�
     try {
       parsed = extractJson(raw);
     } catch (e) {
-      logger.error('Не удалось разобрать JSON плана тренировок', { error: e.message, stopReason: msg.stop_reason });
+      logger.error('Не удалось разобрать JSON плана тренировок', {
+        error: e.message,
+        stopReason: msg.stop_reason,
+        rawLength: raw.length,
+        rawPreview: raw.slice(0, 300),
+        rawEnd: raw.slice(-300),
+      });
       if (msg.stop_reason === 'max_tokens') {
         throw new HttpsError('internal', 'Ответ модели получился слишком длинным и обрезался. Попробуйте ещё раз.');
       }
-      throw new HttpsError('internal', 'Не получилось разобрать ответ модели. Попробуйте ещё раз.');
+      throw new HttpsError('internal', `Не получилось разобрать ответ модели: ${e.message}`);
     }
 
     const batch = db.batch();
@@ -435,7 +441,7 @@ offset — через сколько дней от сегодня (1 = завт�
           'Ответ модели получился слишком длинным и обрезался. Попробуйте ещё раз — иногда со второго раза получается короче.'
         );
       }
-      throw new HttpsError('internal', 'Не получилось разобрать ответ модели. Попробуйте ещё раз.');
+      throw new HttpsError('internal', `Не получилось разобрать ответ модели: ${e.message}`);
     }
 
     const batch = db.batch();
@@ -561,7 +567,7 @@ type — один из: strength, cardio, flexibility, sport, other. Если ч
       parsed = extractJson(raw);
     } catch (e) {
       logger.error('Не удалось разобрать JSON тренировки с фото', { error: e.message, raw: raw.slice(0, 300) });
-      throw new HttpsError('internal', 'Не получилось разобрать фото. Попробуйте более чёткое фото или другой ракурс.');
+      throw new HttpsError('internal', `Не получилось разобрать фото: ${e.message}. Попробуйте более чёткое фото.`);
     }
 
     return { parsed };
@@ -596,7 +602,7 @@ ${preference && preference.trim() ? `Пожелание по замене: ${pre
       meal = extractJson(raw);
     } catch (e) {
       logger.error('Не удалось разобрать JSON замены блюда', e, raw);
-      throw new HttpsError('internal', 'Не получилось разобрать ответ модели. Попробуйте ещё раз.');
+      throw new HttpsError('internal', `Не получилось разобрать ответ модели: ${e.message}`);
     }
 
     const newIngredients = (meal.ingredients || [])
