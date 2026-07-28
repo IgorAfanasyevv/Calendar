@@ -64,7 +64,7 @@ export default function FinanceView({ workspaceId }: { workspaceId: string }) {
   const activeBoard = boards.find((b) => b.id === selected);
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-5xl mx-auto">
       <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-1">
         <button
           onClick={() => setSelected('overview')}

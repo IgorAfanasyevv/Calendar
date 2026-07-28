@@ -27,7 +27,7 @@ export default function SettingsView() {
   }
 
   return (
-    <div className="p-6 max-w-xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 max-w-xl mx-auto space-y-6">
       <h1 className="text-xl font-semibold">Настройки</h1>
 
       <div className="rounded-2xl glass p-5 space-y-4">

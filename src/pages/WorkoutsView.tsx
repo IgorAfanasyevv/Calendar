@@ -198,7 +198,7 @@ export default function WorkoutsView({ workspaceId }: { workspaceId: string }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <h2 className="text-lg font-semibold flex items-center gap-2">
           <Dumbbell size={18} /> Тренировки
         </h2>
@@ -210,9 +210,9 @@ export default function WorkoutsView({ workspaceId }: { workspaceId: string }) {
           </label>
           <button
             onClick={() => setAdding(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white text-sm font-medium shadow-lg shadow-indigo-500/25"
+            className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white text-sm font-medium shadow-lg shadow-indigo-500/25"
           >
-            <Plus size={15} /> Добавить тренировку
+            <Plus size={15} /> <span className="hidden sm:inline">Добавить тренировку</span>
           </button>
         </div>
       </div>
