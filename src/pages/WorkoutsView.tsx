@@ -49,9 +49,9 @@ export default function WorkoutsView({ workspaceId }: { workspaceId: string }) {
   const actor = { uid: firebaseUser?.uid || '', name: profile?.displayName || '' };
   const [adding, setAdding] = useState(false);
   const [startFromTemplate, setStartFromTemplate] = useState<WorkoutTemplate | null>(null);
-  const [photoParsed, setPhotoParsed] = useState<Partial<WorkoutEntry> | null>(null);
   const [importingPhoto, setImportingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
+  const [photoSuccess, setPhotoSuccess] = useState<string | null>(null);
   const [howToExercise, setHowToExercise] = useState<string | null>(null);
   const [addingMeasurement, setAddingMeasurement] = useState(false);
   const [selectedExercise, setSelectedExercise] = useState<string>('');
@@ -138,6 +138,7 @@ export default function WorkoutsView({ workspaceId }: { workspaceId: string }) {
     if (!file) return;
     setImportingPhoto(true);
     setPhotoError(null);
+    setPhotoSuccess(null);
     try {
       const { base64, mediaType } = await resizeImageToBase64(file);
       const res = await fitnessAssistantCall({
@@ -147,7 +148,19 @@ export default function WorkoutsView({ workspaceId }: { workspaceId: string }) {
         imageMediaType: mediaType,
       });
       if (res.data.parsed) {
-        setPhotoParsed(res.data.parsed);
+        const p = res.data.parsed;
+        await addEntry(
+          workspaceId,
+          {
+            name: p.name || 'Тренировка с фото',
+            type: p.type || 'strength',
+            durationMinutes: p.durationMinutes || 30,
+            exercises: p.exercises,
+            date: localDateStr(Date.now()),
+          },
+          actor
+        );
+        setPhotoSuccess(`Добавлено в «Мои тренировки»: ${p.name || 'Тренировка с фото'}`);
       }
     } catch (err) {
       setPhotoError((err as { message?: string })?.message || 'Не получилось распознать фото. Попробуйте другое.');
@@ -177,6 +190,7 @@ export default function WorkoutsView({ workspaceId }: { workspaceId: string }) {
         </div>
       </div>
       {photoError && <p className="text-xs text-rose-500">{photoError}</p>}
+      {photoSuccess && <p className="text-xs text-emerald-600 dark:text-emerald-400">{photoSuccess}</p>}
 
       {members.length > 1 && (
         <div className="flex gap-2">
@@ -399,7 +413,7 @@ export default function WorkoutsView({ workspaceId }: { workspaceId: string }) {
         {grouped.length === 0 && <p className="text-sm text-neutral-400 text-center py-12">Пока нет тренировок 💪</p>}
       </div>
 
-      {(adding || startFromTemplate || photoParsed) && (
+      {(adding || startFromTemplate) && (
         <AddWorkoutModal
           workspaceId={workspaceId}
           actor={actor}
@@ -413,17 +427,14 @@ export default function WorkoutsView({ workspaceId }: { workspaceId: string }) {
                     sets: [{ reps: ex.targetReps, weight: undefined }],
                   })),
                 }
-              : photoParsed
-                ? photoParsed
-                : null
+              : null
           }
-          title={startFromTemplate ? `Тренировка по шаблону «${startFromTemplate.name}»` : photoParsed ? 'Тренировка с фото' : undefined}
+          title={startFromTemplate ? `Тренировка по шаблону «${startFromTemplate.name}»` : undefined}
           onSave={addEntry}
           onSaveTemplate={(t) => addTemplate(workspaceId, t, actor)}
           onClose={() => {
             setAdding(false);
             setStartFromTemplate(null);
-            setPhotoParsed(null);
           }}
         />
       )}
