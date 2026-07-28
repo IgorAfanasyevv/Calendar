@@ -355,9 +355,7 @@ offset — через сколько дней от сегодня (0 = сего�
 
     let parsed;
     try {
-      const jsonStart = raw.indexOf('{');
-      const jsonEnd = raw.lastIndexOf('}');
-      parsed = JSON.parse(raw.slice(jsonStart, jsonEnd + 1));
+      parsed = extractJson(raw);
     } catch (e) {
       logger.error('Не удалось разобрать JSON плана тренировок', { error: e.message, stopReason: msg.stop_reason });
       if (msg.stop_reason === 'max_tokens') {
@@ -422,9 +420,7 @@ offset — через сколько дней от сегодня (1 = завт�
 
     let parsed;
     try {
-      const jsonStart = raw.indexOf('{');
-      const jsonEnd = raw.lastIndexOf('}');
-      parsed = JSON.parse(raw.slice(jsonStart, jsonEnd + 1));
+      parsed = extractJson(raw);
     } catch (e) {
       logger.error('Не удалось разобрать JSON меню от модели', {
         error: e.message,
@@ -562,9 +558,7 @@ type — один из: strength, cardio, flexibility, sport, other. Если ч
 
     let parsed;
     try {
-      const jsonStart = raw.indexOf('{');
-      const jsonEnd = raw.lastIndexOf('}');
-      parsed = JSON.parse(raw.slice(jsonStart, jsonEnd + 1));
+      parsed = extractJson(raw);
     } catch (e) {
       logger.error('Не удалось разобрать JSON тренировки с фото', { error: e.message, raw: raw.slice(0, 300) });
       throw new HttpsError('internal', 'Не получилось разобрать фото. Попробуйте более чёткое фото или другой ракурс.');
@@ -599,9 +593,7 @@ ${preference && preference.trim() ? `Пожелание по замене: ${pre
 
     let meal;
     try {
-      const jsonStart = raw.indexOf('{');
-      const jsonEnd = raw.lastIndexOf('}');
-      meal = JSON.parse(raw.slice(jsonStart, jsonEnd + 1));
+      meal = extractJson(raw);
     } catch (e) {
       logger.error('Не удалось разобрать JSON замены блюда', e, raw);
       throw new HttpsError('internal', 'Не получилось разобрать ответ модели. Попробуйте ещё раз.');
@@ -963,6 +955,34 @@ function zonedTimeToUtc(dateStr, timeStr, timeZone) {
 }
 
 /** Firestore (в том числе Admin SDK) не разрешает поля со значением undefined. */
+/**
+ * Достаёт JSON-объект из ответа модели, даже если она обернула его в markdown
+ * (```json ... ```), добавила лишний текст до/после, или оставила висячую
+ * запятую перед закрывающей скобкой (частая мелкая ошибка у LLM).
+ */
+function extractJson(raw) {
+  let text = raw.trim();
+  // Убираем markdown-разметку кода, если она есть
+  text = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+  const jsonStart = text.indexOf('{');
+  const jsonEnd = text.lastIndexOf('}');
+  if (jsonStart === -1 || jsonEnd === -1 || jsonEnd < jsonStart) {
+    throw new Error('В ответе не найден JSON-объект');
+  }
+  let candidate = text.slice(jsonStart, jsonEnd + 1);
+  try {
+    return JSON.parse(candidate);
+  } catch (firstError) {
+    // Частая проблема — висячая запятая перед } или ]. Пробуем убрать и разобрать ещё раз.
+    const cleaned = candidate.replace(/,(\s*[}\]])/g, '$1');
+    try {
+      return JSON.parse(cleaned);
+    } catch {
+      throw firstError;
+    }
+  }
+}
+
 function stripUndefinedFields(obj) {
   return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined));
 }
