@@ -1,3 +1,4 @@
+import { localDateStr } from '../lib/timezone';
 import { create } from 'zustand';
 import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -49,7 +50,7 @@ export const useFoodStore = create<FoodState>((set) => ({
       stripUndefined({
         mealType: 'breakfast',
         calories: 0,
-        date: new Date().toISOString().slice(0, 10),
+        date: localDateStr(Date.now()),
         ...entry,
         workspaceId,
         createdBy: actor.uid,
@@ -68,7 +69,7 @@ export const useFoodStore = create<FoodState>((set) => ({
     logActivity(entry.workspaceId, actor.uid, actor.name, `удалил(а) из дневника «${entry.name}»`);
   },
   markEaten: async (entry) => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDateStr(Date.now());
     await updateDoc(doc(db, 'workspaces', entry.workspaceId, 'food', entry.id), {
       planned: false,
       date: entry.date < today ? today : entry.date,

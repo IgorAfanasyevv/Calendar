@@ -1,3 +1,4 @@
+import { localDateStr } from '../lib/timezone';
 import { useEffect, useMemo, useState } from 'react';
 import { httpsCallable } from 'firebase/functions';
 import { Plus, Trash2, CalendarRange, RefreshCw, Loader2, ShoppingCart, BookOpen } from 'lucide-react';
@@ -37,7 +38,7 @@ export default function FoodMenuView({ workspaceId }: { workspaceId: string }) {
   const { workspace } = useWorkspaceStore();
   const actor = { uid: firebaseUser?.uid || '', name: profile?.displayName || '' };
   const [adding, setAdding] = useState<{ date: string; mealType: MealType } | null>(null);
-  const [newDate, setNewDate] = useState(new Date().toISOString().slice(0, 10));
+  const [newDate, setNewDate] = useState(localDateStr(Date.now()));
   const [newMeal, setNewMeal] = useState<MealType>('breakfast');
   const [replacingEntry, setReplacingEntry] = useState<FoodEntry | null>(null);
   const [recipeEntry, setRecipeEntry] = useState<FoodEntry | null>(null);

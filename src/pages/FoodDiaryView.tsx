@@ -7,6 +7,7 @@ import type { FoodEntry, MealType } from '../types';
 import AddFoodModal from '../components/AddFoodModal';
 import FitnessAssistant from '../components/FitnessAssistant';
 import KbjuCalculator from '../components/KbjuCalculator';
+import { localDateStr } from '../lib/timezone';
 
 const MEAL_LABELS: Record<MealType, string> = {
   breakfast: 'Завтрак',
@@ -17,7 +18,7 @@ const MEAL_LABELS: Record<MealType, string> = {
 const MEAL_ORDER: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return localDateStr(Date.now());
 }
 
 function formatDay(dateStr: string): string {
@@ -28,7 +29,7 @@ function formatDay(dateStr: string): string {
 function shiftDay(dateStr: string, delta: number): string {
   const d = new Date(dateStr + 'T00:00:00');
   d.setDate(d.getDate() + delta);
-  return d.toISOString().slice(0, 10);
+  return localDateStr(d.getTime());
 }
 
 export default function FoodDiaryView({ workspaceId }: { workspaceId: string }) {

@@ -5,7 +5,7 @@ import Modal from './Modal';
 import type { Assignee, ChecklistItem, Priority, Task } from '../types';
 import { useTaskStore } from '../store/taskStore';
 import { useAuthStore } from '../store/authStore';
-import { computeDueAtUtc, effectiveDate, effectiveTime } from '../lib/timezone';
+import { computeDueAtUtc, effectiveDate, effectiveTime, localDateStr } from '../lib/timezone';
 import { TASK_COLORS, taskColorStyle } from '../lib/taskColor';
 
 const CATEGORIES = ['Общее', 'Работа', 'Дом', 'Здоровье', 'Отношения', 'Финансы', 'Путешествия'];
@@ -30,7 +30,7 @@ export default function TaskModal({
   // Показываем дату/время в часовом поясе ТЕКУЩЕГО пользователя (даже если задачу
   // создал партнёр в другом часовом поясе) — редактируем то, что видим.
   const [date, setDate] = useState(
-    (initial ? effectiveDate(initial) : undefined) || prefillDate || new Date().toISOString().slice(0, 10)
+    (initial ? effectiveDate(initial) : undefined) || prefillDate || localDateStr(Date.now())
   );
   const [time, setTime] = useState((initial ? effectiveTime(initial) : undefined) || '');
   const [duration, setDuration] = useState(initial?.durationMinutes || 30);

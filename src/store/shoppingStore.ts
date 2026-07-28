@@ -1,3 +1,4 @@
+import { localDateStr } from '../lib/timezone';
 import { create } from 'zustand';
 import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -78,7 +79,7 @@ async function addToFinanceIfConfigured(item: ShoppingItem, actor: { uid: string
       amount: item.price * item.quantity,
       category: item.category,
       note,
-      date: new Date().toISOString().slice(0, 10),
+      date: localDateStr(Date.now()),
     },
     actor,
     board.currency

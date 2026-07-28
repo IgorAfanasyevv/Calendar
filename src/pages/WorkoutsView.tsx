@@ -1,3 +1,4 @@
+import { localDateStr } from '../lib/timezone';
 import { useEffect, useMemo, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import {
@@ -381,7 +382,7 @@ function AddMeasurementModal({
 }) {
   const [weight, setWeight] = useState('');
   const [bodyFatPct, setBodyFatPct] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(localDateStr(Date.now()));
   const [saving, setSaving] = useState(false);
 
   async function handleSave() {
@@ -431,7 +432,7 @@ function AddWorkoutModal({
   const [type, setType] = useState<WorkoutType>(template?.type || 'strength');
   const [duration, setDuration] = useState('30');
   const [calories, setCalories] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(localDateStr(Date.now()));
   const [note, setNote] = useState('');
   const [exercises, setExercises] = useState<WorkoutExercise[]>(
     template ? template.exercises.map((ex) => ({ name: ex.name, sets: [{ reps: ex.targetReps, weight: undefined }] })) : []

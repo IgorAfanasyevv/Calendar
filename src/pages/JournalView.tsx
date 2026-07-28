@@ -1,3 +1,4 @@
+import { localDateStr } from '../lib/timezone';
 import { useMemo, useState } from 'react';
 import { Plus, Trash2, BookHeart, Star } from 'lucide-react';
 import { useJournalStore } from '../store/journalStore';
@@ -123,7 +124,7 @@ export default function JournalView({ workspaceId }: { workspaceId: string }) {
 
 function NewEntryForm({ onSave }: { onSave: (data: Partial<JournalEntry>) => Promise<void> }) {
   const [text, setText] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(localDateStr(Date.now()));
   const [mood, setMood] = useState<Mood | undefined>(undefined);
   const [isMemory, setIsMemory] = useState(false);
 

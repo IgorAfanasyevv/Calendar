@@ -1,3 +1,4 @@
+import { localDateStr } from '../lib/timezone';
 import { create } from 'zustand';
 import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, updateDoc, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -28,7 +29,7 @@ export const useHabitStore = create<HabitState>((set, get) => ({
     // Держим последние ~90 дней логов — этого достаточно для стриков и месячной сетки
     const since = new Date();
     since.setDate(since.getDate() - 90);
-    const sinceStr = since.toISOString().slice(0, 10);
+    const sinceStr = localDateStr(since.getTime());
     const q = query(collection(db, 'workspaces', workspaceId, 'habitLogs'), where('date', '>=', sinceStr));
     const unsub = onSnapshot(q, (snap) => {
       set({ logs: snap.docs.map((d) => ({ id: d.id, ...d.data() })) as HabitLog[] });
@@ -76,7 +77,7 @@ export function computeStreak(logs: HabitLog[], habitId: string, uid: string, to
     cursor.setDate(cursor.getDate() - 1);
   }
   while (true) {
-    const key = cursor.toISOString().slice(0, 10);
+    const key = localDateStr(cursor.getTime());
     if (!days.has(key)) break;
     streak++;
     cursor.setDate(cursor.getDate() - 1);

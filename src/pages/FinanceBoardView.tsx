@@ -18,6 +18,7 @@ import { useFinanceBoardStore } from '../store/financeBoardStore';
 import { useAuthStore } from '../store/authStore';
 import type { FinanceBoard, FinanceEntry, FinanceType } from '../types';
 import { CURRENCIES, currencySymbol } from '../lib/currency';
+import { localDateStr } from '../lib/timezone';
 
 const PIE_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#94a3b8'];
 const NEW_CATEGORY = '__new__';
@@ -58,11 +59,6 @@ function fullMonthLabel(key: string) {
   return `${names[Number(m) - 1]} ${y}`;
 }
 
-function formatFullDate(dateStr: string): string {
-  const d = new Date(dateStr + 'T00:00:00');
-  return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
-}
-
 function shiftMonth(key: string, delta: number): string {
   const [y, m] = key.split('-').map(Number);
   const d = new Date(y, m - 1 + delta, 1);
@@ -81,7 +77,6 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
 
   const todayMonth = new Date().toISOString().slice(0, 7);
   const [selectedMonth, setSelectedMonth] = useState(todayMonth);
-  const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
   // Предстоящие траты тоже привязаны к выбранному месяцу — навигация стрелками
   // переключает их вместе со всем остальным.
@@ -144,14 +139,10 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
     }));
   }, [entries, selectedMonth]);
 
-  // Список операций — либо за конкретный выбранный день (если выбран в календаре),
-  // либо за весь месяц целиком (по умолчанию)
+  // Список операций именно за выбранный месяц (навигация стрелками выше)
   const monthTransactions = useMemo(
-    () =>
-      [...monthEntries]
-        .filter((e) => !selectedDay || e.date === selectedDay)
-        .sort((a, b) => b.date.localeCompare(a.date)),
-    [monthEntries, selectedDay]
+    () => [...monthEntries].sort((a, b) => b.date.localeCompare(a.date)),
+    [monthEntries]
   );
 
   async function saveBudget() {
@@ -185,54 +176,37 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
         </div>
       </div>
 
-      {/* Навигация по месяцам/дням */}
+      {/* Навигация по месяцам */}
       <div className="flex items-center justify-center gap-3">
         <button
-          onClick={() => {
-            setSelectedDay(null);
-            setSelectedMonth(shiftMonth(selectedMonth, -1));
-          }}
+          onClick={() => setSelectedMonth(shiftMonth(selectedMonth, -1))}
           className="w-8 h-8 flex items-center justify-center rounded-full bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700"
         >
           <ChevronLeft size={16} />
         </button>
         <div className="text-center min-w-[140px]">
-          <p className="text-sm font-semibold">
-            {selectedDay ? formatFullDate(selectedDay) : fullMonthLabel(selectedMonth)}
-          </p>
-          {selectedDay ? (
-            <button onClick={() => setSelectedDay(null)} className="text-[11px] text-indigo-500 hover:text-indigo-600">
-              Показать весь месяц
+          <p className="text-sm font-semibold">{fullMonthLabel(selectedMonth)}</p>
+          {selectedMonth !== todayMonth && (
+            <button
+              onClick={() => setSelectedMonth(todayMonth)}
+              className="text-[11px] text-indigo-500 hover:text-indigo-600"
+            >
+              Вернуться к текущему
             </button>
-          ) : (
-            selectedMonth !== todayMonth && (
-              <button
-                onClick={() => setSelectedMonth(todayMonth)}
-                className="text-[11px] text-indigo-500 hover:text-indigo-600"
-              >
-                Вернуться к текущему
-              </button>
-            )
           )}
         </div>
         <button
-          onClick={() => {
-            setSelectedDay(null);
-            setSelectedMonth(shiftMonth(selectedMonth, 1));
-          }}
+          onClick={() => setSelectedMonth(shiftMonth(selectedMonth, 1))}
           className="w-8 h-8 flex items-center justify-center rounded-full bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700"
         >
           <ChevronRight size={16} />
         </button>
-        <div className="relative w-8 h-8" title="Выбрать день из календаря">
+        <div className="relative w-8 h-8" title="Выбрать месяц из календаря">
           <input
-            type="date"
-            value={selectedDay || `${selectedMonth}-01`}
+            type="month"
+            value={selectedMonth}
             onChange={(e) => {
-              if (e.target.value) {
-                setSelectedDay(e.target.value);
-                setSelectedMonth(e.target.value.slice(0, 7));
-              }
+              if (e.target.value) setSelectedMonth(e.target.value);
             }}
             className="absolute inset-0 w-8 h-8 opacity-0 cursor-pointer"
           />
@@ -401,7 +375,7 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
       {/* Список операций за выбранный месяц */}
       <div>
         <h3 className="text-xs font-semibold text-neutral-400 uppercase tracking-wide mb-2">
-          Операции — {selectedDay ? formatFullDate(selectedDay) : fullMonthLabel(selectedMonth)}
+          Операции — {fullMonthLabel(selectedMonth)}
         </h3>
         <div className="space-y-1.5">
           {monthTransactions.map((e) => (
@@ -421,7 +395,7 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
           ))}
           {monthTransactions.length === 0 && (
             <p className="text-sm text-neutral-400 text-center py-12">
-              Нет операций за {selectedDay ? formatFullDate(selectedDay).toLowerCase() : fullMonthLabel(selectedMonth).toLowerCase()} 💰
+              Нет операций за {fullMonthLabel(selectedMonth).toLowerCase()} 💰
             </p>
           )}
         </div>
@@ -575,7 +549,7 @@ function AddEntryModal({
   // 1-е число ЭТОГО месяца, чтобы было удобно планировать траты наперёд.
   const todayMonth = new Date().toISOString().slice(0, 7);
   const [date, setDate] = useState(
-    selectedMonth === todayMonth ? new Date().toISOString().slice(0, 10) : `${selectedMonth}-01`
+    selectedMonth === todayMonth ? localDateStr(Date.now()) : `${selectedMonth}-01`
   );
   const [saving, setSaving] = useState(false);
   const [newCategoryInput, setNewCategoryInput] = useState<string | null>(null);

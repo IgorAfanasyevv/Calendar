@@ -1,3 +1,4 @@
+import { localDateStr } from '../lib/timezone';
 import { create } from 'zustand';
 import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -42,7 +43,7 @@ export const useFinanceStore = create<FinanceState>((set) => ({
       type: 'expense',
       category: 'Другое',
       note: '',
-      date: new Date().toISOString().slice(0, 10),
+      date: localDateStr(Date.now()),
       ...entry,
       workspaceId,
       boardId,
@@ -62,7 +63,7 @@ export const useFinanceStore = create<FinanceState>((set) => ({
     logActivity(entry.workspaceId, actor.uid, actor.name, `удалил(а) операцию «${entry.category}»`);
   },
   payInstallment: async (entry, amount, actor, currency) => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDateStr(Date.now());
     const alreadyPaid = entry.paidAmount || 0;
     const newPaid = alreadyPaid + amount;
     const remaining = entry.amount - newPaid;

@@ -1,3 +1,4 @@
+import { localDateStr } from '../lib/timezone';
 import { create } from 'zustand';
 import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -56,7 +57,7 @@ export const useWorkoutStore = create<WorkoutState>((set) => ({
       collection(db, 'workspaces', workspaceId, 'workouts'),
       stripUndefined({
         durationMinutes: 30,
-        date: new Date().toISOString().slice(0, 10),
+        date: localDateStr(Date.now()),
         ...entry,
         workspaceId,
         createdBy: actor.uid,
@@ -72,7 +73,7 @@ export const useWorkoutStore = create<WorkoutState>((set) => ({
   },
   // Отметить запланированную (ИИ-план на неделю) тренировку выполненной
   markDone: async (entry) => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDateStr(Date.now());
     await updateDoc(doc(db, 'workspaces', entry.workspaceId, 'workouts', entry.id), {
       planned: false,
       date: entry.date < today ? today : entry.date,
@@ -98,7 +99,7 @@ export const useWorkoutStore = create<WorkoutState>((set) => ({
     await addDoc(
       collection(db, 'workspaces', workspaceId, 'bodyMeasurements'),
       stripUndefined({
-        date: new Date().toISOString().slice(0, 10),
+        date: localDateStr(Date.now()),
         ...data,
         workspaceId,
         uid,

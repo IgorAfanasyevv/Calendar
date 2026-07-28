@@ -1,3 +1,4 @@
+import { localDateStr } from '../lib/timezone';
 import { create } from 'zustand';
 import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -31,7 +32,7 @@ export const useJournalStore = create<JournalState>((set) => ({
       collection(db, 'workspaces', workspaceId, 'journal'),
       stripUndefined({
         text: '',
-        date: new Date().toISOString().slice(0, 10),
+        date: localDateStr(Date.now()),
         ...data,
         workspaceId,
         createdBy: actor.uid,

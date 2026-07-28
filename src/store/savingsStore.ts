@@ -1,3 +1,4 @@
+import { localDateStr } from '../lib/timezone';
 import { create } from 'zustand';
 import {
   addDoc,
@@ -84,7 +85,7 @@ export const useSavingsStore = create<SavingsState>((set) => ({
       type,
       amount,
       note,
-      date: new Date().toISOString().slice(0, 10),
+      date: localDateStr(Date.now()),
       createdByName: actor.name,
       createdAt: Date.now(),
     });
