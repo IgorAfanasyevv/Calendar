@@ -1,0 +1,10 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Фото в дневнике отношений — доступно на чтение/запись любому, кто вошёл
+    // в аккаунт (сама ссылка на файл не публикуется нигде, кроме приложения).
+    match /journal/{workspaceId}/{fileName} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

@@ -12,6 +12,7 @@
     "deploy:rules": "npx firebase-tools deploy --only firestore:rules",
     "deploy:indexes": "npx firebase-tools deploy --only firestore:indexes",
     "deploy:functions": "npx firebase-tools deploy --only functions",
+    "deploy:storage": "npx firebase-tools deploy --only storage",
     "setup:functions": "cd functions && npm install"
   },
   "dependencies": {

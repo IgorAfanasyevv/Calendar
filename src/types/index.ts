@@ -271,6 +271,7 @@ export interface JournalEntry {
   text: string;
   mood?: Mood;
   isMemory?: boolean; // отметить как особое воспоминание/достижение
+  photoUrl?: string;
   createdBy: string;
   createdByName: string;
   createdAt: number;
