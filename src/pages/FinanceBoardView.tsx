@@ -97,7 +97,6 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
 
   const [adding, setAdding] = useState(false);
   const [editingBudget, setEditingBudget] = useState(false);
-  const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [budgetInput, setBudgetInput] = useState(String(board.monthlyBudget || ''));
 
   const symbol = currencySymbol(board.currency);
@@ -201,29 +200,18 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
         >
           <ChevronRight size={16} />
         </button>
-        <div className="relative">
-          <button
-            onClick={() => setShowMonthPicker((v) => !v)}
-            className="w-8 h-8 flex items-center justify-center rounded-full bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700"
-            title="Выбрать месяц из календаря"
-          >
+        <div className="relative w-8 h-8" title="Выбрать месяц из календаря">
+          <input
+            type="month"
+            value={selectedMonth}
+            onChange={(e) => {
+              if (e.target.value) setSelectedMonth(e.target.value);
+            }}
+            className="absolute inset-0 w-8 h-8 opacity-0 cursor-pointer"
+          />
+          <div className="absolute inset-0 flex items-center justify-center rounded-full bg-neutral-100 dark:bg-neutral-800 pointer-events-none">
             <Calendar size={15} />
-          </button>
-          {showMonthPicker && (
-            <>
-              <div className="fixed inset-0 z-10" onClick={() => setShowMonthPicker(false)} />
-              <input
-                type="month"
-                autoFocus
-                value={selectedMonth}
-                onChange={(e) => {
-                  if (e.target.value) setSelectedMonth(e.target.value);
-                  setShowMonthPicker(false);
-                }}
-                className="input absolute top-10 right-0 z-20 w-40 shadow-lg"
-              />
-            </>
-          )}
+          </div>
         </div>
       </div>
 

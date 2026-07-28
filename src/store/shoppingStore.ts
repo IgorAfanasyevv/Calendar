@@ -13,6 +13,30 @@ function stripUndefined<T extends object>(obj: T): T {
   return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined)) as T;
 }
 
+// Продукты из Меню приходят строкой вида "Куриная грудка — 300 г" — разбираем
+// на базовое название + количество + единицу, чтобы можно было объединять
+// одинаковые продукты с разной граммовкой ("300 г" + "200 г" → "500 г").
+interface ParsedAmount {
+  baseName: string;
+  amount: number;
+  unit: string;
+}
+
+function parseNameAmount(fullName: string): ParsedAmount | null {
+  const match = fullName.match(/^(.+?)\s*[—-]\s*(\d+(?:[.,]\d+)?)\s*(г|кг|шт|мл|л)\.?\s*$/iu);
+  if (!match) return null;
+  return {
+    baseName: match[1].trim(),
+    amount: parseFloat(match[2].replace(',', '.')),
+    unit: match[3].toLowerCase(),
+  };
+}
+
+function formatNameAmount(baseName: string, amount: number, unit: string): string {
+  const amountStr = Number.isInteger(amount) ? String(amount) : amount.toFixed(1).replace('.', ',');
+  return `${baseName} — ${amountStr} ${unit}`;
+}
+
 interface ShoppingState {
   items: ShoppingItem[];
   loading: boolean;
@@ -73,6 +97,33 @@ export const useShoppingStore = create<ShoppingState>((set, get) => ({
     return unsub;
   },
   addItem: async (workspaceId, item, actor) => {
+    const newName = (item.name || '').trim();
+    const parsedNew = parseNameAmount(newName);
+    const notBought = get().items.filter((i) => i.workspaceId === workspaceId && !i.bought);
+
+    // Ищем уже существующий такой же товар среди ещё не купленного, чтобы
+    // объединить количество/граммовку вместо создания дубликата.
+    const matched = parsedNew
+      ? notBought.find((i) => {
+          const p = parseNameAmount(i.name);
+          return p && p.unit === parsedNew.unit && p.baseName.toLowerCase() === parsedNew.baseName.toLowerCase();
+        })
+      : notBought.find((i) => !parseNameAmount(i.name) && i.name.trim().toLowerCase() === newName.toLowerCase());
+
+    if (matched) {
+      if (parsedNew) {
+        const existingParsed = parseNameAmount(matched.name)!;
+        const combinedName = formatNameAmount(parsedNew.baseName, existingParsed.amount + parsedNew.amount, parsedNew.unit);
+        await updateDoc(doc(db, 'workspaces', workspaceId, 'shopping', matched.id), { name: combinedName });
+      } else {
+        await updateDoc(doc(db, 'workspaces', workspaceId, 'shopping', matched.id), {
+          quantity: matched.quantity + (item.quantity ?? 1),
+        });
+      }
+      logActivity(workspaceId, actor.uid, actor.name, `объединил(а) покупку «${newName}» с уже существующей`);
+      return;
+    }
+
     await addDoc(
       collection(db, 'workspaces', workspaceId, 'shopping'),
       stripUndefined({
