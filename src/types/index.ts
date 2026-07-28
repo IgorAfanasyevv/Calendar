@@ -302,6 +302,22 @@ export interface SavingsTransaction {
   createdAt: number;
 }
 
+export type WatchType = 'movie' | 'series' | 'other';
+export type WatchStatus = 'to_watch' | 'watched';
+
+export interface WatchlistItem {
+  id: string;
+  workspaceId: string;
+  title: string;
+  type: WatchType;
+  status: WatchStatus;
+  rating?: number; // 1-5
+  note?: string;
+  createdBy: string;
+  createdByName: string;
+  createdAt: number;
+}
+
 export interface UserProfile {
   uid: string;
   email: string;

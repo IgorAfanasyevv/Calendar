@@ -8,6 +8,7 @@ import {
   CalendarHeart,
   Flame,
   BookHeart,
+  Clapperboard,
   Settings as SettingsIcon,
   Moon,
   Sun,
@@ -23,7 +24,7 @@ import { usePresence } from '../hooks/usePresence';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { WifiOff } from 'lucide-react';
 
-export type Tab = 'home' | 'goals' | 'shopping' | 'finance' | 'fitness' | 'dates' | 'habits' | 'journal' | 'settings';
+export type Tab = 'home' | 'goals' | 'shopping' | 'finance' | 'fitness' | 'dates' | 'habits' | 'journal' | 'watchlist' | 'settings';
 
 const NAV: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { id: 'home', label: 'Обзор', icon: LayoutDashboard },
@@ -34,6 +35,7 @@ const NAV: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { id: 'habits', label: 'Привычки', icon: Flame },
   { id: 'dates', label: 'Даты', icon: CalendarHeart },
   { id: 'journal', label: 'Дневник', icon: BookHeart },
+  { id: 'watchlist', label: 'Смотрим', icon: Clapperboard },
   { id: 'settings', label: 'Настройки', icon: SettingsIcon },
 ];
 

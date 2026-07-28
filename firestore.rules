@@ -95,6 +95,9 @@ service cloud.firestore {
       match /journal/{entryId} {
         allow read, write: if isMember(workspaceId);
       }
+      match /watchlist/{itemId} {
+        allow read, write: if isMember(workspaceId);
+      }
       match /savingsPots/{potId} {
         allow read, write: if isMember(workspaceId);
         match /transactions/{txId} {

@@ -18,11 +18,13 @@ import FitnessView from './pages/FitnessView';
 import ImportantDatesView from './pages/ImportantDatesView';
 import HabitsView from './pages/HabitsView';
 import JournalView from './pages/JournalView';
+import WatchlistView from './pages/WatchlistView';
 import SettingsView from './pages/SettingsView';
 import GlobalAssistant from './components/GlobalAssistant';
 import { useImportantDateStore } from './store/importantDateStore';
 import { useHabitStore } from './store/habitStore';
 import { useJournalStore } from './store/journalStore';
+import { useWatchlistStore } from './store/watchlistStore';
 import { useFinanceBoardStore } from './store/financeBoardStore';
 import { useWorkoutStore } from './store/workoutStore';
 import { useFoodStore } from './store/foodStore';
@@ -39,6 +41,7 @@ export default function App() {
   const { listen: listenDates } = useImportantDateStore();
   const { listenHabits, listenLogs } = useHabitStore();
   const { listen: listenJournal } = useJournalStore();
+  const { listen: listenWatchlist } = useWatchlistStore();
   const { listen: listenFinanceBoards } = useFinanceBoardStore();
   const { listen: listenWorkouts } = useWorkoutStore();
   const { listen: listenFood } = useFoodStore();
@@ -75,6 +78,7 @@ export default function App() {
     const unsubFinanceBoards = listenFinanceBoards(workspace.id);
     const unsubWorkouts = listenWorkouts(workspace.id);
     const unsubFood = listenFood(workspace.id);
+    const unsubWatchlist = listenWatchlist(workspace.id);
     return () => {
       unsubTasks();
       unsubGoals();
@@ -87,6 +91,7 @@ export default function App() {
       unsubFinanceBoards();
       unsubWorkouts();
       unsubFood();
+      unsubWatchlist();
     };
   }, [
     workspace?.id,
@@ -101,6 +106,7 @@ export default function App() {
     listenFinanceBoards,
     listenWorkouts,
     listenFood,
+    listenWatchlist,
   ]);
 
   if (loading) {
@@ -147,6 +153,7 @@ export default function App() {
         {tab === 'dates' && <ImportantDatesView workspaceId={workspace.id} />}
         {tab === 'habits' && <HabitsView workspaceId={workspace.id} />}
         {tab === 'journal' && <JournalView workspaceId={workspace.id} />}
+        {tab === 'watchlist' && <WatchlistView workspaceId={workspace.id} />}
         {tab === 'settings' && <SettingsView />}
       </Layout>
       <ReminderPopup workspaceId={workspace.id} />

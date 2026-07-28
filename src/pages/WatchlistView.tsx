@@ -1,0 +1,189 @@
+import { useMemo, useState } from 'react';
+import { Plus, Trash2, Star, Clapperboard, Tv, Film, Check } from 'lucide-react';
+import { useWatchlistStore } from '../store/watchlistStore';
+import { useAuthStore } from '../store/authStore';
+import Modal from '../components/Modal';
+import type { WatchlistItem, WatchType } from '../types';
+
+const TYPE_LABELS: Record<WatchType, string> = { movie: 'Фильм', series: 'Сериал', other: 'Другое' };
+const TYPE_ICONS: Record<WatchType, typeof Film> = { movie: Film, series: Tv, other: Clapperboard };
+
+export default function WatchlistView({ workspaceId }: { workspaceId: string }) {
+  const { items, addItem, markWatched, deleteItem } = useWatchlistStore();
+  const { firebaseUser, profile } = useAuthStore();
+  const actor = { uid: firebaseUser?.uid || '', name: profile?.displayName || '' };
+  const [creating, setCreating] = useState(false);
+  const [ratingFor, setRatingFor] = useState<WatchlistItem | null>(null);
+  const [tab, setTab] = useState<'to_watch' | 'watched'>('to_watch');
+
+  const toWatch = useMemo(() => items.filter((i) => i.status === 'to_watch'), [items]);
+  const watched = useMemo(() => items.filter((i) => i.status === 'watched'), [items]);
+  const visible = tab === 'to_watch' ? toWatch : watched;
+
+  return (
+    <div className="p-4 sm:p-6 max-w-2xl mx-auto">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-xl font-semibold flex items-center gap-2">
+            <Clapperboard size={20} /> Смотрим
+          </h1>
+          <p className="text-sm text-neutral-400">Фильмы, сериалы и всё, что хотите посмотреть вместе</p>
+        </div>
+        <button
+          onClick={() => setCreating(true)}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white text-sm font-medium shadow-lg shadow-indigo-500/25"
+        >
+          <Plus size={15} /> Добавить
+        </button>
+      </div>
+
+      <div className="flex gap-1.5 mb-5">
+        <button
+          onClick={() => setTab('to_watch')}
+          className={`px-3 py-1.5 rounded-full text-xs font-medium transition ${tab === 'to_watch' ? 'bg-indigo-500 text-white' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500'}`}
+        >
+          Хотим посмотреть ({toWatch.length})
+        </button>
+        <button
+          onClick={() => setTab('watched')}
+          className={`px-3 py-1.5 rounded-full text-xs font-medium transition ${tab === 'watched' ? 'bg-indigo-500 text-white' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500'}`}
+        >
+          Посмотрели ({watched.length})
+        </button>
+      </div>
+
+      <div className="space-y-2">
+        {visible.map((item) => {
+          const Icon = TYPE_ICONS[item.type];
+          return (
+            <div key={item.id} className="flex items-center gap-3 rounded-2xl glass p-4">
+              <div className="w-9 h-9 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center shrink-0 text-neutral-500">
+                <Icon size={16} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium truncate">{item.title}</p>
+                <p className="text-[11px] text-neutral-400">
+                  {TYPE_LABELS[item.type]} · {item.createdByName}
+                  {item.rating ? ` · ${'★'.repeat(item.rating)}${'☆'.repeat(5 - item.rating)}` : ''}
+                </p>
+                {item.note && <p className="text-[11px] text-neutral-400 truncate">{item.note}</p>}
+              </div>
+              {item.status === 'to_watch' ? (
+                <button
+                  onClick={() => setRatingFor(item)}
+                  className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 hover:text-emerald-700 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-1 rounded-lg shrink-0"
+                >
+                  <Check size={12} /> Посмотрели
+                </button>
+              ) : (
+                <button onClick={() => setRatingFor(item)} className="text-neutral-400 hover:text-amber-500 shrink-0" title="Изменить оценку">
+                  <Star size={14} />
+                </button>
+              )}
+              <button onClick={() => deleteItem(item, actor)} className="text-neutral-400 hover:text-rose-500 shrink-0">
+                <Trash2 size={14} />
+              </button>
+            </div>
+          );
+        })}
+        {visible.length === 0 && (
+          <p className="text-sm text-neutral-400 text-center py-16">
+            {tab === 'to_watch' ? 'Пока пусто — добавьте, что хотите посмотреть 🍿' : 'Ничего ещё не отмечено просмотренным'}
+          </p>
+        )}
+      </div>
+
+      {creating && (
+        <Modal title="Добавить в список" onClose={() => setCreating(false)}>
+          <NewItemForm
+            onSave={async (data) => {
+              await addItem(workspaceId, data, actor);
+              setCreating(false);
+            }}
+          />
+        </Modal>
+      )}
+
+      {ratingFor && (
+        <Modal title={`«${ratingFor.title}» — оценка`} onClose={() => setRatingFor(null)}>
+          <RatingForm
+            initial={ratingFor.rating}
+            onSave={async (rating) => {
+              await markWatched(ratingFor, rating);
+              setRatingFor(null);
+            }}
+            onSkip={async () => {
+              await markWatched(ratingFor);
+              setRatingFor(null);
+            }}
+          />
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function NewItemForm({ onSave }: { onSave: (data: Partial<WatchlistItem>) => Promise<void> }) {
+  const [title, setTitle] = useState('');
+  const [type, setType] = useState<WatchType>('movie');
+  const [note, setNote] = useState('');
+
+  return (
+    <div className="space-y-3">
+      <input className="input" placeholder="Название" value={title} onChange={(e) => setTitle(e.target.value)} />
+      <div className="flex gap-2">
+        {(Object.keys(TYPE_LABELS) as WatchType[]).map((t) => (
+          <button
+            key={t}
+            onClick={() => setType(t)}
+            className={`flex-1 py-2 rounded-xl text-xs font-medium transition ${type === t ? 'bg-indigo-500 text-white' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500'}`}
+          >
+            {TYPE_LABELS[t]}
+          </button>
+        ))}
+      </div>
+      <input className="input" placeholder="Заметка (необязательно)" value={note} onChange={(e) => setNote(e.target.value)} />
+      <button
+        disabled={!title.trim()}
+        onClick={() => onSave({ title: title.trim(), type, note })}
+        className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white font-medium text-sm disabled:opacity-50"
+      >
+        Добавить
+      </button>
+    </div>
+  );
+}
+
+function RatingForm({
+  initial,
+  onSave,
+  onSkip,
+}: {
+  initial?: number;
+  onSave: (rating: number) => Promise<void>;
+  onSkip: () => Promise<void>;
+}) {
+  const [rating, setRating] = useState(initial || 0);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-center gap-2">
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button key={n} onClick={() => setRating(n)} className="text-3xl leading-none">
+            {n <= rating ? '★' : '☆'}
+          </button>
+        ))}
+      </div>
+      <button
+        onClick={() => onSave(rating)}
+        disabled={rating === 0}
+        className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white font-medium text-sm disabled:opacity-50"
+      >
+        Сохранить оценку
+      </button>
+      <button onClick={onSkip} className="w-full py-2 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-xs font-medium text-neutral-500">
+        Без оценки
+      </button>
+    </div>
+  );
+}
