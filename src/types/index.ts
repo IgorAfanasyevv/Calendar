@@ -318,6 +318,15 @@ export interface WatchlistItem {
   createdAt: number;
 }
 
+export interface DailyTracker {
+  id: string;
+  workspaceId: string;
+  uid: string;
+  date: string; // yyyy-mm-dd
+  waterGlasses?: number;
+  sleepHours?: number;
+}
+
 export interface UserProfile {
   uid: string;
   email: string;

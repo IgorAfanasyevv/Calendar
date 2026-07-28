@@ -1,28 +1,33 @@
 import { useEffect, useState } from 'react';
-import { UtensilsCrossed, CalendarRange, Dumbbell } from 'lucide-react';
+import { UtensilsCrossed, CalendarRange, Dumbbell, Droplet } from 'lucide-react';
 import { useFoodStore } from '../store/foodStore';
 import { useWorkoutStore } from '../store/workoutStore';
+import { useDailyTrackerStore } from '../store/dailyTrackerStore';
 import FoodDiaryView from './FoodDiaryView';
 import FoodMenuView from './FoodMenuView';
 import WorkoutsView from './WorkoutsView';
+import HydrationSleepView from './HydrationSleepView';
 
-type FitnessTab = 'diary' | 'menu' | 'workouts';
+type FitnessTab = 'diary' | 'menu' | 'workouts' | 'hydration';
 
 export default function FitnessView({ workspaceId }: { workspaceId: string }) {
   const { listen: listenFood, listenPresets } = useFoodStore();
   const { listen: listenWorkouts } = useWorkoutStore();
+  const { listen: listenTrackers } = useDailyTrackerStore();
   const [tab, setTab] = useState<FitnessTab>('diary');
 
   useEffect(() => {
     const unsubFood = listenFood(workspaceId);
     const unsubPresets = listenPresets(workspaceId);
     const unsubWorkouts = listenWorkouts(workspaceId);
+    const unsubTrackers = listenTrackers(workspaceId);
     return () => {
       unsubFood();
       unsubPresets();
       unsubWorkouts();
+      unsubTrackers();
     };
-  }, [workspaceId, listenFood, listenPresets, listenWorkouts]);
+  }, [workspaceId, listenFood, listenPresets, listenWorkouts, listenTrackers]);
 
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto">
@@ -30,11 +35,13 @@ export default function FitnessView({ workspaceId }: { workspaceId: string }) {
         <TabButton active={tab === 'diary'} onClick={() => setTab('diary')} icon={UtensilsCrossed} label="Дневник питания" />
         <TabButton active={tab === 'menu'} onClick={() => setTab('menu')} icon={CalendarRange} label="Меню" />
         <TabButton active={tab === 'workouts'} onClick={() => setTab('workouts')} icon={Dumbbell} label="Тренировки" />
+        <TabButton active={tab === 'hydration'} onClick={() => setTab('hydration')} icon={Droplet} label="Вода и сон" />
       </div>
 
       {tab === 'diary' && <FoodDiaryView workspaceId={workspaceId} />}
       {tab === 'menu' && <FoodMenuView workspaceId={workspaceId} />}
       {tab === 'workouts' && <WorkoutsView workspaceId={workspaceId} />}
+      {tab === 'hydration' && <HydrationSleepView workspaceId={workspaceId} />}
     </div>
   );
 }
