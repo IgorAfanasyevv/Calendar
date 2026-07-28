@@ -44,6 +44,7 @@ export interface Goal {
   deadline?: string;
   progress: number; // 0-100
   steps: ChecklistItem[];
+  savingsPotId?: string; // связанная копилка — прогресс накопления показывается на карточке цели
   createdAt: number;
   createdByName: string;
 }

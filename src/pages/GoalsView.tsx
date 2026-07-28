@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { Plus, Trash2, Calendar, CheckSquare, Check, Pencil } from 'lucide-react';
+import { Plus, Trash2, Calendar, CheckSquare, Check, Pencil, PiggyBank } from 'lucide-react';
 import { useGoalStore } from '../store/goalStore';
 import { useAuthStore } from '../store/authStore';
 import { useTaskStore } from '../store/taskStore';
+import { useSavingsStore } from '../store/savingsStore';
+import { currencySymbol } from '../lib/currency';
 import Modal from '../components/Modal';
 import TaskModal from '../components/TaskModal';
 import type { ChecklistItem, Goal, Task } from '../types';
@@ -71,6 +73,8 @@ function GoalCard({
 
   const linkedTasks = tasks.filter((t) => t.goalId === goal.id);
   const actor = { uid: firebaseUser?.uid || '', name: profile?.displayName || '' };
+  const { pots } = useSavingsStore();
+  const linkedPot = pots.find((p) => p.id === goal.savingsPotId);
 
   function toggleStep(step: ChecklistItem) {
     const steps = goal.steps.map((s) => (s.id === step.id ? { ...s, done: !s.done } : s));
@@ -102,6 +106,28 @@ function GoalCard({
       {goal.deadline && (
         <div className="flex items-center gap-1.5 text-[11px] text-neutral-400 mb-3">
           <Calendar size={12} /> до {goal.deadline}
+        </div>
+      )}
+
+      {linkedPot && (
+        <div className="mb-3 rounded-xl bg-violet-50/60 dark:bg-violet-500/10 p-2.5">
+          <div className="flex items-center justify-between text-xs mb-1">
+            <span className="flex items-center gap-1 font-medium text-violet-600 dark:text-violet-400">
+              <PiggyBank size={12} /> {linkedPot.name}
+            </span>
+            <span className="font-semibold">
+              {linkedPot.balance.toLocaleString('ru-RU')}
+              {linkedPot.targetAmount ? ` / ${linkedPot.targetAmount.toLocaleString('ru-RU')}` : ''} {currencySymbol(linkedPot.currency)}
+            </span>
+          </div>
+          {linkedPot.targetAmount && (
+            <div className="h-1.5 rounded-full bg-white/60 dark:bg-neutral-800 overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-violet-500 to-indigo-400"
+                style={{ width: `${Math.min(100, Math.round((linkedPot.balance / linkedPot.targetAmount) * 100))}%` }}
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -210,15 +236,28 @@ function GoalForm({
   const [title, setTitle] = useState(initial?.title || '');
   const [description, setDescription] = useState(initial?.description || '');
   const [deadline, setDeadline] = useState(initial?.deadline || '');
+  const [savingsPotId, setSavingsPotId] = useState(initial?.savingsPotId || '');
+  const { pots } = useSavingsStore();
 
   return (
     <div className="space-y-3">
       <input className="input" placeholder="Например: Поехать в Японию" value={title} onChange={(e) => setTitle(e.target.value)} />
       <textarea className="input resize-none" rows={2} placeholder="Описание" value={description} onChange={(e) => setDescription(e.target.value)} />
       <input type="date" className="input" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
+      {pots.length > 0 && (
+        <div>
+          <label className="block text-xs font-medium text-neutral-500 mb-1">Связать с копилкой (необязательно)</label>
+          <select className="input" value={savingsPotId} onChange={(e) => setSavingsPotId(e.target.value)}>
+            <option value="">Не связывать</option>
+            {pots.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
       <button
         disabled={!title.trim()}
-        onClick={() => onSave({ title, description, deadline })}
+        onClick={() => onSave({ title, description, deadline, savingsPotId: savingsPotId || undefined })}
         className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white font-medium text-sm disabled:opacity-50"
       >
         {submitLabel}

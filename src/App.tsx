@@ -25,6 +25,7 @@ import { useImportantDateStore } from './store/importantDateStore';
 import { useHabitStore } from './store/habitStore';
 import { useJournalStore } from './store/journalStore';
 import { useWatchlistStore } from './store/watchlistStore';
+import { useSavingsStore } from './store/savingsStore';
 import { useFinanceBoardStore } from './store/financeBoardStore';
 import { useWorkoutStore } from './store/workoutStore';
 import { useFoodStore } from './store/foodStore';
@@ -42,6 +43,7 @@ export default function App() {
   const { listenHabits, listenLogs } = useHabitStore();
   const { listen: listenJournal } = useJournalStore();
   const { listen: listenWatchlist } = useWatchlistStore();
+  const { listenPots } = useSavingsStore();
   const { listen: listenFinanceBoards } = useFinanceBoardStore();
   const { listen: listenWorkouts } = useWorkoutStore();
   const { listen: listenFood } = useFoodStore();
@@ -79,6 +81,7 @@ export default function App() {
     const unsubWorkouts = listenWorkouts(workspace.id);
     const unsubFood = listenFood(workspace.id);
     const unsubWatchlist = listenWatchlist(workspace.id);
+    const unsubPots = listenPots(workspace.id);
     return () => {
       unsubTasks();
       unsubGoals();
@@ -92,6 +95,7 @@ export default function App() {
       unsubWorkouts();
       unsubFood();
       unsubWatchlist();
+      unsubPots();
     };
   }, [
     workspace?.id,
@@ -107,6 +111,7 @@ export default function App() {
     listenWorkouts,
     listenFood,
     listenWatchlist,
+    listenPots,
   ]);
 
   if (loading) {
