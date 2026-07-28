@@ -372,11 +372,25 @@ offset — через сколько дней от сегодня (0 = сего�
 
     const batch = db.batch();
     const workoutsCol = db.collection('workspaces').doc(workspaceId).collection('workouts');
+
+    // Для оценки калорий берём последний известный вес тела; если замеров нет — 70 кг по умолчанию.
+    const weightSnap = await db
+      .collection('workspaces')
+      .doc(workspaceId)
+      .collection('bodyMeasurements')
+      .where('uid', '==', uid)
+      .orderBy('date', 'desc')
+      .limit(1)
+      .get();
+    const latestWeightKg = weightSnap.docs[0]?.data()?.weight || 70;
+
     let count = 0;
     (parsed.days || []).forEach((day) => {
       const date = new Date();
       date.setDate(date.getDate() + (day.offset || 0));
       const dateStr = date.toISOString().slice(0, 10);
+      const dayType = day.type || 'other';
+      const dayDuration = Number(day.durationMinutes) || 30;
       const ref = workoutsCol.doc();
       batch.set(
         ref,
@@ -384,8 +398,9 @@ offset — через сколько дней от сегодня (0 = сего�
           workspaceId,
           date: dateStr,
           name: day.name || 'Тренировка',
-          type: day.type || 'other',
-          durationMinutes: Number(day.durationMinutes) || 30,
+          type: dayType,
+          durationMinutes: dayDuration,
+          caloriesBurned: estimateCalories(dayType, dayDuration, latestWeightKg),
           exercises: (day.exercises || []).map((ex) => ({
             name: ex.name,
             sets: Array.from({ length: Number(ex.sets) || 1 }, () => ({ reps: ex.reps ? Number(ex.reps) : undefined })),
@@ -987,6 +1002,13 @@ function extractJson(raw) {
       throw firstError;
     }
   }
+}
+
+/** Примерная оценка сожжённых калорий: MET × вес(кг) × время(ч) — так же, как на клиенте. */
+const MET_VALUES = { strength: 5, cardio: 8, flexibility: 3, sport: 7, other: 5 };
+function estimateCalories(type, durationMinutes, weightKg) {
+  const met = MET_VALUES[type] || 5;
+  return Math.round(met * weightKg * (durationMinutes / 60));
 }
 
 function stripUndefinedFields(obj) {

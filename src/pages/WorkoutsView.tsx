@@ -42,6 +42,43 @@ function formatDate(dateStr: string): string {
   return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
 }
 
+// Понятное описание подходов: "3 подхода: 10 повт. × 50 кг, 8 повт. × 55 кг, ..."
+function formatSets(sets: ExerciseSet[]): string {
+  if (sets.length === 0) return 'Без указанных подходов';
+  const setsText = sets
+    .map((s) => {
+      const reps = s.reps ? `${s.reps} повт.` : 'повт. не указаны';
+      const weight = s.weight ? ` × ${s.weight} кг` : '';
+      return `${reps}${weight}`;
+    })
+    .join(', ');
+  return `${sets.length} ${setsWord(sets.length)}: ${setsText}`;
+}
+
+function setsWord(n: number): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 14) return 'подходов';
+  if (mod10 === 1) return 'подход';
+  if (mod10 >= 2 && mod10 <= 4) return 'подхода';
+  return 'подходов';
+}
+
+// Примерная оценка сожжённых калорий по формуле MET × вес(кг) × время(ч) —
+// стандартный способ прикидки расхода калорий для разных типов активности.
+const MET_VALUES: Record<WorkoutType, number> = {
+  strength: 5,
+  cardio: 8,
+  flexibility: 3,
+  sport: 7,
+  other: 5,
+};
+
+function estimateCalories(type: WorkoutType, durationMinutes: number, weightKg: number): number {
+  const met = MET_VALUES[type] || 5;
+  return Math.round(met * weightKg * (durationMinutes / 60));
+}
+
 export default function WorkoutsView({ workspaceId }: { workspaceId: string }) {
   const { entries, templates, measurements, addEntry, deleteEntry, markDone, addTemplate, deleteTemplate, addMeasurement, deleteMeasurement, listen, listenTemplates, listenMeasurements } = useWorkoutStore();
   const { firebaseUser, profile } = useAuthStore();
@@ -113,6 +150,10 @@ export default function WorkoutsView({ workspaceId }: { workspaceId: string }) {
     () => myMeasurements.filter((m) => m.weight != null).map((m) => ({ date: formatDate(m.date), sortKey: m.date, weight: m.weight! })),
     [myMeasurements]
   );
+  const latestWeightKg = useMemo(
+    () => [...myMeasurements].reverse().find((m) => m.weight != null)?.weight,
+    [myMeasurements]
+  );
 
   async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -131,12 +172,15 @@ export default function WorkoutsView({ workspaceId }: { workspaceId: string }) {
       });
       if (res.data.parsed) {
         const p = res.data.parsed;
+        const dur = p.durationMinutes || 30;
+        const pType = p.type || 'strength';
         await addEntry(
           workspaceId,
           {
             name: p.name || 'Тренировка с фото',
-            type: p.type || 'strength',
-            durationMinutes: p.durationMinutes || 30,
+            type: pType,
+            durationMinutes: dur,
+            caloriesBurned: estimateCalories(pType, dur, latestWeightKg || 70),
             exercises: p.exercises,
             date: localDateStr(Date.now()),
             planned: true,
@@ -290,17 +334,27 @@ export default function WorkoutsView({ workspaceId }: { workspaceId: string }) {
           )}
         </div>
         {weightData.length > 1 ? (
-          <ResponsiveContainer width="100%" height={180}>
-            <LineChart data={weightData}>
-              <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
-              <XAxis dataKey="date" fontSize={11} />
-              <YAxis fontSize={11} domain={['dataMin - 2', 'dataMax + 2']} />
-              <Tooltip formatter={(v) => `${v} кг`} />
-              <Line type="monotone" dataKey="weight" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />
-            </LineChart>
-          </ResponsiveContainer>
+          <>
+            <p className="text-xs text-neutral-400 mb-2">
+              Изменение за период: {' '}
+              <span className={`font-semibold ${weightData[weightData.length - 1].weight - weightData[0].weight <= 0 ? 'text-emerald-500' : 'text-amber-500'}`}>
+                {weightData[weightData.length - 1].weight - weightData[0].weight > 0 ? '+' : ''}
+                {(weightData[weightData.length - 1].weight - weightData[0].weight).toFixed(1)} кг
+              </span>
+              {' '}({weightData[0].weight} кг → {weightData[weightData.length - 1].weight} кг)
+            </p>
+            <ResponsiveContainer width="100%" height={180}>
+              <LineChart data={weightData}>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
+                <XAxis dataKey="date" fontSize={11} />
+                <YAxis fontSize={11} domain={[(min: number) => min - 2, (max: number) => max + 2]} />
+                <Tooltip formatter={(v) => `${v} кг`} />
+                <Line type="monotone" dataKey="weight" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </>
         ) : (
-          <p className="text-xs text-neutral-400 text-center py-8">Пока мало замеров для графика</p>
+          <p className="text-xs text-neutral-400 text-center py-8">Пока мало замеров для графика — нужно хотя бы 2</p>
         )}
         {myMeasurements.length > 0 && (
           <div className="space-y-1 mt-2">
@@ -343,7 +397,7 @@ export default function WorkoutsView({ workspaceId }: { workspaceId: string }) {
                         <div key={i} className="flex items-center gap-1.5">
                           <p className="text-[11px] text-neutral-500">
                             <span className="font-medium">{ex.name}:</span>{' '}
-                            {ex.sets.map((s) => `${s.reps || '-'}×${s.weight || 0}кг`).join(', ')}
+                            {formatSets(ex.sets)}
                           </p>
                           <button
                             onClick={() => setHowToExercise(ex.name)}
@@ -369,6 +423,7 @@ export default function WorkoutsView({ workspaceId }: { workspaceId: string }) {
           workspaceId={workspaceId}
           actor={actor}
           existingTemplates={templates}
+          latestWeightKg={latestWeightKg}
           initial={
             startFromTemplate
               ? {
@@ -445,9 +500,7 @@ function ViewPlannedModal({
                 <div className="min-w-0">
                   <p className="text-sm font-medium truncate">{ex.name}</p>
                   <p className="text-xs text-neutral-400">
-                    {ex.sets.length > 0
-                      ? ex.sets.map((s) => `${s.reps || '-'}×${s.weight ? `${s.weight}кг` : '-'}`).join(', ')
-                      : 'Без деталей подходов'}
+                    {ex.sets.length > 0 ? formatSets(ex.sets) : 'Без деталей подходов'}
                   </p>
                 </div>
                 <button
@@ -521,6 +574,7 @@ function AddWorkoutModal({
   initial,
   title,
   existingTemplates,
+  latestWeightKg,
   onSave,
   onSaveTemplate,
   onClose,
@@ -530,6 +584,7 @@ function AddWorkoutModal({
   initial?: Partial<WorkoutEntry> | null;
   title?: string;
   existingTemplates: WorkoutTemplate[];
+  latestWeightKg?: number;
   onSave: (workspaceId: string, entry: Partial<WorkoutEntry>, actor: { uid: string; name: string }) => Promise<void>;
   onSaveTemplate: (template: Partial<WorkoutTemplate>) => Promise<void>;
   onClose: () => void;
@@ -538,9 +593,20 @@ function AddWorkoutModal({
   const [type, setType] = useState<WorkoutType>(initial?.type || 'strength');
   const [duration, setDuration] = useState(initial?.durationMinutes ? String(initial.durationMinutes) : '30');
   const [calories, setCalories] = useState('');
+  const [caloriesTouched, setCaloriesTouched] = useState(false);
   const [date, setDate] = useState(localDateStr(Date.now()));
   const [note, setNote] = useState('');
   const [exercises, setExercises] = useState<WorkoutExercise[]>(initial?.exercises || []);
+
+  // Автоматически прикидываем сожжённые калории по типу тренировки, длительности
+  // и последнему известному весу тела — пока человек не поправит значение вручную.
+  useEffect(() => {
+    if (caloriesTouched) return;
+    const weight = latestWeightKg || 70;
+    const dur = Number(duration);
+    if (dur > 0) setCalories(String(estimateCalories(type, dur, weight)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [type, duration, latestWeightKg, caloriesTouched]);
   const [saving, setSaving] = useState(false);
   const [howToExercise, setHowToExercise] = useState<string | null>(null);
 
@@ -630,7 +696,21 @@ function AddWorkoutModal({
 
         <div className="grid grid-cols-2 gap-2">
           <input type="number" className="input" placeholder="Минуты" value={duration} onChange={(e) => setDuration(e.target.value)} />
-          <input type="number" className="input" placeholder="Ккал сожжено (необязательно)" value={calories} onChange={(e) => setCalories(e.target.value)} />
+          <div>
+            <input
+              type="number"
+              className="input"
+              placeholder="Ккал сожжено"
+              value={calories}
+              onChange={(e) => {
+                setCaloriesTouched(true);
+                setCalories(e.target.value);
+              }}
+            />
+            {!caloriesTouched && calories && (
+              <p className="text-[10px] text-neutral-400 mt-0.5">≈ рассчитано автоматически, можно поправить</p>
+            )}
+          </div>
         </div>
         <input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} />
         <input className="input" placeholder="Заметка (необязательно)" value={note} onChange={(e) => setNote(e.target.value)} />
