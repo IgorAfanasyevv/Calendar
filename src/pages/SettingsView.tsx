@@ -1,14 +1,30 @@
 import { useState } from 'react';
-import { Copy, Check, Moon, Sun, LogOut, UserX } from 'lucide-react';
+import { Copy, Check, Moon, Sun, LogOut, UserX, Download, Loader2 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useWorkspaceStore } from '../store/workspaceStore';
 import { useThemeStore } from '../store/themeStore';
+import { exportWorkspaceData } from '../lib/exportData';
 
 export default function SettingsView() {
   const { profile, logOut } = useAuthStore();
   const { workspace, removeMember } = useWorkspaceStore();
   const { dark, toggle } = useThemeStore();
   const [copied, setCopied] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  async function handleExport() {
+    if (!workspace) return;
+    setExporting(true);
+    setExportError(null);
+    try {
+      await exportWorkspaceData(workspace.id, workspace.name);
+    } catch (e) {
+      setExportError((e as { message?: string })?.message || 'Не удалось выгрузить данные. Попробуйте ещё раз.');
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const isOwner = !!profile && !!workspace && profile.uid === workspace.ownerUid;
 
@@ -90,6 +106,22 @@ export default function SettingsView() {
           {dark ? <Sun size={15} /> : <Moon size={15} />}
           {dark ? 'Светлая тема' : 'Тёмная тема'}
         </button>
+      </div>
+
+      <div className="rounded-2xl glass p-5 space-y-3">
+        <h2 className="text-sm font-semibold text-neutral-500">Экспорт данных</h2>
+        <p className="text-xs text-neutral-400">
+          Выгрузить все ваши данные (задачи, финансы, дневник и т.д.) в один файл — на случай бэкапа.
+        </p>
+        <button
+          onClick={handleExport}
+          disabled={exporting}
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-sm font-medium disabled:opacity-60"
+        >
+          {exporting ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+          {exporting ? 'Собираю данные...' : 'Скачать бэкап (JSON)'}
+        </button>
+        {exportError && <p className="text-xs text-rose-500">{exportError}</p>}
       </div>
 
       <button
