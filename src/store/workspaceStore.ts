@@ -30,7 +30,7 @@ interface WorkspaceState {
   ) => Promise<void>;
   setDietPreferences: (workspaceId: string, uid: string, prefs: DietPreferences) => Promise<void>;
   setFitnessPreferences: (workspaceId: string, uid: string, prefs: FitnessPreferences) => Promise<void>;
-  setShoppingFinanceBoard: (workspaceId: string, boardId: string | null) => Promise<void>;
+  setShoppingFinanceBoard: (workspaceId: string, uid: string, boardId: string | null) => Promise<void>;
   clearError: () => void;
 }
 
@@ -160,8 +160,21 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   },
 
   // Какая вкладка финансов автоматически получает расходы из купленных товаров
-  // в списке покупок (если у товара указана цена). null — отключить автоучёт.
-  setShoppingFinanceBoard: async (workspaceId, boardId) => {
-    await updateDoc(doc(db, 'workspaces', workspaceId), { shoppingFinanceBoardId: boardId });
+  // в списке покупок (если у товара указана цена) — у каждого участника свой
+  // собственный выбор, не общий на двоих. null — отключить автоучёт лично для себя.
+  setShoppingFinanceBoard: async (workspaceId, uid, boardId) => {
+    const current = get().workspace;
+    if (!current) return;
+    const members = current.members.map((m) => {
+      if (m.uid !== uid) return m;
+      const updated = { ...m };
+      if (boardId) {
+        updated.shoppingFinanceBoardId = boardId;
+      } else {
+        delete updated.shoppingFinanceBoardId;
+      }
+      return updated;
+    });
+    await updateDoc(doc(db, 'workspaces', workspaceId), { members });
   },
 }));

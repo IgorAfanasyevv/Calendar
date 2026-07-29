@@ -53,12 +53,14 @@ interface ShoppingState {
   deleteItem: (id: string, actor: { uid: string; name: string }) => Promise<void>;
 }
 
-// Если настроена целевая вкладка финансов и у товара указана цена — сразу
-// добавляем это как расход с той же категорией, что и в покупках.
+// Если у ТОГО, КТО ОТМЕЧАЕТ покупку купленной, настроена своя целевая вкладка
+// финансов, и у товара указана цена — сразу добавляем это как расход с той же
+// категорией. У каждого участника пространства свой собственный выбор вкладки.
 async function addToFinanceIfConfigured(item: ShoppingItem, actor: { uid: string; name: string }) {
   if (!item.price) return;
   const workspace = useWorkspaceStore.getState().workspace;
-  const boardId = workspace?.shoppingFinanceBoardId;
+  const member = workspace?.members.find((m) => m.uid === actor.uid);
+  const boardId = member?.shoppingFinanceBoardId;
   if (!boardId) return;
   const board = useFinanceBoardStore.getState().boards.find((b) => b.id === boardId);
   if (!board) return;

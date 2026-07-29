@@ -81,6 +81,7 @@ export interface WorkspaceMember {
   carbsGoal?: number;
   dietPreferences?: DietPreferences;
   fitnessPreferences?: FitnessPreferences;
+  shoppingFinanceBoardId?: string; // если задано — купленные ЭТИМ человеком товары автоматически попадают в эту вкладку финансов (у каждого свой выбор)
 }
 
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
@@ -227,7 +228,6 @@ export interface Workspace {
   memberUids: string[];
   monthlyBudget?: number;
   currency?: string; // ISO code, e.g. 'RUB', 'USD', 'EUR'
-  shoppingFinanceBoardId?: string; // если задано — покупки с ценой автоматически попадают в эту вкладку финансов
   createdAt: number;
 }
 

@@ -115,21 +115,22 @@ export default function ShoppingView({ workspaceId }: { workspaceId: string }) {
 
       <div className="rounded-2xl glass p-3 mb-4 flex items-center gap-2 flex-wrap">
         <span className="flex items-center gap-1.5 text-xs font-medium text-neutral-500 shrink-0">
-          <Wallet size={13} /> Учитывать покупки в финансах:
+          <Wallet size={13} /> Учитывать МОИ покупки в финансах:
         </span>
         <select
           className="input flex-1 min-w-[160px] py-1.5 text-xs"
-          value={workspace?.shoppingFinanceBoardId || ''}
-          onChange={(e) => setShoppingFinanceBoard(workspaceId, e.target.value || null)}
+          value={workspace?.members.find((m) => m.uid === firebaseUser?.uid)?.shoppingFinanceBoardId || ''}
+          onChange={(e) => firebaseUser && setShoppingFinanceBoard(workspaceId, firebaseUser.uid, e.target.value || null)}
         >
           <option value="">Не учитывать</option>
           {boards.map((b) => (
             <option key={b.id} value={b.id}>{b.name}</option>
           ))}
         </select>
-        {workspace?.shoppingFinanceBoardId && (
+        {workspace?.members.find((m) => m.uid === firebaseUser?.uid)?.shoppingFinanceBoardId && (
           <p className="w-full text-[11px] text-neutral-400">
-            Купленные товары с указанной ценой автоматически попадут туда как расход, с той же категорией.
+            Купленные вами товары с указанной ценой автоматически попадут туда как расход, с той же категорией.
+            Это только ваш личный выбор — у {workspace?.members.find((m) => m.uid !== firebaseUser?.uid)?.displayName || 'партнёра'} свой собственный.
           </p>
         )}
       </div>
