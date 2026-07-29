@@ -20,7 +20,9 @@ export default function AddFoodModal({
   date,
   actor,
   planned,
+  editingEntry,
   onSave,
+  onUpdate,
   onClose,
 }: {
   workspaceId: string;
@@ -28,18 +30,30 @@ export default function AddFoodModal({
   date: string;
   actor: { uid: string; name: string };
   planned?: boolean;
+  editingEntry?: FoodEntry;
   onSave: (workspaceId: string, entry: Partial<FoodEntry>, actor: { uid: string; name: string }) => Promise<void>;
+  onUpdate?: (entry: FoodEntry, patch: Partial<FoodEntry>) => Promise<void>;
   onClose: () => void;
 }) {
   const { presets, addPreset } = useFoodStore();
   const firstPreset = presets.length > 0 ? presets[0] : undefined;
-  const [selected, setSelected] = useState(firstPreset ? firstPreset.id : NEW_FOOD);
-  const [name, setName] = useState(firstPreset?.name || '');
-  const [grams, setGrams] = useState(firstPreset?.grams ? String(firstPreset.grams) : '');
-  const [calories, setCalories] = useState(firstPreset ? String(firstPreset.calories) : '');
-  const [protein, setProtein] = useState(firstPreset?.protein ? String(firstPreset.protein) : '');
-  const [fat, setFat] = useState(firstPreset?.fat ? String(firstPreset.fat) : '');
-  const [carbs, setCarbs] = useState(firstPreset?.carbs ? String(firstPreset.carbs) : '');
+  const [selected, setSelected] = useState(editingEntry ? NEW_FOOD : firstPreset ? firstPreset.id : NEW_FOOD);
+  const [name, setName] = useState(editingEntry?.name || firstPreset?.name || '');
+  const [grams, setGrams] = useState(
+    editingEntry?.grams ? String(editingEntry.grams) : firstPreset?.grams ? String(firstPreset.grams) : ''
+  );
+  const [calories, setCalories] = useState(
+    editingEntry ? String(editingEntry.calories) : firstPreset ? String(firstPreset.calories) : ''
+  );
+  const [protein, setProtein] = useState(
+    editingEntry?.protein ? String(editingEntry.protein) : firstPreset?.protein ? String(firstPreset.protein) : ''
+  );
+  const [fat, setFat] = useState(
+    editingEntry?.fat ? String(editingEntry.fat) : firstPreset?.fat ? String(firstPreset.fat) : ''
+  );
+  const [carbs, setCarbs] = useState(
+    editingEntry?.carbs ? String(editingEntry.carbs) : firstPreset?.carbs ? String(firstPreset.carbs) : ''
+  );
   const [saveAsPreset, setSaveAsPreset] = useState(false);
   const [saving, setSaving] = useState(false);
   const [ingredientsText, setIngredientsText] = useState('');
@@ -47,20 +61,21 @@ export default function AddFoodModal({
   const [photoError, setPhotoError] = useState<string | null>(null);
 
   // Коэффициенты "на грамм" — если заданы, изменение граммовки пересчитывает
-  // калории/БЖУ пропорционально. Появляются после фото/выбора готового блюда,
-  // сбрасываются, если человек правит калории/БЖУ вручную напрямую.
+  // калории/БЖУ пропорционально. Появляются после фото/выбора готового блюда/
+  // открытия существующей записи на редактирование, сбрасываются, если человек
+  // правит калории/БЖУ вручную напрямую.
   const [perGramRates, setPerGramRates] = useState<{
     calories?: number; protein?: number; fat?: number; carbs?: number;
-  } | null>(
-    firstPreset?.grams
-      ? {
-          calories: firstPreset.calories / firstPreset.grams,
-          protein: firstPreset.protein != null ? firstPreset.protein / firstPreset.grams : undefined,
-          fat: firstPreset.fat != null ? firstPreset.fat / firstPreset.grams : undefined,
-          carbs: firstPreset.carbs != null ? firstPreset.carbs / firstPreset.grams : undefined,
-        }
-      : null
-  );
+  } | null>(() => {
+    const base = editingEntry?.grams ? editingEntry : firstPreset?.grams ? firstPreset : null;
+    if (!base || !base.grams) return null;
+    return {
+      calories: base.calories != null ? base.calories / base.grams : undefined,
+      protein: base.protein != null ? base.protein / base.grams : undefined,
+      fat: base.fat != null ? base.fat / base.grams : undefined,
+      carbs: base.carbs != null ? base.carbs / base.grams : undefined,
+    };
+  });
 
   const isNew = selected === NEW_FOOD;
 
@@ -175,6 +190,11 @@ export default function AddFoodModal({
           ? ingredientsText.split(',').map((s) => s.trim()).filter(Boolean)
           : undefined,
       };
+      if (editingEntry && onUpdate) {
+        await onUpdate(editingEntry, payload);
+        onClose();
+        return;
+      }
       await onSave(workspaceId, payload, actor);
       if (isNew && saveAsPreset) {
         await addPreset(workspaceId, {
@@ -193,16 +213,18 @@ export default function AddFoodModal({
   }
 
   return (
-    <Modal title="Добавить еду" onClose={onClose}>
+    <Modal title={editingEntry ? 'Изменить запись' : 'Добавить еду'} onClose={onClose}>
       <div className="space-y-3">
-        <label className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white text-sm font-medium cursor-pointer hover:brightness-105">
-          {recognizingPhoto ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />}
-          {recognizingPhoto ? 'Распознаю фото...' : 'Сфотографировать еду'}
-          <input type="file" accept="image/*" className="hidden" onChange={handlePhotoRecognize} disabled={recognizingPhoto} />
-        </label>
+        {!editingEntry && (
+          <label className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white text-sm font-medium cursor-pointer hover:brightness-105">
+            {recognizingPhoto ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />}
+            {recognizingPhoto ? 'Распознаю фото...' : 'Сфотографировать еду'}
+            <input type="file" accept="image/*" className="hidden" onChange={handlePhotoRecognize} disabled={recognizingPhoto} />
+          </label>
+        )}
         {photoError && <p className="text-[11px] text-rose-500 -mt-1">{photoError}</p>}
 
-        {presets.length > 0 && (
+        {!editingEntry && presets.length > 0 && (
           <select className="input" value={selected} onChange={(e) => handleSelectChange(e.target.value)}>
             {presets.map((p) => (
               <option key={p.id} value={p.id}>{p.name} — {p.calories} ккал{p.grams ? ` (${p.grams} г)` : ''}</option>
@@ -276,7 +298,7 @@ export default function AddFoodModal({
           </p>
         )}
 
-        {isNew && (
+        {isNew && !editingEntry && (
           <label className="flex items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400 px-1">
             <input type="checkbox" checked={saveAsPreset} onChange={(e) => setSaveAsPreset(e.target.checked)} />
             Сохранить как свою еду (для быстрого повторного добавления)
@@ -305,7 +327,7 @@ export default function AddFoodModal({
           disabled={saving || !name.trim() || !calories}
           className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white font-medium text-sm disabled:opacity-50"
         >
-          Добавить
+          {editingEntry ? 'Сохранить' : 'Добавить'}
         </button>
       </div>
     </Modal>

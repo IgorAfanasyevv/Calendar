@@ -18,6 +18,7 @@ interface FoodState {
   listen: (workspaceId: string) => () => void;
   listenPresets: (workspaceId: string) => () => void;
   addEntry: (workspaceId: string, entry: Partial<FoodEntry>, actor: { uid: string; name: string }) => Promise<void>;
+  updateEntry: (entry: FoodEntry, patch: Partial<FoodEntry>) => Promise<void>;
   deleteEntry: (entry: FoodEntry, actor: { uid: string; name: string }) => Promise<void>;
   markEaten: (entry: FoodEntry) => Promise<void>;
   addPreset: (workspaceId: string, preset: Partial<FoodPreset>) => Promise<void>;
@@ -63,6 +64,9 @@ export const useFoodStore = create<FoodState>((set) => ({
     } else {
       logActivity(workspaceId, actor.uid, actor.name, `добавил(а) в меню «${entry.name}»`);
     }
+  },
+  updateEntry: async (entry, patch) => {
+    await updateDoc(doc(db, 'workspaces', entry.workspaceId, 'food', entry.id), stripUndefined(patch));
   },
   deleteEntry: async (entry, actor) => {
     await deleteDoc(doc(db, 'workspaces', entry.workspaceId, 'food', entry.id));

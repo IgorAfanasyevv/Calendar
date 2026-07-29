@@ -33,7 +33,7 @@ function shiftDay(dateStr: string, delta: number): string {
 }
 
 export default function FoodDiaryView({ workspaceId }: { workspaceId: string }) {
-  const { entries, addEntry, deleteEntry } = useFoodStore();
+  const { entries, addEntry, updateEntry, deleteEntry } = useFoodStore();
   const { workspace, setCalorieGoal } = useWorkspaceStore();
   const { firebaseUser, profile } = useAuthStore();
   const actor = { uid: firebaseUser?.uid || '', name: profile?.displayName || '' };
@@ -42,6 +42,7 @@ export default function FoodDiaryView({ workspaceId }: { workspaceId: string }) 
   const [selectedDate, setSelectedDate] = useState(today);
   const [selectedUid, setSelectedUid] = useState(firebaseUser?.uid || '');
   const [addingMeal, setAddingMeal] = useState<MealType | null>(null);
+  const [editingEntry, setEditingEntry] = useState<FoodEntry | null>(null);
   const [editingGoal, setEditingGoal] = useState(false);
   const [goalInput, setGoalInput] = useState('');
   const [showCalculator, setShowCalculator] = useState(false);
@@ -208,7 +209,13 @@ export default function FoodDiaryView({ workspaceId }: { workspaceId: string }) 
               {mealEntries.length > 0 ? (
                 <div className="space-y-1">
                   {mealEntries.map((e) => (
-                    <FoodRow key={e.id} entry={e} onDelete={() => deleteEntry(e, actor)} canDelete={isMe} />
+                    <FoodRow
+                      key={e.id}
+                      entry={e}
+                      onDelete={() => deleteEntry(e, actor)}
+                      onEdit={() => setEditingEntry(e)}
+                      canDelete={isMe}
+                    />
                   ))}
                 </div>
               ) : (
@@ -230,6 +237,20 @@ export default function FoodDiaryView({ workspaceId }: { workspaceId: string }) 
         />
       )}
 
+      {editingEntry && (
+        <AddFoodModal
+          workspaceId={workspaceId}
+          mealType={editingEntry.mealType}
+          date={editingEntry.date}
+          planned={editingEntry.planned}
+          actor={actor}
+          editingEntry={editingEntry}
+          onSave={addEntry}
+          onUpdate={updateEntry}
+          onClose={() => setEditingEntry(null)}
+        />
+      )}
+
       {showCalculator && (
         <KbjuCalculator
           workspaceId={workspaceId}
@@ -242,10 +263,22 @@ export default function FoodDiaryView({ workspaceId }: { workspaceId: string }) 
   );
 }
 
-function FoodRow({ entry, onDelete, canDelete }: { entry: FoodEntry; onDelete: () => void; canDelete: boolean }) {
+function FoodRow({
+  entry,
+  onDelete,
+  onEdit,
+  canDelete,
+}: {
+  entry: FoodEntry;
+  onDelete: () => void;
+  onEdit: () => void;
+  canDelete: boolean;
+}) {
   return (
     <div className="flex items-center gap-2 text-sm py-1">
-      <span className="flex-1 truncate">{entry.name}</span>
+      <button onClick={onEdit} className="flex-1 text-left truncate hover:text-indigo-500 transition">
+        {entry.name}
+      </button>
       <span className="text-xs text-neutral-400 shrink-0">{entry.grams ? `${entry.grams} г · ` : ''}{entry.calories} ккал</span>
       {canDelete && (
         <button onClick={onDelete} className="text-neutral-400 hover:text-rose-500 shrink-0">
