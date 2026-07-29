@@ -550,6 +550,44 @@ ${current.ingredients && current.ingredients.length ? `Используй эти
     return { text: msg.content.map((b) => b.text || '').join('\n') };
   }
 
+  if (action === 'parse_food_photo') {
+    if (!imageBase64 || !imageMediaType) throw new HttpsError('invalid-argument', 'Не передано изображение.');
+
+    const prompt = `${SAFETY_NOTE}
+
+На фото — еда/блюдо, которое собирается съесть пользователь. Определи, что это за блюдо, и оцени примерную
+калорийность и БЖУ порции, которая видна на фото (по объёму/размеру порции на глаз).
+
+Ответь СТРОГО в формате JSON без текста до/после:
+{"name":"Название блюда","calories":450,"grams":300,"protein":25,"fat":15,"carbs":40}
+Если не удаётся точно определить блюдо — дай наиболее вероятное предположение по внешнему виду, не отказывайся отвечать.`;
+
+    const msg = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 500,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: imageMediaType, data: imageBase64 } },
+            { type: 'text', text: prompt },
+          ],
+        },
+      ],
+    });
+    const raw = msg.content.map((b) => b.text || '').join('\n').trim();
+
+    let parsed;
+    try {
+      parsed = extractJson(raw);
+    } catch (e) {
+      logger.error('Не удалось разобрать JSON еды с фото', { error: e.message, raw: raw.slice(0, 300) });
+      throw new HttpsError('internal', `Не получилось распознать фото: ${e.message}. Попробуйте более чёткое фото.`);
+    }
+
+    return { parsed };
+  }
+
   if (action === 'parse_workout_photo') {
     if (!imageBase64 || !imageMediaType) throw new HttpsError('invalid-argument', 'Не передано изображение.');
 

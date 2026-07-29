@@ -1,11 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
-import { Search, Loader2 } from 'lucide-react';
+import { httpsCallable } from 'firebase/functions';
+import { Search, Loader2, Camera } from 'lucide-react';
 import Modal from './Modal';
 import { useFoodStore } from '../store/foodStore';
 import { searchNutritionDatabases, type NutritionSearchResult } from '../lib/nutritionSearch';
+import { resizeImageToBase64 } from '../lib/imageResize';
+import { functions } from '../lib/firebase';
 import type { FoodEntry, MealType } from '../types';
 
 const NEW_FOOD = '__new__';
+
+const fitnessAssistantCall = httpsCallable<
+  { workspaceId: string; action: string; imageBase64?: string; imageMediaType?: string },
+  { parsed?: { name?: string; calories?: number; grams?: number; protein?: number; fat?: number; carbs?: number } }
+>(functions, 'fitnessAssistant');
 
 export default function AddFoodModal({
   workspaceId,
@@ -43,8 +51,41 @@ export default function AddFoodModal({
   const [searching, setSearching] = useState(false);
   const [linked, setLinked] = useState<NutritionSearchResult | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [recognizingPhoto, setRecognizingPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
 
   const isNew = selected === NEW_FOOD;
+
+  async function handlePhotoRecognize(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setRecognizingPhoto(true);
+    setPhotoError(null);
+    try {
+      const { base64, mediaType } = await resizeImageToBase64(file);
+      const res = await fitnessAssistantCall({
+        workspaceId,
+        action: 'parse_food_photo',
+        imageBase64: base64,
+        imageMediaType: mediaType,
+      });
+      const p = res.data.parsed;
+      if (p) {
+        setLinked(null);
+        setName(p.name || '');
+        setCalories(p.calories ? String(p.calories) : '');
+        setGrams(p.grams ? String(p.grams) : '');
+        setProtein(p.protein ? String(p.protein) : '');
+        setFat(p.fat ? String(p.fat) : '');
+        setCarbs(p.carbs ? String(p.carbs) : '');
+      }
+    } catch (err) {
+      setPhotoError((err as { message?: string })?.message || 'Не получилось распознать фото. Попробуйте другое.');
+    } finally {
+      setRecognizingPhoto(false);
+    }
+  }
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -170,16 +211,23 @@ export default function AddFoodModal({
 
         {isNew && (
           <div className="relative">
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
-              <input
-                className="input pl-8"
-                placeholder="Искать в базе данных (USDA, Open Food Facts)..."
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-              {searching && <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-neutral-400" />}
+            <div className="relative flex gap-2">
+              <div className="relative flex-1">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+                <input
+                  className="input pl-8"
+                  placeholder="Искать в базе данных (USDA, Open Food Facts)..."
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+                {searching && <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-neutral-400" />}
+              </div>
+              <label className="flex items-center justify-center w-10 shrink-0 rounded-xl bg-neutral-100 dark:bg-neutral-800 cursor-pointer hover:bg-neutral-200 dark:hover:bg-neutral-700" title="Сфотографировать еду">
+                {recognizingPhoto ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />}
+                <input type="file" accept="image/*" className="hidden" onChange={handlePhotoRecognize} disabled={recognizingPhoto} />
+              </label>
             </div>
+            {photoError && <p className="text-[11px] text-rose-500 mt-1">{photoError}</p>}
             {searchResults.length > 0 && (
               <div className="absolute z-10 mt-1 w-full max-h-52 overflow-y-auto rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 shadow-lg">
                 {searchResults.map((r) => (
