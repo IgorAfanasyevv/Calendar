@@ -19,6 +19,7 @@ import ImportantDatesView from './pages/ImportantDatesView';
 import HabitsView from './pages/HabitsView';
 import JournalView from './pages/JournalView';
 import WatchlistView from './pages/WatchlistView';
+import TravelView from './pages/TravelView';
 import SettingsView from './pages/SettingsView';
 import GlobalAssistant from './components/GlobalAssistant';
 import GlobalSearch from './components/GlobalSearch';
@@ -27,6 +28,7 @@ import { useImportantDateStore } from './store/importantDateStore';
 import { useHabitStore } from './store/habitStore';
 import { useJournalStore } from './store/journalStore';
 import { useWatchlistStore } from './store/watchlistStore';
+import { useTripStore } from './store/tripStore';
 import { useSavingsStore } from './store/savingsStore';
 import { useFinanceBoardStore } from './store/financeBoardStore';
 import { useWorkoutStore } from './store/workoutStore';
@@ -45,6 +47,7 @@ export default function App() {
   const { listenHabits, listenLogs } = useHabitStore();
   const { listen: listenJournal } = useJournalStore();
   const { listen: listenWatchlist } = useWatchlistStore();
+  const { listen: listenTrips } = useTripStore();
   const { listenPots } = useSavingsStore();
   const { listen: listenFinanceBoards } = useFinanceBoardStore();
   const { listen: listenWorkouts } = useWorkoutStore();
@@ -84,6 +87,7 @@ export default function App() {
     const unsubFood = listenFood(workspace.id);
     const unsubWatchlist = listenWatchlist(workspace.id);
     const unsubPots = listenPots(workspace.id);
+    const unsubTrips = listenTrips(workspace.id);
     return () => {
       unsubTasks();
       unsubGoals();
@@ -98,6 +102,7 @@ export default function App() {
       unsubFood();
       unsubWatchlist();
       unsubPots();
+      unsubTrips();
     };
   }, [
     workspace?.id,
@@ -114,6 +119,7 @@ export default function App() {
     listenFood,
     listenWatchlist,
     listenPots,
+    listenTrips,
   ]);
 
   if (loading) {
@@ -161,6 +167,7 @@ export default function App() {
         {tab === 'habits' && <HabitsView workspaceId={workspace.id} />}
         {tab === 'journal' && <JournalView workspaceId={workspace.id} />}
         {tab === 'watchlist' && <WatchlistView workspaceId={workspace.id} />}
+        {tab === 'travel' && <TravelView workspaceId={workspace.id} />}
         {tab === 'settings' && <SettingsView />}
       </Layout>
       <ReminderPopup workspaceId={workspace.id} />

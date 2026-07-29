@@ -344,6 +344,33 @@ export interface DailyTracker {
   sleepHours?: number;
 }
 
+export interface TripItineraryItem {
+  id: string;
+  date: string; // yyyy-mm-dd
+  title: string;
+  note?: string;
+}
+
+export interface PackingItem {
+  id: string;
+  name: string;
+  packed: boolean;
+}
+
+export interface Trip {
+  id: string;
+  workspaceId: string;
+  name: string;
+  destination?: string;
+  startDate?: string;
+  endDate?: string;
+  savingsPotId?: string;
+  itinerary: TripItineraryItem[];
+  packingList: PackingItem[];
+  createdByName: string;
+  createdAt: number;
+}
+
 export interface UserProfile {
   uid: string;
   email: string;

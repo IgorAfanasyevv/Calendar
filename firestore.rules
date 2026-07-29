@@ -98,6 +98,9 @@ service cloud.firestore {
       match /watchlist/{itemId} {
         allow read, write: if isMember(workspaceId);
       }
+      match /trips/{tripId} {
+        allow read, write: if isMember(workspaceId);
+      }
       match /dailyTrackers/{trackerId} {
         allow read, write: if isMember(workspaceId);
       }
