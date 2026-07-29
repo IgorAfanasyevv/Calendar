@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Plus, Trash2, Star, Clapperboard, Tv, Film, Check } from 'lucide-react';
+import { Plus, Trash2, Star, Clapperboard, Tv, Film, Check, ExternalLink, Link2 } from 'lucide-react';
 import { useWatchlistStore } from '../store/watchlistStore';
 import { useAuthStore } from '../store/authStore';
 import Modal from '../components/Modal';
@@ -9,11 +9,12 @@ const TYPE_LABELS: Record<WatchType, string> = { movie: 'Фильм', series: '�
 const TYPE_ICONS: Record<WatchType, typeof Film> = { movie: Film, series: Tv, other: Clapperboard };
 
 export default function WatchlistView({ workspaceId }: { workspaceId: string }) {
-  const { items, addItem, markWatched, deleteItem } = useWatchlistStore();
+  const { items, addItem, markWatched, updateItem, deleteItem } = useWatchlistStore();
   const { firebaseUser, profile } = useAuthStore();
   const actor = { uid: firebaseUser?.uid || '', name: profile?.displayName || '' };
   const [creating, setCreating] = useState(false);
   const [ratingFor, setRatingFor] = useState<WatchlistItem | null>(null);
+  const [linkFor, setLinkFor] = useState<WatchlistItem | null>(null);
   const [tab, setTab] = useState<'to_watch' | 'watched'>('to_watch');
 
   const toWatch = useMemo(() => items.filter((i) => i.status === 'to_watch'), [items]);
@@ -68,6 +69,23 @@ export default function WatchlistView({ workspaceId }: { workspaceId: string }) 
                 </p>
                 {item.note && <p className="text-[11px] text-neutral-400 truncate">{item.note}</p>}
               </div>
+              {item.url && (
+                <a
+                  href={item.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-[11px] font-medium text-indigo-600 hover:text-indigo-700 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-1 rounded-lg shrink-0"
+                >
+                  <ExternalLink size={12} /> Открыть
+                </a>
+              )}
+              <button
+                onClick={() => setLinkFor(item)}
+                className="text-neutral-400 hover:text-indigo-500 shrink-0"
+                title={item.url ? 'Изменить ссылку' : 'Добавить ссылку'}
+              >
+                <Link2 size={14} />
+              </button>
               {item.status === 'to_watch' ? (
                 <button
                   onClick={() => setRatingFor(item)}
@@ -119,6 +137,18 @@ export default function WatchlistView({ workspaceId }: { workspaceId: string }) 
           />
         </Modal>
       )}
+
+      {linkFor && (
+        <Modal title={`Ссылка на «${linkFor.title}»`} onClose={() => setLinkFor(null)}>
+          <LinkForm
+            initial={linkFor.url}
+            onSave={async (url) => {
+              await updateItem(linkFor, { url: url || undefined });
+              setLinkFor(null);
+            }}
+          />
+        </Modal>
+      )}
     </div>
   );
 }
@@ -127,6 +157,7 @@ function NewItemForm({ onSave }: { onSave: (data: Partial<WatchlistItem>) => Pro
   const [title, setTitle] = useState('');
   const [type, setType] = useState<WatchType>('movie');
   const [note, setNote] = useState('');
+  const [url, setUrl] = useState('');
 
   return (
     <div className="space-y-3">
@@ -143,12 +174,48 @@ function NewItemForm({ onSave }: { onSave: (data: Partial<WatchlistItem>) => Pro
         ))}
       </div>
       <input className="input" placeholder="Заметка (необязательно)" value={note} onChange={(e) => setNote(e.target.value)} />
+      <input className="input" placeholder="Ссылка, где смотреть (необязательно)" value={url} onChange={(e) => setUrl(e.target.value)} />
       <button
         disabled={!title.trim()}
-        onClick={() => onSave({ title: title.trim(), type, note })}
+        onClick={() => onSave({ title: title.trim(), type, note, url: url.trim() || undefined })}
         className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white font-medium text-sm disabled:opacity-50"
       >
         Добавить
+      </button>
+    </div>
+  );
+}
+
+function LinkForm({ initial, onSave }: { initial?: string; onSave: (url: string) => Promise<void> }) {
+  const [url, setUrl] = useState(initial || '');
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await onSave(url.trim());
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <input
+        autoFocus
+        className="input"
+        placeholder="https://..."
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+      />
+      <p className="text-xs text-neutral-400">Ссылка на легальный сервис, где будете смотреть (Кинопоиск, Иви, Netflix и т.п.)</p>
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white font-medium text-sm disabled:opacity-50"
+      >
+        Сохранить
       </button>
     </div>
   );
