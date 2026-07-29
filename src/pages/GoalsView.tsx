@@ -65,6 +65,8 @@ function GoalCard({
   onDelete: (id: string, actor: { uid: string; name: string }) => void;
 }) {
   const [newStep, setNewStep] = useState('');
+  const [editingStepId, setEditingStepId] = useState<string | null>(null);
+  const [editingStepText, setEditingStepText] = useState('');
   const { tasks, toggleDone } = useTaskStore();
   const { firebaseUser, profile } = useAuthStore();
   const [addingTask, setAddingTask] = useState(false);
@@ -79,6 +81,17 @@ function GoalCard({
   function toggleStep(step: ChecklistItem) {
     const steps = goal.steps.map((s) => (s.id === step.id ? { ...s, done: !s.done } : s));
     const progress = steps.length ? Math.round((steps.filter((s) => s.done).length / steps.length) * 100) : goal.progress;
+    onUpdate(goal.id, { steps, progress });
+  }
+
+  function editStepText(id: string, text: string) {
+    const steps = goal.steps.map((s) => (s.id === id ? { ...s, text } : s));
+    onUpdate(goal.id, { steps });
+  }
+
+  function removeStep(id: string) {
+    const steps = goal.steps.filter((s) => s.id !== id);
+    const progress = steps.length ? Math.round((steps.filter((s) => s.done).length / steps.length) * 100) : 0;
     onUpdate(goal.id, { steps, progress });
   }
 
@@ -146,10 +159,41 @@ function GoalCard({
 
       <div className="space-y-1">
         {goal.steps.map((s) => (
-          <label key={s.id} className="flex items-center gap-2 text-xs">
-            <input type="checkbox" checked={s.done} onChange={() => toggleStep(s)} />
-            <span className={s.done ? 'line-through text-neutral-400' : ''}>{s.text}</span>
-          </label>
+          <div key={s.id} className="flex items-center gap-2 text-xs group">
+            <input type="checkbox" checked={s.done} onChange={() => toggleStep(s)} className="shrink-0" />
+            {editingStepId === s.id ? (
+              <input
+                autoFocus
+                className="input flex-1 py-1 text-xs"
+                value={editingStepText}
+                onChange={(e) => setEditingStepText(e.target.value)}
+                onBlur={() => {
+                  if (editingStepText.trim()) editStepText(s.id, editingStepText.trim());
+                  setEditingStepId(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') e.currentTarget.blur();
+                  if (e.key === 'Escape') setEditingStepId(null);
+                }}
+              />
+            ) : (
+              <button
+                onClick={() => {
+                  setEditingStepId(s.id);
+                  setEditingStepText(s.text);
+                }}
+                className={`flex-1 text-left ${s.done ? 'line-through text-neutral-400' : ''}`}
+              >
+                {s.text}
+              </button>
+            )}
+            <button
+              onClick={() => removeStep(s.id)}
+              className="text-neutral-400 hover:text-rose-500 shrink-0"
+            >
+              <Trash2 size={12} />
+            </button>
+          </div>
         ))}
         <div className="flex gap-2 mt-2">
           <input
