@@ -26,6 +26,7 @@ export default function ShoppingView({ workspaceId }: { workspaceId: string }) {
 
   const members = workspace?.members || [];
   const isMe = selectedUid === firebaseUser?.uid;
+  const selectedMember = workspace?.members.find((m) => m.uid === selectedUid);
 
   useEffect(() => {
     if (firebaseUser && !selectedUid) setSelectedUid(firebaseUser.uid);
@@ -115,22 +116,22 @@ export default function ShoppingView({ workspaceId }: { workspaceId: string }) {
 
       <div className="rounded-2xl glass p-3 mb-4 flex items-center gap-2 flex-wrap">
         <span className="flex items-center gap-1.5 text-xs font-medium text-neutral-500 shrink-0">
-          <Wallet size={13} /> Учитывать МОИ покупки в финансах:
+          <Wallet size={13} /> Учитывать покупки {selectedMember?.displayName || ''} в финансах:
         </span>
         <select
           className="input flex-1 min-w-[160px] py-1.5 text-xs"
-          value={workspace?.members.find((m) => m.uid === firebaseUser?.uid)?.shoppingFinanceBoardId || ''}
-          onChange={(e) => firebaseUser && setShoppingFinanceBoard(workspaceId, firebaseUser.uid, e.target.value || null)}
+          value={selectedMember?.shoppingFinanceBoardId || ''}
+          onChange={(e) => selectedUid && setShoppingFinanceBoard(workspaceId, selectedUid, e.target.value || null)}
         >
           <option value="">Не учитывать</option>
           {boards.map((b) => (
             <option key={b.id} value={b.id}>{b.name}</option>
           ))}
         </select>
-        {workspace?.members.find((m) => m.uid === firebaseUser?.uid)?.shoppingFinanceBoardId && (
+        {selectedMember?.shoppingFinanceBoardId && (
           <p className="w-full text-[11px] text-neutral-400">
-            Купленные вами товары с указанной ценой автоматически попадут туда как расход, с той же категорией.
-            Это только ваш личный выбор — у {workspace?.members.find((m) => m.uid !== firebaseUser?.uid)?.displayName || 'партнёра'} свой собственный.
+            Купленные {selectedMember?.displayName} товары с указанной ценой автоматически попадут туда как расход, с той же категорией.
+            Это личный выбор именно {selectedMember?.displayName} — у {workspace?.members.find((m) => m.uid !== selectedUid)?.displayName || 'другого участника'} свой собственный.
           </p>
         )}
       </div>
