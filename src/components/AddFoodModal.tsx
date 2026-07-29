@@ -46,7 +46,42 @@ export default function AddFoodModal({
   const [recognizingPhoto, setRecognizingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
 
+  // Коэффициенты "на грамм" — если заданы, изменение граммовки пересчитывает
+  // калории/БЖУ пропорционально. Появляются после фото/выбора готового блюда,
+  // сбрасываются, если человек правит калории/БЖУ вручную напрямую.
+  const [perGramRates, setPerGramRates] = useState<{
+    calories?: number; protein?: number; fat?: number; carbs?: number;
+  } | null>(
+    firstPreset?.grams
+      ? {
+          calories: firstPreset.calories / firstPreset.grams,
+          protein: firstPreset.protein != null ? firstPreset.protein / firstPreset.grams : undefined,
+          fat: firstPreset.fat != null ? firstPreset.fat / firstPreset.grams : undefined,
+          carbs: firstPreset.carbs != null ? firstPreset.carbs / firstPreset.grams : undefined,
+        }
+      : null
+  );
+
   const isNew = selected === NEW_FOOD;
+
+  function handleGramsChange(value: string) {
+    setGrams(value);
+    const g = Number(value);
+    if (perGramRates && g > 0) {
+      if (perGramRates.calories != null) setCalories(String(Math.round(perGramRates.calories * g)));
+      if (perGramRates.protein != null) setProtein(String(Math.round(perGramRates.protein * g)));
+      if (perGramRates.fat != null) setFat(String(Math.round(perGramRates.fat * g)));
+      if (perGramRates.carbs != null) setCarbs(String(Math.round(perGramRates.carbs * g)));
+    }
+  }
+
+  // Ручное редактирование калорий/БЖУ напрямую отвязывает от авторасчёта по граммовке
+  function manualEdit(setter: (v: string) => void) {
+    return (v: string) => {
+      setPerGramRates(null);
+      setter(v);
+    };
+  }
 
   async function handlePhotoRecognize(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -71,6 +106,16 @@ export default function AddFoodModal({
         setProtein(p.protein ? String(p.protein) : '');
         setFat(p.fat ? String(p.fat) : '');
         setCarbs(p.carbs ? String(p.carbs) : '');
+        setPerGramRates(
+          p.grams
+            ? {
+                calories: p.calories != null ? p.calories / p.grams : undefined,
+                protein: p.protein != null ? p.protein / p.grams : undefined,
+                fat: p.fat != null ? p.fat / p.grams : undefined,
+                carbs: p.carbs != null ? p.carbs / p.grams : undefined,
+              }
+            : null
+        );
       }
     } catch (err) {
       setPhotoError((err as { message?: string })?.message || 'Не получилось распознать фото. Попробуйте другое.');
@@ -90,6 +135,16 @@ export default function AddFoodModal({
         setProtein(p.protein ? String(p.protein) : '');
         setFat(p.fat ? String(p.fat) : '');
         setCarbs(p.carbs ? String(p.carbs) : '');
+        setPerGramRates(
+          p.grams
+            ? {
+                calories: p.calories / p.grams,
+                protein: p.protein != null ? p.protein / p.grams : undefined,
+                fat: p.fat != null ? p.fat / p.grams : undefined,
+                carbs: p.carbs != null ? p.carbs / p.grams : undefined,
+              }
+            : null
+        );
       }
     } else {
       setName('');
@@ -98,6 +153,7 @@ export default function AddFoodModal({
       setProtein('');
       setFat('');
       setCarbs('');
+      setPerGramRates(null);
     }
   }
 
@@ -163,42 +219,62 @@ export default function AddFoodModal({
         />
 
         <div className="grid grid-cols-2 gap-2">
-          <input
-            type="number"
-            className="input"
-            placeholder="Калории"
-            value={calories}
-            onChange={(e) => setCalories(e.target.value)}
-          />
-          <input
-            type="number"
-            className="input"
-            placeholder="Граммовка, г"
-            value={grams}
-            onChange={(e) => setGrams(e.target.value)}
-          />
-          <input
-            type="number"
-            className="input"
-            placeholder="Белки, г"
-            value={protein}
-            onChange={(e) => setProtein(e.target.value)}
-          />
-          <input
-            type="number"
-            className="input"
-            placeholder="Жиры, г"
-            value={fat}
-            onChange={(e) => setFat(e.target.value)}
-          />
-          <input
-            type="number"
-            className="input"
-            placeholder="Углеводы, г"
-            value={carbs}
-            onChange={(e) => setCarbs(e.target.value)}
-          />
+          <div>
+            <label className="block text-[11px] font-medium text-neutral-500 mb-1">Калории</label>
+            <input
+              type="number"
+              className="input"
+              placeholder="ккал"
+              value={calories}
+              onChange={(e) => manualEdit(setCalories)(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] font-medium text-neutral-500 mb-1">Граммовка</label>
+            <input
+              type="number"
+              className="input"
+              placeholder="г"
+              value={grams}
+              onChange={(e) => handleGramsChange(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] font-medium text-neutral-500 mb-1">Белки</label>
+            <input
+              type="number"
+              className="input"
+              placeholder="г"
+              value={protein}
+              onChange={(e) => manualEdit(setProtein)(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] font-medium text-neutral-500 mb-1">Жиры</label>
+            <input
+              type="number"
+              className="input"
+              placeholder="г"
+              value={fat}
+              onChange={(e) => manualEdit(setFat)(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] font-medium text-neutral-500 mb-1">Углеводы</label>
+            <input
+              type="number"
+              className="input"
+              placeholder="г"
+              value={carbs}
+              onChange={(e) => manualEdit(setCarbs)(e.target.value)}
+            />
+          </div>
         </div>
+        {perGramRates && (
+          <p className="text-[11px] text-emerald-600 dark:text-emerald-400 -mt-1">
+            Меняйте граммовку — калории и БЖУ пересчитаются пропорционально сами.
+          </p>
+        )}
 
         {isNew && (
           <label className="flex items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400 px-1">
