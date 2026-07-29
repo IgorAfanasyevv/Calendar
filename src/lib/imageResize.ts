@@ -5,8 +5,8 @@
  */
 export function resizeImageToBase64(
   file: File,
-  maxDim = 1600,
-  quality = 0.85
+  maxDim = 1800,
+  quality = 0.9
 ): Promise<{ base64: string; mediaType: string }> {
   return new Promise((resolve, reject) => {
     const img = new Image();
