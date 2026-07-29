@@ -816,6 +816,28 @@ const ASSISTANT_TOOLS = [
     },
   },
   {
+    name: 'update_task',
+    description: 'Изменить существующую задачу (найди по названию среди активных задач в контексте) — например, поменять цвет, категорию, приоритет, дату, время или исполнителя.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Точное или похожее название задачи, которую нужно найти' },
+        new_title: { type: 'string', description: 'Новое название, если нужно переименовать' },
+        color: {
+          type: 'string',
+          description:
+            'Новый цвет — одно из точных значений: #6366f1 (индиго), #ec4899 (розовый), #f59e0b (янтарный), #10b981 (изумрудный), #3b82f6 (синий), #8b5cf6 (фиолетовый), #ef4444 (красный), #14b8a6 (бирюзовый), #f97316 (оранжевый), #84cc16 (лайм), gradient-heart (градиент индиго-розовый, как сердечко в логотипе — используй, если попросят "цвет как в логотипе"/"градиент"/"сердечко").',
+        },
+        date: { type: 'string', description: 'Новая дата YYYY-MM-DD' },
+        time: { type: 'string', description: 'Новое время HH:mm' },
+        category: { type: 'string' },
+        priority: { type: 'string', enum: ['low', 'medium', 'high'] },
+        assignee: { type: 'string', enum: ['me', 'partner', 'together'] },
+      },
+      required: ['title'],
+    },
+  },
+  {
     name: 'delete_task',
     description: 'Удалить задачу (найди по названию среди активных задач в контексте).',
     input_schema: {
@@ -1196,6 +1218,26 @@ async function executeAssistantTool(name, input, ctx) {
     return { ok: true, created: 'workout', name: input.name };
   }
 
+  if (name === 'update_task') {
+    const tasksSnap = await db.collection('workspaces').doc(workspaceId).collection('tasks').where('done', '==', false).get();
+    const match = tasksSnap.docs.find((d) => (d.data().title || '').toLowerCase().includes((input.title || '').toLowerCase()));
+    if (!match) return { ok: false, error: `Задача «${input.title}» не найдена` };
+
+    const patch = stripUndefinedFields({
+      title: input.new_title,
+      color: input.color,
+      date: input.date,
+      time: input.time,
+      category: input.category,
+      priority: input.priority,
+      assignee: input.assignee,
+    });
+    if (Object.keys(patch).length === 0) return { ok: false, error: 'Не указано, что именно менять' };
+
+    await match.ref.update(patch);
+    return { ok: true, updated: 'task', title: input.new_title || match.data().title, changes: Object.keys(patch) };
+  }
+
   if (name === 'delete_task') {
     const tasksSnap = await db.collection('workspaces').doc(workspaceId).collection('tasks').where('done', '==', false).get();
     const match = tasksSnap.docs.find((d) => (d.data().title || '').toLowerCase().includes((input.title || '').toLowerCase()));
@@ -1291,7 +1333,7 @@ async function handleAssistant(request) {
   const context = await buildAssistantContext(workspaceId, uid, actorName);
   const systemPrompt = `Ты — помощник в семейном приложении-органайзере для пары (задачи, календарь, цели, покупки, финансы). ` +
     `Ты можешь отвечать на вопросы по данным пространства и создавать/дополнять записи через инструменты. ` +
-    `Если пользователь просит что-то создать или удалить — используй подходящий инструмент, не выдумывай, что уже сделано, пока реально не вызвал инструмент. Перед удалением можешь кратко уточнить, если не уверен(а), что нашёл именно нужный элемент, но если запрос однозначный — просто удаляй. ` +
+    `Если пользователь просит что-то создать, изменить или удалить — используй подходящий инструмент, не выдумывай, что уже сделано, пока реально не вызвал инструмент. Перед удалением можешь кратко уточнить, если не уверен(а), что нашёл именно нужный элемент, но если запрос однозначный — просто удаляй/меняй. ` +
     `Если данных не хватает для действия (например, не нашлась вкладка финансов или цель) — прямо скажи об этом. ` +
     `Отвечай по-русски, кратко и по-дружески.\n\n${context}`;
 
