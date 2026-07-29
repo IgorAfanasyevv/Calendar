@@ -191,6 +191,21 @@ export interface FinanceEntry {
   createdByName: string;
 }
 
+export interface RecurringRule {
+  id: string;
+  workspaceId: string;
+  boardId: string;
+  type: FinanceType;
+  amount: number;
+  category: string;
+  note?: string;
+  dayOfMonth: number; // 1-31
+  active: boolean;
+  lastCreatedMonth?: string; // 'YYYY-MM' — последний месяц, за который уже создана операция
+  createdByName: string;
+  createdAt: number;
+}
+
 export interface FinanceBoard {
   id: string;
   workspaceId: string;

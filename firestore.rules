@@ -101,6 +101,9 @@ service cloud.firestore {
       match /dailyTrackers/{trackerId} {
         allow read, write: if isMember(workspaceId);
       }
+      match /recurringRules/{ruleId} {
+        allow read, write: if isMember(workspaceId);
+      }
       match /savingsPots/{potId} {
         allow read, write: if isMember(workspaceId);
         match /transactions/{txId} {
