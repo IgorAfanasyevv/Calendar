@@ -901,6 +901,28 @@ const ASSISTANT_TOOLS = [
       required: ['board_name'],
     },
   },
+  {
+    name: 'add_watchlist_items',
+    description:
+      'Добавить один или несколько фильмов/сериалов в раздел "Смотрим" (список "хотим посмотреть"). Если нужно найти актуальный список реальных названий (например "все фильмы про Человека-паука с определённым актёром") — сначала поищи в интернете точные названия, и только потом вызови этот инструмент с найденными названиями.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        items: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              title: { type: 'string' },
+              type: { type: 'string', enum: ['movie', 'series', 'other'] },
+            },
+            required: ['title'],
+          },
+        },
+      },
+      required: ['items'],
+    },
+  },
 ];
 
 async function buildAssistantContext(workspaceId, uid, actorName) {
@@ -1306,6 +1328,30 @@ async function executeAssistantTool(name, input, ctx) {
     return { ok: true, deleted: 'finance_entry', board: targetBoard.data().name, category: match.data().category };
   }
 
+  if (name === 'add_watchlist_items') {
+    const list = Array.isArray(input.items) ? input.items : [];
+    if (list.length === 0) return { ok: false, error: 'Не передан список фильмов/сериалов' };
+    const batch = db.batch();
+    const col = db.collection('workspaces').doc(workspaceId).collection('watchlist');
+    let count = 0;
+    list.forEach((item) => {
+      if (!item.title || !item.title.trim()) return;
+      const ref = col.doc();
+      batch.set(ref, {
+        workspaceId,
+        title: item.title.trim(),
+        type: item.type || 'movie',
+        status: 'to_watch',
+        createdBy: uid,
+        createdByName: actorName,
+        createdAt: Date.now(),
+      });
+      count++;
+    });
+    await batch.commit();
+    return { ok: true, created: 'watchlist_items', count, titles: list.map((i) => i.title) };
+  }
+
   return { ok: false, error: `Неизвестный инструмент: ${name}` };
 }
 
@@ -1331,21 +1377,27 @@ async function handleAssistant(request) {
   const actorName = (info.member && info.member.displayName) || 'Пользователь';
 
   const context = await buildAssistantContext(workspaceId, uid, actorName);
-  const systemPrompt = `Ты — помощник в семейном приложении-органайзере для пары (задачи, календарь, цели, покупки, финансы). ` +
+  const systemPrompt = `Ты — помощник в семейном приложении-органайзере для пары (задачи, календарь, цели, покупки, финансы, раздел "Смотрим" с фильмами/сериалами). ` +
     `Ты можешь отвечать на вопросы по данным пространства и создавать/дополнять записи через инструменты. ` +
+    `У тебя есть доступ к веб-поиску — используй его, когда нужны реальные актуальные данные, которых нет в контексте (например, точный список фильмов определённой франшизы, актёрский состав, даты выхода), прежде чем добавлять что-то в "Смотрим" или отвечать на фактический вопрос. ` +
     `Если пользователь просит что-то создать, изменить или удалить — используй подходящий инструмент, не выдумывай, что уже сделано, пока реально не вызвал инструмент. Перед удалением можешь кратко уточнить, если не уверен(а), что нашёл именно нужный элемент, но если запрос однозначный — просто удаляй/меняй. ` +
     `Если данных не хватает для действия (например, не нашлась вкладка финансов или цель) — прямо скажи об этом. ` +
     `Отвечай по-русски, кратко и по-дружески.\n\n${context}`;
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+  // Веб-поиск — встроенный инструмент Anthropic: модель сама решает, когда
+  // поискать в интернете (например, чтобы найти реальные названия фильмов),
+  // выполняется на стороне Anthropic, нам ничего обрабатывать не нужно.
+  const allTools = [...ASSISTANT_TOOLS, { type: 'web_search_20250305', name: 'web_search' }];
+
   const messages = [...(Array.isArray(history) ? history.slice(-8) : []), { role: 'user', content: message }];
 
   let response = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
-    max_tokens: 1024,
+    max_tokens: 2048,
     system: systemPrompt,
-    tools: ASSISTANT_TOOLS,
+    tools: allTools,
     messages,
   });
 
@@ -1367,9 +1419,9 @@ async function handleAssistant(request) {
     messages.push({ role: 'user', content: toolResults });
     response = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1024,
+      max_tokens: 2048,
       system: systemPrompt,
-      tools: ASSISTANT_TOOLS,
+      tools: allTools,
       messages,
     });
     iterations++;
