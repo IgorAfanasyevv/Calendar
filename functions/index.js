@@ -1445,3 +1445,129 @@ async function handleAssistant(request) {
 
   return { text: finalText || 'Готово.', messages: updatedMessages };
 }
+
+exports.tripAssistant = onCall({ secrets: ['ANTHROPIC_API_KEY'] }, async (request) => {
+  try {
+    return await handleTripAssistant(request);
+  } catch (err) {
+    if (err instanceof HttpsError) throw err;
+    logger.error('tripAssistant error', err);
+    throw new HttpsError('internal', (err && err.message) || 'Внутренняя ошибка сервера');
+  }
+});
+
+async function handleTripAssistant(request) {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'Нужно войти в аккаунт.');
+
+  const { workspaceId, tripId, message, history } = request.data || {};
+  if (!workspaceId || !tripId || !message) throw new HttpsError('invalid-argument', 'Не хватает параметров.');
+
+  const info = await getMember(workspaceId, uid);
+  if (!info) throw new HttpsError('permission-denied', 'Вы не участник этого пространства.');
+  const actorName = (info.member && info.member.displayName) || 'Пользователь';
+
+  const tripRef = db.collection('workspaces').doc(workspaceId).collection('trips').doc(tripId);
+  const tripSnap = await tripRef.get();
+  if (!tripSnap.exists) throw new HttpsError('not-found', 'Поездка не найдена.');
+  const trip = tripSnap.data();
+
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+  const tripTools = [
+    {
+      name: 'add_itinerary_items',
+      description:
+        'Добавить один или несколько пунктов в маршрут этой поездки (дата + что запланировано, заметка необязательна) — используй, когда пользователь согласился добавить что-то конкретное.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          items: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                date: { type: 'string', description: 'YYYY-MM-DD' },
+                title: { type: 'string' },
+                note: { type: 'string', description: 'Например: цена, ссылка, номер рейса — если нашлось через поиск' },
+              },
+              required: ['date', 'title'],
+            },
+          },
+        },
+        required: ['items'],
+      },
+    },
+    { type: 'web_search_20250305', name: 'web_search' },
+  ];
+
+  const itineraryText =
+    (trip.itinerary || [])
+      .map((i) => `- ${i.date}: ${i.title}${i.note ? ` (${i.note})` : ''}`)
+      .join('\n') || 'пока пусто';
+
+  const systemPrompt =
+    `Ты — помощник по планированию поездки «${trip.name}»${trip.destination ? ` в ${trip.destination}` : ''}.` +
+    `${trip.startDate ? ` Даты поездки: ${trip.startDate}${trip.endDate ? ` — ${trip.endDate}` : ''}.` : ''}\n` +
+    `Текущий маршрут:\n${itineraryText}\n\n` +
+    `У тебя есть веб-поиск — используй его, чтобы находить реальные варианты авиабилетов, отелей, экскурсий, ` +
+    `ресторанов, достопримечательностей (актуальные цены/названия/ссылки, если получится их найти). ` +
+    `Когда пользователь соглашается добавить что-то конкретное в маршрут — используй инструмент add_itinerary_items. ` +
+    `Не выдумывай точные цены и названия отелей/рейсов, если не нашёл их через поиск — честно скажи, что это ориентировочно. ` +
+    `Отвечай по-русски, кратко и по делу. Собеседника зовут ${actorName}.`;
+
+  const messages = [...(Array.isArray(history) ? history.slice(-10) : []), { role: 'user', content: message }];
+
+  let response = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 2048,
+    system: systemPrompt,
+    tools: tripTools,
+    messages,
+  });
+
+  let iterations = 0;
+  while (response.stop_reason === 'tool_use' && iterations < 6) {
+    const toolUseBlocks = response.content.filter((b) => b.type === 'tool_use');
+    const toolResults = [];
+    for (const block of toolUseBlocks) {
+      let result;
+      try {
+        if (block.name === 'add_itinerary_items') {
+          const list = Array.isArray(block.input.items) ? block.input.items : [];
+          const newItems = list
+            .filter((i) => i.date && i.title)
+            .map((i) => stripUndefinedFields({ id: randomUUID(), date: i.date, title: i.title, note: i.note }));
+          const currentSnap = await tripRef.get();
+          const currentItinerary = (currentSnap.data() || {}).itinerary || [];
+          const updatedItinerary = [...currentItinerary, ...newItems].sort((a, b) => a.date.localeCompare(b.date));
+          await tripRef.update({ itinerary: updatedItinerary });
+          result = { ok: true, added: newItems.length };
+        } else {
+          result = { ok: false, error: `Неизвестный инструмент: ${block.name}` };
+        }
+      } catch (err) {
+        logger.error('Ошибка инструмента помощника поездки', err);
+        result = { ok: false, error: 'Внутренняя ошибка при выполнении действия' };
+      }
+      toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(result) });
+    }
+    messages.push({ role: 'assistant', content: response.content });
+    messages.push({ role: 'user', content: toolResults });
+    response = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 2048,
+      system: systemPrompt,
+      tools: tripTools,
+      messages,
+    });
+    iterations++;
+  }
+
+  const finalTextBlocks = response.content.filter((b) => b.type === 'text');
+  const finalText = finalTextBlocks.map((b) => b.text).join('\n');
+  const updatedMessages =
+    finalTextBlocks.length > 0 ? messages.concat([{ role: 'assistant', content: finalTextBlocks }]) : messages;
+
+  return { text: finalText || 'Готово.', messages: updatedMessages };
+}

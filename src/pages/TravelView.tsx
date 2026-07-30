@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Plus, Trash2, Plane, MapPin, Calendar, Check, PiggyBank, X, ArrowLeft } from 'lucide-react';
+import { Plus, Trash2, Plane, MapPin, Calendar, Check, PiggyBank, X, ArrowLeft, Sparkles } from 'lucide-react';
 import { useTripStore } from '../store/tripStore';
 import { useSavingsStore } from '../store/savingsStore';
 import { useAuthStore } from '../store/authStore';
 import Modal from '../components/Modal';
+import TripAssistantModal from '../components/TripAssistantModal';
 import { currencySymbol } from '../lib/currency';
 import type { PackingItem, Trip, TripItineraryItem } from '../types';
 
@@ -25,7 +26,7 @@ export default function TravelView({ workspaceId }: { workspaceId: string }) {
   const activeTrip = openTrip ? trips.find((t) => t.id === openTrip.id) || null : null;
 
   if (activeTrip) {
-    return <TripDetail trip={activeTrip} onUpdate={updateTrip} onBack={() => setOpenTrip(null)} />;
+    return <TripDetail trip={activeTrip} workspaceId={workspaceId} onUpdate={updateTrip} onBack={() => setOpenTrip(null)} />;
   }
 
   return (
@@ -143,10 +144,12 @@ function NewTripForm({ onSave }: { onSave: (data: Partial<Trip>) => Promise<void
 
 function TripDetail({
   trip,
+  workspaceId,
   onUpdate,
   onBack,
 }: {
   trip: Trip;
+  workspaceId: string;
   onUpdate: (trip: Trip, patch: Partial<Trip>) => Promise<void>;
   onBack: () => void;
 }) {
@@ -156,6 +159,7 @@ function TripDetail({
   const [newItemTitle, setNewItemTitle] = useState('');
   const [newItemDate, setNewItemDate] = useState(trip.startDate || '');
   const [newPackingName, setNewPackingName] = useState('');
+  const [assistantOpen, setAssistantOpen] = useState(false);
 
   async function addItineraryItem() {
     if (!newItemTitle.trim()) return;
@@ -189,7 +193,15 @@ function TripDetail({
         <ArrowLeft size={15} /> Все поездки
       </button>
 
-      <h1 className="text-xl font-semibold">{trip.name}</h1>
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <h1 className="text-xl font-semibold">{trip.name}</h1>
+        <button
+          onClick={() => setAssistantOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white text-xs font-medium shrink-0"
+        >
+          <Sparkles size={13} /> ИИ-помощник
+        </button>
+      </div>
       <p className="text-sm text-neutral-400 mb-4">
         {trip.destination}{trip.destination && trip.startDate ? ' · ' : ''}{formatRange(trip.startDate, trip.endDate)}
       </p>
@@ -233,16 +245,16 @@ function TripDetail({
 
       {tab === 'itinerary' ? (
         <div className="space-y-3">
-          <div className="rounded-2xl glass p-3 flex gap-2">
-            <input type="date" className="input w-36" value={newItemDate} onChange={(e) => setNewItemDate(e.target.value)} />
+          <div className="rounded-2xl glass p-3 grid gap-2" style={{ gridTemplateColumns: '140px 1fr 40px' }}>
+            <input type="date" className="input" value={newItemDate} onChange={(e) => setNewItemDate(e.target.value)} />
             <input
-              className="input flex-1"
+              className="input"
               placeholder="Что запланировано"
               value={newItemTitle}
               onChange={(e) => setNewItemTitle(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && addItineraryItem()}
             />
-            <button onClick={addItineraryItem} className="w-10 shrink-0 rounded-xl bg-indigo-500 text-white flex items-center justify-center">
+            <button onClick={addItineraryItem} className="rounded-xl bg-indigo-500 text-white flex items-center justify-center">
               <Plus size={16} />
             </button>
           </div>
@@ -292,6 +304,15 @@ function TripDetail({
             {trip.packingList.length === 0 && <p className="text-xs text-neutral-400 text-center py-8">Список вещей пока пуст</p>}
           </div>
         </div>
+      )}
+
+      {assistantOpen && (
+        <TripAssistantModal
+          workspaceId={workspaceId}
+          tripId={trip.id}
+          tripName={trip.name}
+          onClose={() => setAssistantOpen(false)}
+        />
       )}
     </div>
   );
