@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import type { Trip } from '../types';
+import type { Trip, FavoriteHotel } from '../types';
 
 function stripUndefined<T extends object>(obj: T): T {
   return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined)) as T;
@@ -13,6 +13,8 @@ interface TripState {
   addTrip: (workspaceId: string, trip: Partial<Trip>, actor: { name: string }) => Promise<void>;
   updateTrip: (trip: Trip, patch: Partial<Trip>) => Promise<void>;
   deleteTrip: (trip: Trip) => Promise<void>;
+  addFavoriteHotel: (trip: Trip, hotel: FavoriteHotel) => Promise<void>;
+  removeFavoriteHotel: (trip: Trip, id: string) => Promise<void>;
 }
 
 export const useTripStore = create<TripState>((set) => ({
@@ -43,5 +45,13 @@ export const useTripStore = create<TripState>((set) => ({
   },
   deleteTrip: async (trip) => {
     await deleteDoc(doc(db, 'workspaces', trip.workspaceId, 'trips', trip.id));
+  },
+  addFavoriteHotel: async (trip, hotel) => {
+    const favoriteHotels = [...(trip.favoriteHotels || []), hotel];
+    await updateDoc(doc(db, 'workspaces', trip.workspaceId, 'trips', trip.id), stripUndefined({ favoriteHotels }));
+  },
+  removeFavoriteHotel: async (trip, id) => {
+    const favoriteHotels = (trip.favoriteHotels || []).filter((h) => h.id !== id);
+    await updateDoc(doc(db, 'workspaces', trip.workspaceId, 'trips', trip.id), { favoriteHotels });
   },
 }));

@@ -367,8 +367,18 @@ export interface Trip {
   savingsPotId?: string;
   itinerary: TripItineraryItem[];
   packingList: PackingItem[];
+  favoriteHotels?: FavoriteHotel[];
   createdByName: string;
   createdAt: number;
+}
+
+export interface FavoriteHotel {
+  id: string;
+  name: string;
+  rating?: number;
+  address?: string;
+  photoUrl?: string;
+  mapsUrl?: string;
 }
 
 export interface UserProfile {

@@ -1446,7 +1446,7 @@ async function handleAssistant(request) {
   return { text: finalText || 'Готово.', messages: updatedMessages };
 }
 
-exports.tripAssistant = onCall({ secrets: ['ANTHROPIC_API_KEY'] }, async (request) => {
+exports.tripAssistant = onCall({ secrets: ['ANTHROPIC_API_KEY', 'GOOGLE_PLACES_API_KEY'] }, async (request) => {
   try {
     return await handleTripAssistant(request);
   } catch (err) {
@@ -1499,6 +1499,18 @@ async function handleTripAssistant(request) {
       },
     },
     { type: 'web_search_20250305', name: 'web_search' },
+    {
+      name: 'search_hotels',
+      description:
+        'Найти реальные отели по месту (и, если известно, датам) через Google Places — возвращает настоящие названия, рейтинг, адрес и фото. Используй, когда пользователь просит найти/предложить отели.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          location: { type: 'string', description: 'Город/район, где искать отели' },
+        },
+        required: ['location'],
+      },
+    },
   ];
 
   const itineraryText =
@@ -1510,10 +1522,15 @@ async function handleTripAssistant(request) {
     `Ты — помощник по планированию поездки «${trip.name}»${trip.destination ? ` в ${trip.destination}` : ''}.` +
     `${trip.startDate ? ` Даты поездки: ${trip.startDate}${trip.endDate ? ` — ${trip.endDate}` : ''}.` : ''}\n` +
     `Текущий маршрут:\n${itineraryText}\n\n` +
-    `У тебя есть веб-поиск — используй его, чтобы находить реальные варианты авиабилетов, отелей, экскурсий, ` +
-    `ресторанов, достопримечательностей (актуальные цены/названия/ссылки, если получится их найти). ` +
+    `ВАЖНО про авиабилеты: у тебя НЕТ доступа к реальным live-ценам на билеты (это требует отдельных API бронирования). ` +
+    `Никогда не выдумывай и не называй конкретную цену билета как точную. Вместо этого, когда просят найти билеты — ` +
+    `сформируй прямую ссылку на Google Flights с указанными городами и датами в формате: ` +
+    `https://www.google.com/travel/flights?q=Flights%20to%20{город назначения}%20from%20{город отправления}%20on%20{YYYY-MM-DD} ` +
+    `(даты бери из вопроса пользователя или из дат поездки; города пиши на английском, через %20 вместо пробелов) — ` +
+    `и честно скажи, что по этой ссылке будут видны настоящие актуальные цены. ` +
+    `Про отели — используй инструмент search_hotels, чтобы получить настоящие названия/рейтинг/фото через Google Places, ` +
+    `а не выдумывать их самому. Про экскурсии/рестораны можно использовать обычный веб-поиск. ` +
     `Когда пользователь соглашается добавить что-то конкретное в маршрут — используй инструмент add_itinerary_items. ` +
-    `Не выдумывай точные цены и названия отелей/рейсов, если не нашёл их через поиск — честно скажи, что это ориентировочно. ` +
     `Отвечай по-русски, кратко и по делу. Собеседника зовут ${actorName}.`;
 
   const messages = [...(Array.isArray(history) ? history.slice(-10) : []), { role: 'user', content: message }];
@@ -1527,6 +1544,7 @@ async function handleTripAssistant(request) {
   });
 
   let iterations = 0;
+  let lastHotels = [];
   while (response.stop_reason === 'tool_use' && iterations < 6) {
     const toolUseBlocks = response.content.filter((b) => b.type === 'tool_use');
     const toolResults = [];
@@ -1543,6 +1561,35 @@ async function handleTripAssistant(request) {
           const updatedItinerary = [...currentItinerary, ...newItems].sort((a, b) => a.date.localeCompare(b.date));
           await tripRef.update({ itinerary: updatedItinerary });
           result = { ok: true, added: newItems.length };
+        } else if (block.name === 'search_hotels') {
+          const placesApiKey = process.env.GOOGLE_PLACES_API_KEY;
+          if (!placesApiKey) {
+            result = { ok: false, error: 'Поиск отелей не настроен на сервере (нет ключа Google Places).' };
+          } else {
+            const placesRes = await fetch('https://places.googleapis.com/v1/places:searchText', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Goog-Api-Key': placesApiKey,
+                'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.rating,places.photos,places.googleMapsUri',
+              },
+              body: JSON.stringify({ textQuery: `отели в ${block.input.location}`, maxResultCount: 6 }),
+            });
+            const placesData = await placesRes.json();
+            const hotels = (placesData.places || []).slice(0, 6).map((p) => ({
+              id: p.id,
+              name: (p.displayName && p.displayName.text) || 'Отель',
+              rating: p.rating,
+              address: p.formattedAddress,
+              photoUrl:
+                p.photos && p.photos[0]
+                  ? `https://places.googleapis.com/v1/${p.photos[0].name}/media?maxWidthPx=500&key=${placesApiKey}`
+                  : undefined,
+              mapsUrl: p.googleMapsUri,
+            }));
+            lastHotels = hotels;
+            result = { ok: true, hotels: hotels.map((h) => ({ name: h.name, rating: h.rating, address: h.address })) };
+          }
         } else {
           result = { ok: false, error: `Неизвестный инструмент: ${block.name}` };
         }
@@ -1569,5 +1616,5 @@ async function handleTripAssistant(request) {
   const updatedMessages =
     finalTextBlocks.length > 0 ? messages.concat([{ role: 'assistant', content: finalTextBlocks }]) : messages;
 
-  return { text: finalText || 'Готово.', messages: updatedMessages };
+  return { text: finalText || 'Готово.', messages: updatedMessages, hotels: lastHotels };
 }

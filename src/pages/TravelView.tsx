@@ -154,8 +154,9 @@ function TripDetail({
   onBack: () => void;
 }) {
   const { pots } = useSavingsStore();
+  const { removeFavoriteHotel } = useTripStore();
   const linkedPot = pots.find((p) => p.id === trip.savingsPotId);
-  const [tab, setTab] = useState<'itinerary' | 'packing'>('itinerary');
+  const [tab, setTab] = useState<'itinerary' | 'packing' | 'hotels'>('itinerary');
   const [newItemTitle, setNewItemTitle] = useState('');
   const [newItemDate, setNewItemDate] = useState(trip.startDate || '');
   const [newPackingName, setNewPackingName] = useState('');
@@ -241,6 +242,12 @@ function TripDetail({
         >
           Чемодан
         </button>
+        <button
+          onClick={() => setTab('hotels')}
+          className={`px-3 py-1.5 rounded-full text-xs font-medium transition ${tab === 'hotels' ? 'bg-indigo-500 text-white' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500'}`}
+        >
+          Отели ⭐
+        </button>
       </div>
 
       {tab === 'itinerary' ? (
@@ -306,11 +313,45 @@ function TripDetail({
         </div>
       )}
 
+      {tab === 'hotels' && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {(trip.favoriteHotels || []).map((hotel) => (
+            <div key={hotel.id} className="rounded-xl overflow-hidden glass">
+              {hotel.photoUrl && <img src={hotel.photoUrl} alt={hotel.name} className="w-full h-28 object-cover" />}
+              <div className="p-2.5">
+                <p className="text-sm font-medium truncate">{hotel.name}</p>
+                {hotel.rating && <p className="text-xs text-amber-500">★ {hotel.rating}</p>}
+                {hotel.address && <p className="text-[11px] text-neutral-400 truncate">{hotel.address}</p>}
+                <div className="flex items-center gap-2 mt-1.5">
+                  {hotel.mapsUrl && (
+                    <a href={hotel.mapsUrl} target="_blank" rel="noopener noreferrer" className="text-[11px] text-indigo-500 hover:underline">
+                      На карте
+                    </a>
+                  )}
+                  <button
+                    onClick={() => removeFavoriteHotel(trip, hotel.id)}
+                    className="ml-auto text-[11px] text-neutral-400 hover:text-rose-500"
+                  >
+                    Убрать
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+          {(!trip.favoriteHotels || trip.favoriteHotels.length === 0) && (
+            <p className="text-xs text-neutral-400 text-center py-8 col-span-2">
+              Пока нет избранных отелей — спросите у ИИ-помощника, и понравившиеся можно будет добавить сюда
+            </p>
+          )}
+        </div>
+      )}
+
       {assistantOpen && (
         <TripAssistantModal
           workspaceId={workspaceId}
           tripId={trip.id}
           tripName={trip.name}
+          trip={trip}
           onClose={() => setAssistantOpen(false)}
         />
       )}

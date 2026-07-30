@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { httpsCallable } from 'firebase/functions';
-import { Sparkles, Send, Loader2 } from 'lucide-react';
+import { Sparkles, Send, Loader2, Star, MapPin } from 'lucide-react';
 import { functions } from '../lib/firebase';
+import { useTripStore } from '../store/tripStore';
 import Modal from './Modal';
+import type { FavoriteHotel, Trip } from '../types';
 
 interface AnthropicMessage {
   role: 'user' | 'assistant';
@@ -11,25 +13,43 @@ interface AnthropicMessage {
 
 const tripAssistantCall = httpsCallable<
   { workspaceId: string; tripId: string; message: string; history: AnthropicMessage[] },
-  { text: string; messages: AnthropicMessage[] }
+  { text: string; messages: AnthropicMessage[]; hotels?: FavoriteHotel[] }
 >(functions, 'tripAssistant');
 
 interface ChatEntry {
   role: 'user' | 'assistant';
   text: string;
+  hotels?: FavoriteHotel[];
+}
+
+// Делаем ссылки в тексте кликабельными (нужно для ссылок на Google Flights)
+function linkify(text: string) {
+  const parts = text.split(/(https?:\/\/[^\s)]+)/g);
+  return parts.map((part, i) =>
+    /^https?:\/\//.test(part) ? (
+      <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="underline text-indigo-200 dark:text-indigo-300 break-all">
+        {part}
+      </a>
+    ) : (
+      <span key={i}>{part}</span>
+    )
+  );
 }
 
 export default function TripAssistantModal({
   workspaceId,
   tripId,
   tripName,
+  trip,
   onClose,
 }: {
   workspaceId: string;
   tripId: string;
   tripName: string;
+  trip: Trip;
   onClose: () => void;
 }) {
+  const { addFavoriteHotel } = useTripStore();
   const [chat, setChat] = useState<ChatEntry[]>([]);
   const [history, setHistory] = useState<AnthropicMessage[]>([]);
   const [input, setInput] = useState('');
@@ -44,7 +64,7 @@ export default function TripAssistantModal({
     setError(null);
     try {
       const res = await tripAssistantCall({ workspaceId, tripId, message: text, history });
-      setChat((c) => [...c, { role: 'assistant', text: res.data.text }]);
+      setChat((c) => [...c, { role: 'assistant', text: res.data.text, hotels: res.data.hotels }]);
       setHistory(res.data.messages || []);
     } catch (e) {
       setError((e as { message?: string })?.message || 'Не удалось получить ответ. Попробуйте ещё раз.');
@@ -53,28 +73,69 @@ export default function TripAssistantModal({
     }
   }
 
+  const favoriteIds = new Set((trip.favoriteHotels || []).map((h) => h.id));
+
   return (
     <Modal title={`ИИ-помощник — ${tripName}`} onClose={onClose} wide>
-      <div className="flex flex-col h-[60vh]">
+      <div className="flex flex-col h-[65vh]">
         <div className="flex-1 overflow-y-auto space-y-3 mb-3 pr-1">
           {chat.length === 0 && (
             <div className="text-xs text-neutral-400 space-y-2">
               <p className="flex items-center gap-1.5 font-medium text-indigo-500">
                 <Sparkles size={13} /> Могу помочь спланировать поездку
               </p>
-              <p>Например: «Найди билеты из Алматы в Тбилиси на конец августа» или «Предложи 3 отеля в центре, недорого» — я поищу в интернете и, если согласитесь, сразу добавлю в маршрут.</p>
+              <p>Например: «Найди билеты из Алматы в Тбилиси на 20 августа» или «Предложи отели в центре» — для билетов дам ссылку на живые цены, для отелей покажу настоящие варианты с фото, которые можно добавить в избранное.</p>
             </div>
           )}
           {chat.map((m, i) => (
-            <div
-              key={i}
-              className={`rounded-xl px-3 py-2 text-sm whitespace-pre-wrap max-w-[85%] ${
-                m.role === 'user'
-                  ? 'ml-auto bg-indigo-500 text-white'
-                  : 'bg-neutral-100 dark:bg-neutral-800'
-              }`}
-            >
-              {m.text}
+            <div key={i}>
+              <div
+                className={`rounded-xl px-3 py-2 text-sm whitespace-pre-wrap max-w-[85%] ${
+                  m.role === 'user' ? 'ml-auto bg-indigo-500 text-white' : 'bg-neutral-100 dark:bg-neutral-800'
+                }`}
+              >
+                {m.role === 'assistant' ? linkify(m.text) : m.text}
+              </div>
+              {m.hotels && m.hotels.length > 0 && (
+                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {m.hotels.map((hotel) => {
+                    const isFav = favoriteIds.has(hotel.id);
+                    return (
+                      <div key={hotel.id} className="rounded-xl overflow-hidden glass">
+                        {hotel.photoUrl && (
+                          <img src={hotel.photoUrl} alt={hotel.name} className="w-full h-28 object-cover" />
+                        )}
+                        <div className="p-2.5">
+                          <p className="text-sm font-medium truncate">{hotel.name}</p>
+                          {hotel.rating && <p className="text-xs text-amber-500">★ {hotel.rating}</p>}
+                          {hotel.address && (
+                            <p className="text-[11px] text-neutral-400 truncate flex items-center gap-1">
+                              <MapPin size={10} className="shrink-0" /> {hotel.address}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-2 mt-1.5">
+                            {hotel.mapsUrl && (
+                              <a href={hotel.mapsUrl} target="_blank" rel="noopener noreferrer" className="text-[11px] text-indigo-500 hover:underline">
+                                На карте
+                              </a>
+                            )}
+                            <button
+                              onClick={() => !isFav && addFavoriteHotel(trip, hotel)}
+                              disabled={isFav}
+                              className={`ml-auto flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-lg ${
+                                isFav ? 'text-amber-500 bg-amber-50 dark:bg-amber-500/10' : 'text-neutral-500 bg-neutral-100 dark:bg-neutral-800 hover:text-amber-500'
+                              }`}
+                            >
+                              <Star size={11} fill={isFav ? 'currentColor' : 'none'} />
+                              {isFav ? 'В избранном' : 'В избранное'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           ))}
           {loading && (
