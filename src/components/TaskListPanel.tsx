@@ -16,6 +16,13 @@ function assigneeLabel(task: Task, members: { uid: string; displayName: string }
   return other?.displayName || 'Партнёр';
 }
 
+// Показываем дату понятно, с днём недели — "Пн, 3 авг" вместо "2026-08-03"
+function formatTaskDate(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  const formatted = d.toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric', month: 'short' });
+  return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+}
+
 export default function TaskListPanel({ workspaceId }: { workspaceId: string }) {
   const { tasks, toggleDone } = useTaskStore();
   const { firebaseUser, profile } = useAuthStore();
@@ -118,8 +125,8 @@ export default function TaskListPanel({ workspaceId }: { workspaceId: string }) 
                 <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-neutral-400">
                   {task.date && (
                     <span className="flex items-center gap-1">
-                      <Clock size={10} /> {effectiveDate(task)}
-                      {effectiveTime(task) ? ` ${effectiveTime(task)}` : ''}
+                      <Clock size={10} /> {formatTaskDate(effectiveDate(task) || task.date)}
+                      {effectiveTime(task) ? ` · ${effectiveTime(task)}` : ''}
                     </span>
                   )}
                   {task.location && (

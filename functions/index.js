@@ -747,6 +747,11 @@ const ASSISTANT_TOOLS = [
         category: { type: 'string', description: 'Категория, например Работа, Дом, Здоровье' },
         priority: { type: 'string', enum: ['low', 'medium', 'high'] },
         assignee: { type: 'string', enum: ['me', 'partner', 'together'], description: 'Кто выполняет' },
+        color: {
+          type: 'string',
+          description:
+            'Цвет — укажи, только если пользователь явно попросил конкретный цвет. Если не попросил — НЕ указывай этот параметр вообще, цвет подберётся автоматически под привычки того, кому назначена задача. Точные значения: #6366f1 (индиго), #ec4899 (розовый), #f59e0b (янтарный), #10b981 (изумрудный), #3b82f6 (синий), #8b5cf6 (фиолетовый), #ef4444 (красный), #14b8a6 (бирюзовый), #f97316 (оранжевый), #84cc16 (лайм), gradient-heart (градиент).',
+        },
       },
       required: ['title'],
     },
@@ -1161,11 +1166,53 @@ async function searchPlacesHotels(location, apiKey, pageToken) {
   return { ok: true, hotels, nextPageToken: placesData.nextPageToken };
 }
 
+/** Находит самый часто используемый цвет задач у конкретного человека — чтобы ИИ мог
+ * подставлять "привычный" цвет автоматически, если пользователь явно не попросил другой. */
+async function getMostUsedColor(workspaceId, targetUid) {
+  const snap = await db
+    .collection('workspaces')
+    .doc(workspaceId)
+    .collection('tasks')
+    .where('createdBy', '==', targetUid)
+    .limit(100)
+    .get();
+  const counts = {};
+  snap.docs.forEach((d) => {
+    const c = d.data().color;
+    if (c) counts[c] = (counts[c] || 0) + 1;
+  });
+  let best = null;
+  let bestCount = 0;
+  for (const [color, count] of Object.entries(counts)) {
+    if (count > bestCount) {
+      best = color;
+      bestCount = count;
+    }
+  }
+  return best;
+}
+
 async function executeAssistantTool(name, input, ctx) {
   const { workspaceId, uid, actorName, timezone } = ctx;
 
   if (name === 'create_task') {
     const dueAtUtc = input.date && input.time && timezone ? zonedTimeToUtc(input.date, input.time, timezone) : undefined;
+
+    let color = input.color;
+    if (!color) {
+      // Определяем, для кого задача, чтобы подобрать именно ЕГО привычный цвет.
+      // 'me' и 'together' — сам звонящий (это он взаимодействует с ассистентом),
+      // 'partner' — другой участник пространства.
+      let targetUid = uid;
+      if (input.assignee === 'partner') {
+        const wsSnap = await db.collection('workspaces').doc(workspaceId).get();
+        const members = (wsSnap.data() || {}).members || [];
+        const other = members.find((m) => m.uid !== uid);
+        if (other) targetUid = other.uid;
+      }
+      color = (await getMostUsedColor(workspaceId, targetUid)) || '#6366f1';
+    }
+
     const ref = db.collection('workspaces').doc(workspaceId).collection('tasks').doc();
     await ref.set(
       stripUndefinedFields({
@@ -1174,7 +1221,7 @@ async function executeAssistantTool(name, input, ctx) {
         date: input.date || null,
         time: input.time || null,
         dueAtUtc,
-        color: '#6366f1',
+        color,
         category: input.category || 'Общее',
         priority: input.priority || 'medium',
         repeat: 'none',
