@@ -6,14 +6,29 @@ const STORAGE_KEY = 'whatsnew_last_seen_version';
 
 export default function WhatsNewModal() {
   const [open, setOpen] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [visibleEntries, setVisibleEntries] = useState<typeof CHANGELOG>([]);
 
   const latest = CHANGELOG[0];
 
   useEffect(() => {
     if (!latest) return;
     const lastSeen = localStorage.getItem(STORAGE_KEY);
-    if (lastSeen !== latest.version) {
+
+    if (!lastSeen) {
+      // Совсем новый человек — не заваливаем всей историей, показываем только последнее
+      setVisibleEntries([latest]);
+      setOpen(true);
+      return;
+    }
+
+    if (lastSeen === latest.version) return; // уже видел всё актуальное
+
+    const seenIndex = CHANGELOG.findIndex((e) => e.version === lastSeen);
+    // Если версия найдена — показываем всё, что новее неё (могли пропустить несколько обновлений).
+    // Если не найдена (старая версия, которой уже нет в списке) — на всякий случай показываем всё, что есть.
+    const missed = seenIndex === -1 ? CHANGELOG : CHANGELOG.slice(0, seenIndex);
+    if (missed.length > 0) {
+      setVisibleEntries(missed);
       setOpen(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -24,9 +39,7 @@ export default function WhatsNewModal() {
     setOpen(false);
   }
 
-  if (!open || !latest) return null;
-
-  const visibleEntries = expanded ? CHANGELOG : [latest];
+  if (!open || visibleEntries.length === 0) return null;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={handleClose}>
@@ -43,8 +56,14 @@ export default function WhatsNewModal() {
           </button>
         </div>
 
-        {visibleEntries.map((entry) => (
-          <div key={entry.version} className="mt-4">
+        {visibleEntries.length > 1 && (
+          <p className="text-xs text-neutral-400 mt-1">
+            Похоже, вы пропустили несколько обновлений ({visibleEntries.length}) — вот всё сразу:
+          </p>
+        )}
+
+        {visibleEntries.map((entry, idx) => (
+          <div key={entry.version} className={idx === 0 ? 'mt-4' : 'mt-5 pt-5 border-t border-neutral-100 dark:border-neutral-800'}>
             <p className="text-xs text-neutral-400 mb-1">{entry.date}</p>
             <h2 className="text-lg font-semibold mb-3">{entry.title}</h2>
             <ul className="space-y-2">
@@ -58,22 +77,12 @@ export default function WhatsNewModal() {
           </div>
         ))}
 
-        <div className="flex gap-2 mt-6">
-          {!expanded && CHANGELOG.length > 1 && (
-            <button
-              onClick={() => setExpanded(true)}
-              className="flex-1 py-2.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-sm font-medium"
-            >
-              Смотреть все изменения
-            </button>
-          )}
-          <button
-            onClick={handleClose}
-            className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white text-sm font-medium"
-          >
-            Понятно, закрыть
-          </button>
-        </div>
+        <button
+          onClick={handleClose}
+          className="w-full mt-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white text-sm font-medium"
+        >
+          Понятно, закрыть
+        </button>
       </div>
     </div>
   );
