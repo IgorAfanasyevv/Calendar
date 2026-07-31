@@ -629,7 +629,7 @@ type — один из: strength, cardio, flexibility, sport, other (для ин
 
     const msg = await anthropic.messages.create({
       model: 'claude-sonnet-5',
-      max_tokens: 3000,
+      max_tokens: 8000,
       messages: [
         {
           role: 'user',
@@ -646,7 +646,18 @@ type — один из: strength, cardio, flexibility, sport, other (для ин
     try {
       parsed = extractJson(raw);
     } catch (e) {
-      logger.error('Не удалось разобрать JSON тренировки с фото', { error: e.message, raw: raw.slice(0, 300) });
+      logger.error('Не удалось разобрать JSON тренировки с фото', {
+        error: e.message,
+        stopReason: msg.stop_reason,
+        rawLength: raw.length,
+        raw: raw.slice(0, 300),
+      });
+      if (msg.stop_reason === 'max_tokens') {
+        throw new HttpsError(
+          'internal',
+          'Слишком много упражнений сразу для одного ответа — модель не успела закончить. Попробуйте загрузить чуть меньше фото за раз (например, по 2).'
+        );
+      }
       throw new HttpsError('internal', `Не получилось разобрать фото: ${e.message}. Попробуйте более чёткое фото.`);
     }
 
