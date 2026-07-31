@@ -36,10 +36,15 @@ export default function HotelGalleryModal({ hotel, onClose }: { hotel: FavoriteH
         </button>
       </div>
 
-      <div className="flex-1 flex items-center justify-center relative px-4" onClick={(e) => e.stopPropagation()}>
+      <div className="flex-1 min-h-0 flex items-center justify-center relative px-4" onClick={(e) => e.stopPropagation()}>
         {photos.length > 0 ? (
           <>
-            <img src={photos[index]} alt={hotel.name} className="max-h-full max-w-full object-contain rounded-lg" />
+            <img
+              src={photos[index]}
+              alt={hotel.name}
+              className="max-w-full object-contain rounded-lg"
+              style={{ maxHeight: 'calc(100vh - 180px)' }}
+            />
             {photos.length > 1 && (
               <>
                 <button
