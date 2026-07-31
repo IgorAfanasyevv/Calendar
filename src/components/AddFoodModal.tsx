@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { httpsCallable } from 'firebase/functions';
-import { Loader2, Camera } from 'lucide-react';
+import { Loader2, Camera, Trash2 } from 'lucide-react';
 import Modal from './Modal';
 import { useFoodStore } from '../store/foodStore';
 import { resizeImageToBase64 } from '../lib/imageResize';
@@ -35,7 +35,7 @@ export default function AddFoodModal({
   onUpdate?: (entry: FoodEntry, patch: Partial<FoodEntry>) => Promise<void>;
   onClose: () => void;
 }) {
-  const { presets, addPreset } = useFoodStore();
+  const { presets, addPreset, deletePreset } = useFoodStore();
   const firstPreset = presets.length > 0 ? presets[0] : undefined;
   const [selected, setSelected] = useState(editingEntry ? NEW_FOOD : firstPreset ? firstPreset.id : NEW_FOOD);
   const [name, setName] = useState(editingEntry?.name || firstPreset?.name || '');
@@ -225,12 +225,29 @@ export default function AddFoodModal({
         {photoError && <p className="text-[11px] text-rose-500 -mt-1">{photoError}</p>}
 
         {!editingEntry && presets.length > 0 && (
-          <select className="input" value={selected} onChange={(e) => handleSelectChange(e.target.value)}>
-            {presets.map((p) => (
-              <option key={p.id} value={p.id}>{p.name} — {p.calories} ккал{p.grams ? ` (${p.grams} г)` : ''}</option>
-            ))}
-            <option value={NEW_FOOD}>+ Своя еда...</option>
-          </select>
+          <div className="flex gap-2">
+            <select className="input flex-1" value={selected} onChange={(e) => handleSelectChange(e.target.value)}>
+              {presets.map((p) => (
+                <option key={p.id} value={p.id}>{p.name} — {p.calories} ккал{p.grams ? ` (${p.grams} г)` : ''}</option>
+              ))}
+              <option value={NEW_FOOD}>+ Своя еда...</option>
+            </select>
+            {selected !== NEW_FOOD && (
+              <button
+                onClick={() => {
+                  const preset = presets.find((p) => p.id === selected);
+                  if (preset && confirm(`Удалить «${preset.name}» из сохранённой еды?`)) {
+                    deletePreset(preset);
+                    handleSelectChange(presets.find((p) => p.id !== selected)?.id || NEW_FOOD);
+                  }
+                }}
+                className="shrink-0 w-10 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-neutral-400 hover:text-rose-500 flex items-center justify-center"
+                title="Удалить это сохранённое блюдо"
+              >
+                <Trash2 size={15} />
+              </button>
+            )}
+          </div>
         )}
 
         <input
