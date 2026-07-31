@@ -1124,6 +1124,43 @@ function stripUndefinedFields(obj) {
   return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined));
 }
 
+/** Ищет отели через Google Places (New) — переиспользуется и инструментом ИИ, и кнопкой "Ещё". */
+async function searchPlacesHotels(location, apiKey, pageToken) {
+  const placesRes = await fetch('https://places.googleapis.com/v1/places:searchText', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Goog-Api-Key': apiKey,
+      'X-Goog-FieldMask':
+        'places.id,places.displayName,places.formattedAddress,places.rating,places.photos,places.googleMapsUri,nextPageToken',
+    },
+    body: JSON.stringify(
+      stripUndefinedFields({ textQuery: `отели в ${location}`, maxResultCount: 6, pageToken })
+    ),
+  });
+  const rawBody = await placesRes.text();
+  if (!placesRes.ok) {
+    logger.error('Places API вернул ошибку', { status: placesRes.status, body: rawBody.slice(0, 500) });
+    return { ok: false, error: `Google Places вернул ошибку ${placesRes.status}: ${rawBody.slice(0, 300)}` };
+  }
+  const placesData = JSON.parse(rawBody);
+  const hotels = (placesData.places || []).slice(0, 6).map((p) => {
+    const photoUrls = (p.photos || [])
+      .slice(0, 6)
+      .map((photo) => `https://places.googleapis.com/v1/${photo.name}/media?maxWidthPx=800&key=${apiKey}`);
+    return {
+      id: p.id,
+      name: (p.displayName && p.displayName.text) || 'Отель',
+      rating: p.rating,
+      address: p.formattedAddress,
+      photoUrl: photoUrls[0],
+      photoUrls: photoUrls.length > 0 ? photoUrls : undefined,
+      mapsUrl: p.googleMapsUri,
+    };
+  });
+  return { ok: true, hotels, nextPageToken: placesData.nextPageToken };
+}
+
 async function executeAssistantTool(name, input, ctx) {
   const { workspaceId, uid, actorName, timezone } = ctx;
 
@@ -1467,6 +1504,30 @@ async function handleAssistant(request) {
   return { text: finalText || 'Готово.', messages: updatedMessages };
 }
 
+exports.searchMoreHotels = onCall({ secrets: ['GOOGLE_PLACES_API_KEY'] }, async (request) => {
+  try {
+    const uid = request.auth && request.auth.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Нужно войти в аккаунт.');
+    const { workspaceId, location, pageToken } = request.data || {};
+    if (!workspaceId || !location) throw new HttpsError('invalid-argument', 'Не хватает параметров.');
+
+    const info = await getMember(workspaceId, uid);
+    if (!info) throw new HttpsError('permission-denied', 'Вы не участник этого пространства.');
+
+    const placesApiKey = process.env.GOOGLE_PLACES_API_KEY;
+    if (!placesApiKey) throw new HttpsError('failed-precondition', 'Поиск отелей не настроен на сервере (нет ключа Google Places).');
+
+    const searchResult = await searchPlacesHotels(location, placesApiKey, pageToken);
+    if (!searchResult.ok) throw new HttpsError('internal', searchResult.error);
+
+    return { hotels: searchResult.hotels, nextPageToken: searchResult.nextPageToken };
+  } catch (err) {
+    if (err instanceof HttpsError) throw err;
+    logger.error('searchMoreHotels error', err);
+    throw new HttpsError('internal', (err && err.message) || 'Внутренняя ошибка сервера');
+  }
+});
+
 exports.tripAssistant = onCall({ secrets: ['ANTHROPIC_API_KEY', 'GOOGLE_PLACES_API_KEY'] }, async (request) => {
   try {
     return await handleTripAssistant(request);
@@ -1569,6 +1630,8 @@ async function handleTripAssistant(request) {
 
   let iterations = 0;
   let lastHotels = [];
+  let lastHotelsLocation = null;
+  let lastHotelsPageToken = null;
   while (response.stop_reason === 'tool_use' && iterations < 6) {
     const toolUseBlocks = response.content.filter((b) => b.type === 'tool_use');
     const toolResults = [];
@@ -1590,37 +1653,14 @@ async function handleTripAssistant(request) {
           if (!placesApiKey) {
             result = { ok: false, error: 'Поиск отелей не настроен на сервере (нет ключа Google Places).' };
           } else {
-            const placesRes = await fetch('https://places.googleapis.com/v1/places:searchText', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'X-Goog-Api-Key': placesApiKey,
-                'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.rating,places.photos,places.googleMapsUri',
-              },
-              body: JSON.stringify({ textQuery: `отели в ${block.input.location}`, maxResultCount: 6 }),
-            });
-            const rawBody = await placesRes.text();
-            if (!placesRes.ok) {
-              logger.error('Places API вернул ошибку', { status: placesRes.status, body: rawBody.slice(0, 500) });
-              result = { ok: false, error: `Google Places вернул ошибку ${placesRes.status}: ${rawBody.slice(0, 300)}` };
+            const searchResult = await searchPlacesHotels(block.input.location, placesApiKey);
+            if (!searchResult.ok) {
+              result = searchResult;
             } else {
-              const placesData = JSON.parse(rawBody);
-              const hotels = (placesData.places || []).slice(0, 6).map((p) => {
-                const photoUrls = (p.photos || [])
-                  .slice(0, 6)
-                  .map((photo) => `https://places.googleapis.com/v1/${photo.name}/media?maxWidthPx=800&key=${placesApiKey}`);
-                return {
-                  id: p.id,
-                  name: (p.displayName && p.displayName.text) || 'Отель',
-                  rating: p.rating,
-                  address: p.formattedAddress,
-                  photoUrl: photoUrls[0],
-                  photoUrls: photoUrls.length > 0 ? photoUrls : undefined,
-                  mapsUrl: p.googleMapsUri,
-                };
-              });
-              lastHotels = hotels;
-              result = { ok: true, hotels: hotels.map((h) => ({ name: h.name, rating: h.rating, address: h.address })) };
+              lastHotels = searchResult.hotels;
+              lastHotelsLocation = block.input.location;
+              lastHotelsPageToken = searchResult.nextPageToken;
+              result = { ok: true, hotels: searchResult.hotels.map((h) => ({ name: h.name, rating: h.rating, address: h.address })) };
             }
           }
         } else {
@@ -1649,5 +1689,11 @@ async function handleTripAssistant(request) {
   const updatedMessages =
     finalTextBlocks.length > 0 ? messages.concat([{ role: 'assistant', content: finalTextBlocks }]) : messages;
 
-  return { text: finalText || 'Готово.', messages: updatedMessages, hotels: lastHotels };
+  return {
+    text: finalText || 'Готово.',
+    messages: updatedMessages,
+    hotels: lastHotels,
+    hotelsLocation: lastHotelsLocation,
+    hotelsNextPageToken: lastHotelsPageToken,
+  };
 }

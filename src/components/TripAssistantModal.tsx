@@ -14,13 +14,26 @@ interface AnthropicMessage {
 
 const tripAssistantCall = httpsCallable<
   { workspaceId: string; tripId: string; message: string; history: AnthropicMessage[] },
-  { text: string; messages: AnthropicMessage[]; hotels?: FavoriteHotel[] }
+  {
+    text: string;
+    messages: AnthropicMessage[];
+    hotels?: FavoriteHotel[];
+    hotelsLocation?: string | null;
+    hotelsNextPageToken?: string | null;
+  }
 >(functions, 'tripAssistant');
+
+const searchMoreHotelsCall = httpsCallable<
+  { workspaceId: string; location: string; pageToken?: string },
+  { hotels: FavoriteHotel[]; nextPageToken?: string | null }
+>(functions, 'searchMoreHotels');
 
 interface ChatEntry {
   role: 'user' | 'assistant';
   text: string;
   hotels?: FavoriteHotel[];
+  hotelsLocation?: string | null;
+  hotelsNextPageToken?: string | null;
 }
 
 // Делаем ссылки в тексте кликабельными (нужно для ссылок на Google Flights)
@@ -57,6 +70,7 @@ export default function TripAssistantModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [galleryHotel, setGalleryHotel] = useState<FavoriteHotel | null>(null);
+  const [loadingMoreIndex, setLoadingMoreIndex] = useState<number | null>(null);
 
   async function send(text: string) {
     if (!text.trim() || loading) return;
@@ -66,12 +80,46 @@ export default function TripAssistantModal({
     setError(null);
     try {
       const res = await tripAssistantCall({ workspaceId, tripId, message: text, history });
-      setChat((c) => [...c, { role: 'assistant', text: res.data.text, hotels: res.data.hotels }]);
+      setChat((c) => [
+        ...c,
+        {
+          role: 'assistant',
+          text: res.data.text,
+          hotels: res.data.hotels,
+          hotelsLocation: res.data.hotelsLocation,
+          hotelsNextPageToken: res.data.hotelsNextPageToken,
+        },
+      ]);
       setHistory(res.data.messages || []);
     } catch (e) {
       setError((e as { message?: string })?.message || 'Не удалось получить ответ. Попробуйте ещё раз.');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadMoreHotels(index: number) {
+    const entry = chat[index];
+    if (!entry.hotelsLocation || !entry.hotelsNextPageToken) return;
+    setLoadingMoreIndex(index);
+    setError(null);
+    try {
+      const res = await searchMoreHotelsCall({
+        workspaceId,
+        location: entry.hotelsLocation,
+        pageToken: entry.hotelsNextPageToken,
+      });
+      setChat((c) =>
+        c.map((m, i) =>
+          i === index
+            ? { ...m, hotels: [...(m.hotels || []), ...res.data.hotels], hotelsNextPageToken: res.data.nextPageToken }
+            : m
+        )
+      );
+    } catch (e) {
+      setError((e as { message?: string })?.message || 'Не удалось загрузить ещё отели.');
+    } finally {
+      setLoadingMoreIndex(null);
     }
   }
 
@@ -140,6 +188,16 @@ export default function TripAssistantModal({
                     );
                   })}
                 </div>
+              )}
+              {m.hotelsNextPageToken && (
+                <button
+                  onClick={() => loadMoreHotels(i)}
+                  disabled={loadingMoreIndex === i}
+                  className="mt-2 w-full py-2 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-xs font-medium text-neutral-500 disabled:opacity-60 flex items-center justify-center gap-1.5"
+                >
+                  {loadingMoreIndex === i ? <Loader2 size={12} className="animate-spin" /> : null}
+                  {loadingMoreIndex === i ? 'Загружаю...' : 'Показать ещё'}
+                </button>
               )}
             </div>
           ))}
