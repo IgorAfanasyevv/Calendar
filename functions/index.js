@@ -753,9 +753,17 @@ const ASSISTANT_TOOLS = [
       type: 'object',
       properties: {
         title: { type: 'string', description: 'Название задачи' },
-        date: { type: 'string', description: 'Дата в формате YYYY-MM-DD, если указана' },
+        date: { type: 'string', description: 'Дата в формате YYYY-MM-DD, если указана (для повторяющихся — дата ПЕРВОГО вхождения)' },
         time: { type: 'string', description: 'Время в формате HH:mm, если указано' },
         end_time: { type: 'string', description: 'Время окончания HH:mm, если пользователь указал диапазон (например "с 6 до 18")' },
+        repeat_frequency: {
+          type: 'string',
+          enum: ['weekly', 'daily', 'monthly'],
+          description:
+            'Укажи, только если пользователь просит ПОВТОРЯЮЩУЮСЯ задачу (например "каждую среду", "каждый день", "каждый месяц"). ' +
+            'Требует repeat_until. Сервер сам создаст отдельную задачу на каждое повторение между date и repeat_until.',
+        },
+        repeat_until: { type: 'string', description: 'Дата YYYY-MM-DD, до которой повторять (включительно) — обязательно, если указан repeat_frequency' },
         category: { type: 'string', description: 'Категория, например Работа, Дом, Здоровье' },
         priority: { type: 'string', enum: ['low', 'medium', 'high'] },
         assignee: { type: 'string', enum: ['me', 'partner', 'together'], description: 'Кто выполняет' },
@@ -1205,12 +1213,39 @@ async function getMostUsedColor(workspaceId, targetUid) {
   return best;
 }
 
+/** Строит список дат-повторений (YYYY-MM-DD) между start и end включительно, с заданной
+ * периодичностью — используется, когда ИИ создаёт повторяющуюся задачу ("каждую среду до конца года"). */
+function buildOccurrenceDates(startDateStr, endDateStr, frequency, cap = 100) {
+  const [sy, sm, sd] = startDateStr.split('-').map(Number);
+  const [ey, em, ed] = endDateStr.split('-').map(Number);
+  const endUTC = Date.UTC(ey, em - 1, ed);
+  let cur = Date.UTC(sy, sm - 1, sd);
+  const dates = [];
+  let i = 0;
+  while (cur <= endUTC && i < cap) {
+    const d = new Date(cur);
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    dates.push(`${y}-${m}-${day}`);
+    if (frequency === 'daily') {
+      cur += 24 * 60 * 60 * 1000;
+    } else if (frequency === 'monthly') {
+      const nd = new Date(cur);
+      nd.setUTCMonth(nd.getUTCMonth() + 1);
+      cur = nd.getTime();
+    } else {
+      cur += 7 * 24 * 60 * 60 * 1000; // weekly (по умолчанию)
+    }
+    i++;
+  }
+  return dates;
+}
+
 async function executeAssistantTool(name, input, ctx) {
   const { workspaceId, uid, actorName, timezone } = ctx;
 
   if (name === 'create_task') {
-    const dueAtUtc = input.date && input.time && timezone ? zonedTimeToUtc(input.date, input.time, timezone) : undefined;
-
     let durationMinutes;
     if (input.time && input.end_time) {
       const [sh, sm] = input.time.split(':').map(Number);
@@ -1235,29 +1270,42 @@ async function executeAssistantTool(name, input, ctx) {
       color = (await getMostUsedColor(workspaceId, targetUid)) || '#6366f1';
     }
 
-    const ref = db.collection('workspaces').doc(workspaceId).collection('tasks').doc();
-    await ref.set(
-      stripUndefinedFields({
-        title: input.title,
-        description: '',
-        date: input.date || null,
-        time: input.time || null,
-        durationMinutes,
-        dueAtUtc,
-        color,
-        category: input.category || 'Общее',
-        priority: input.priority || 'medium',
-        repeat: 'none',
-        assignee: input.assignee || 'together',
-        done: false,
-        checklist: [],
-        workspaceId,
-        createdBy: uid,
-        createdByName: actorName,
-        createdAt: Date.now(),
-      })
-    );
-    return { ok: true, created: 'task', title: input.title };
+    // Одна задача, или серия повторов ("каждую среду до конца года" и т.п.)
+    const occurrenceDates =
+      input.repeat_frequency && input.repeat_until && input.date
+        ? buildOccurrenceDates(input.date, input.repeat_until, input.repeat_frequency)
+        : [input.date || null];
+
+    const tasksCol = db.collection('workspaces').doc(workspaceId).collection('tasks');
+    const batch = db.batch();
+    occurrenceDates.forEach((dateStr) => {
+      const dueAtUtc = dateStr && input.time && timezone ? zonedTimeToUtc(dateStr, input.time, timezone) : undefined;
+      const ref = tasksCol.doc();
+      batch.set(
+        ref,
+        stripUndefinedFields({
+          title: input.title,
+          description: '',
+          date: dateStr,
+          time: input.time || null,
+          durationMinutes,
+          dueAtUtc,
+          color,
+          category: input.category || 'Общее',
+          priority: input.priority || 'medium',
+          repeat: 'none',
+          assignee: input.assignee || 'together',
+          done: false,
+          checklist: [],
+          workspaceId,
+          createdBy: uid,
+          createdByName: actorName,
+          createdAt: Date.now(),
+        })
+      );
+    });
+    await batch.commit();
+    return { ok: true, created: 'task', title: input.title, count: occurrenceDates.length };
   }
 
   if (name === 'create_shopping_item') {
@@ -1526,6 +1574,7 @@ async function handleAssistant(request) {
     `Ты можешь отвечать на вопросы по данным пространства и создавать/дополнять записи через инструменты. ` +
     `У тебя есть доступ к веб-поиску — используй его, когда нужны реальные актуальные данные, которых нет в контексте (например, точный список фильмов определённой франшизы, актёрский состав, даты выхода), прежде чем добавлять что-то в "Смотрим" или отвечать на фактический вопрос. ` +
     `Если пользователь просит что-то создать, изменить или удалить — используй подходящий инструмент, не выдумывай, что уже сделано, пока реально не вызвал инструмент. Перед удалением можешь кратко уточнить, если не уверен(а), что нашёл именно нужный элемент, но если запрос однозначный — просто удаляй/меняй. ` +
+    `Если пользователь просит ПОВТОРЯЮЩУЮСЯ задачу (например "каждую среду до конца года", "каждый день на этой неделе") — используй в create_task поля repeat_frequency + repeat_until вместе с date (первое вхождение), сервер сам создаст все нужные повторения одним действием, не нужно вызывать create_task много раз подряд самому. Если пользователь не назвал явную дату окончания повтора ("до конца года", "до июня") — переведи это в конкретную дату (например "до конца года" = 31 декабря текущего года). ` +
     `Если данных не хватает для действия (например, не нашлась вкладка финансов или цель) — прямо скажи об этом. ` +
     `Отвечай по-русски, кратко и по-дружески.\n\n${context}`;
 
