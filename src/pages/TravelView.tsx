@@ -252,7 +252,7 @@ function TripDetail({
         </button>
       </div>
 
-      {tab === 'itinerary' ? (
+      {tab === 'itinerary' && (
         <div className="space-y-3">
           <div className="rounded-2xl glass p-3 grid gap-2" style={{ gridTemplateColumns: '140px 1fr 40px' }}>
             <input type="date" className="input" value={newItemDate} onChange={(e) => setNewItemDate(e.target.value)} />
@@ -282,7 +282,9 @@ function TripDetail({
             {trip.itinerary.length === 0 && <p className="text-xs text-neutral-400 text-center py-8">Маршрут пока пуст</p>}
           </div>
         </div>
-      ) : (
+      )}
+
+      {tab === 'packing' && (
         <div className="space-y-3">
           <div className="rounded-2xl glass p-3 flex gap-2">
             <input
