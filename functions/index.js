@@ -1575,27 +1575,33 @@ async function handleTripAssistant(request) {
               },
               body: JSON.stringify({ textQuery: `отели в ${block.input.location}`, maxResultCount: 6 }),
             });
-            const placesData = await placesRes.json();
-            const hotels = (placesData.places || []).slice(0, 6).map((p) => ({
-              id: p.id,
-              name: (p.displayName && p.displayName.text) || 'Отель',
-              rating: p.rating,
-              address: p.formattedAddress,
-              photoUrl:
-                p.photos && p.photos[0]
-                  ? `https://places.googleapis.com/v1/${p.photos[0].name}/media?maxWidthPx=500&key=${placesApiKey}`
-                  : undefined,
-              mapsUrl: p.googleMapsUri,
-            }));
-            lastHotels = hotels;
-            result = { ok: true, hotels: hotels.map((h) => ({ name: h.name, rating: h.rating, address: h.address })) };
+            const rawBody = await placesRes.text();
+            if (!placesRes.ok) {
+              logger.error('Places API вернул ошибку', { status: placesRes.status, body: rawBody.slice(0, 500) });
+              result = { ok: false, error: `Google Places вернул ошибку ${placesRes.status}: ${rawBody.slice(0, 300)}` };
+            } else {
+              const placesData = JSON.parse(rawBody);
+              const hotels = (placesData.places || []).slice(0, 6).map((p) => ({
+                id: p.id,
+                name: (p.displayName && p.displayName.text) || 'Отель',
+                rating: p.rating,
+                address: p.formattedAddress,
+                photoUrl:
+                  p.photos && p.photos[0]
+                    ? `https://places.googleapis.com/v1/${p.photos[0].name}/media?maxWidthPx=500&key=${placesApiKey}`
+                    : undefined,
+                mapsUrl: p.googleMapsUri,
+              }));
+              lastHotels = hotels;
+              result = { ok: true, hotels: hotels.map((h) => ({ name: h.name, rating: h.rating, address: h.address })) };
+            }
           }
         } else {
           result = { ok: false, error: `Неизвестный инструмент: ${block.name}` };
         }
       } catch (err) {
         logger.error('Ошибка инструмента помощника поездки', err);
-        result = { ok: false, error: 'Внутренняя ошибка при выполнении действия' };
+        result = { ok: false, error: `Внутренняя ошибка: ${err && err.message}` };
       }
       toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(result) });
     }
