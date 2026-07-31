@@ -1,7 +1,7 @@
 import { Plus, Clock, MapPin, Check } from 'lucide-react';
 import Modal from './Modal';
 import type { Task } from '../types';
-import { effectiveTime } from '../lib/timezone';
+import { effectiveTime, formatTimeRange } from '../lib/timezone';
 import { taskColorStyle } from '../lib/taskColor';
 import { useWorkspaceStore } from '../store/workspaceStore';
 
@@ -63,7 +63,7 @@ export default function DayTasksModal({
                 <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-neutral-400">
                   {effectiveTime(task) && (
                     <span className="flex items-center gap-1">
-                      <Clock size={10} /> {effectiveTime(task)}
+                      <Clock size={10} /> {formatTimeRange(task)}
                     </span>
                   )}
                   {task.location && (

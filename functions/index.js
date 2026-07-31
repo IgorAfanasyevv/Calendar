@@ -755,6 +755,7 @@ const ASSISTANT_TOOLS = [
         title: { type: 'string', description: 'Название задачи' },
         date: { type: 'string', description: 'Дата в формате YYYY-MM-DD, если указана' },
         time: { type: 'string', description: 'Время в формате HH:mm, если указано' },
+        end_time: { type: 'string', description: 'Время окончания HH:mm, если пользователь указал диапазон (например "с 6 до 18")' },
         category: { type: 'string', description: 'Категория, например Работа, Дом, Здоровье' },
         priority: { type: 'string', enum: ['low', 'medium', 'high'] },
         assignee: { type: 'string', enum: ['me', 'partner', 'together'], description: 'Кто выполняет' },
@@ -873,6 +874,7 @@ const ASSISTANT_TOOLS = [
         },
         date: { type: 'string', description: 'Новая дата YYYY-MM-DD' },
         time: { type: 'string', description: 'Новое время HH:mm' },
+        end_time: { type: 'string', description: 'Новое время окончания HH:mm, если нужен диапазон (например "с 6 до 18")' },
         category: { type: 'string' },
         priority: { type: 'string', enum: ['low', 'medium', 'high'] },
         assignee: { type: 'string', enum: ['me', 'partner', 'together'] },
@@ -1209,6 +1211,15 @@ async function executeAssistantTool(name, input, ctx) {
   if (name === 'create_task') {
     const dueAtUtc = input.date && input.time && timezone ? zonedTimeToUtc(input.date, input.time, timezone) : undefined;
 
+    let durationMinutes;
+    if (input.time && input.end_time) {
+      const [sh, sm] = input.time.split(':').map(Number);
+      const [eh, em] = input.end_time.split(':').map(Number);
+      let diff = eh * 60 + em - (sh * 60 + sm);
+      if (diff <= 0) diff += 24 * 60;
+      durationMinutes = diff;
+    }
+
     let color = input.color;
     if (!color) {
       // Определяем, для кого задача, чтобы подобрать именно ЕГО привычный цвет.
@@ -1231,6 +1242,7 @@ async function executeAssistantTool(name, input, ctx) {
         description: '',
         date: input.date || null,
         time: input.time || null,
+        durationMinutes,
         dueAtUtc,
         color,
         category: input.category || 'Общее',
@@ -1367,11 +1379,22 @@ async function executeAssistantTool(name, input, ctx) {
     const match = tasksSnap.docs.find((d) => (d.data().title || '').toLowerCase().includes((input.title || '').toLowerCase()));
     if (!match) return { ok: false, error: `Задача «${input.title}» не найдена` };
 
+    let durationMinutes;
+    const effectiveStartTime = input.time || match.data().time;
+    if (input.end_time && effectiveStartTime) {
+      const [sh, sm] = effectiveStartTime.split(':').map(Number);
+      const [eh, em] = input.end_time.split(':').map(Number);
+      let diff = eh * 60 + em - (sh * 60 + sm);
+      if (diff <= 0) diff += 24 * 60;
+      durationMinutes = diff;
+    }
+
     const patch = stripUndefinedFields({
       title: input.new_title,
       color: input.color,
       date: input.date,
       time: input.time,
+      durationMinutes,
       category: input.category,
       priority: input.priority,
       assignee: input.assignee,

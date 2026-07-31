@@ -24,6 +24,21 @@ export function effectiveTime(task: Pick<Task, 'time' | 'dueAtUtc'>): string | u
   return task.time;
 }
 
+// Показывает время как диапазон "6:00–18:00", если у задачи задана длительность
+// больше стандартных 30 минут (иначе это, скорее всего, просто точка во времени,
+// а не осмысленный интервал) — иначе просто время начала.
+export function formatTimeRange(task: Pick<Task, 'time' | 'dueAtUtc' | 'durationMinutes'>): string | undefined {
+  const start = effectiveTime(task);
+  if (!start) return undefined;
+  if (!task.durationMinutes || task.durationMinutes <= 30) return start;
+  const [h, m] = start.split(':').map(Number);
+  const totalMin = (h * 60 + m + task.durationMinutes) % (24 * 60);
+  const endH = Math.floor(totalMin / 60);
+  const endM = totalMin % 60;
+  const end = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+  return `${start}–${end}`;
+}
+
 export function localDateStr(ms: number): string {
   const d = new Date(ms);
   const y = d.getFullYear();

@@ -38,6 +38,27 @@ export default function TaskModal({
   );
   const [time, setTime] = useState((initial ? effectiveTime(initial) : undefined) || '');
   const [duration, setDuration] = useState(initial?.durationMinutes || 30);
+  // "До какого времени" — удобнее для человека, чем указывать длительность в минутах.
+  // Под капотом всё равно храним durationMinutes, просто вычисляем его из разницы времён.
+  const [endTime, setEndTime] = useState(() => {
+    const startTime = (initial ? effectiveTime(initial) : undefined) || '';
+    if (!startTime || !initial?.durationMinutes) return '';
+    const [h, m] = startTime.split(':').map(Number);
+    const totalMin = h * 60 + m + initial.durationMinutes;
+    const endH = Math.floor(totalMin / 60) % 24;
+    const endM = totalMin % 60;
+    return `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+  });
+
+  function handleEndTimeChange(newEndTime: string) {
+    setEndTime(newEndTime);
+    if (!time || !newEndTime) return;
+    const [sh, sm] = time.split(':').map(Number);
+    const [eh, em] = newEndTime.split(':').map(Number);
+    let diff = eh * 60 + em - (sh * 60 + sm);
+    if (diff <= 0) diff += 24 * 60; // задача через полночь, например ночная смена
+    setDuration(diff);
+  }
   const [color, setColor] = useState(initial?.color || TASK_COLORS[0]);
   const [category, setCategory] = useState(initial?.category || CATEGORIES[0]);
   const [location, setLocation] = useState(initial?.location || '');
@@ -123,15 +144,8 @@ export default function TaskModal({
           <Field label="Время">
             <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="input" />
           </Field>
-          <Field label="Длительность (мин)">
-            <input
-              type="number"
-              min={5}
-              step={5}
-              value={duration}
-              onChange={(e) => setDuration(Number(e.target.value))}
-              className="input"
-            />
+          <Field label="До (необязательно)">
+            <input type="time" value={endTime} onChange={(e) => handleEndTimeChange(e.target.value)} className="input" />
           </Field>
           <Field label="Место">
             <input value={location} onChange={(e) => setLocation(e.target.value)} className="input" placeholder="Необязательно" />

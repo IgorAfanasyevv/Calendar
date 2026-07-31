@@ -5,7 +5,7 @@ import { useAuthStore } from '../store/authStore';
 import { useWorkspaceStore } from '../store/workspaceStore';
 import type { Task } from '../types';
 import TaskModal from './TaskModal';
-import { effectiveDate, effectiveTime } from '../lib/timezone';
+import { effectiveDate, formatTimeRange } from '../lib/timezone';
 import { taskColorStyle } from '../lib/taskColor';
 
 function assigneeLabel(task: Task, members: { uid: string; displayName: string }[]): string {
@@ -126,7 +126,7 @@ export default function TaskListPanel({ workspaceId }: { workspaceId: string }) 
                   {task.date && (
                     <span className="flex items-center gap-1">
                       <Clock size={10} /> {formatTaskDate(effectiveDate(task) || task.date)}
-                      {effectiveTime(task) ? ` · ${effectiveTime(task)}` : ''}
+                      {formatTimeRange(task) ? ` · ${formatTimeRange(task)}` : ''}
                     </span>
                   )}
                   {task.location && (
