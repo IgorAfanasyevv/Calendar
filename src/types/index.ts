@@ -122,6 +122,7 @@ export type WorkoutType = 'strength' | 'cardio' | 'flexibility' | 'sport' | 'oth
 export interface ExerciseSet {
   reps?: number;
   weight?: number; // кг
+  durationSeconds?: number; // для интервальных упражнений (например "30 сек")
 }
 
 export interface WorkoutExercise {
@@ -378,6 +379,7 @@ export interface FavoriteHotel {
   rating?: number;
   address?: string;
   photoUrl?: string;
+  photoUrls?: string[];
   mapsUrl?: string;
 }
 

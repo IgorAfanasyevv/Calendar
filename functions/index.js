@@ -196,7 +196,7 @@ async function handleFitnessAssistant(request) {
   const uid = request.auth && request.auth.uid;
   if (!uid) throw new HttpsError('unauthenticated', 'Нужно войти в аккаунт.');
 
-  const { workspaceId, action, question, entryId, preference, exerciseName, imageBase64, imageMediaType } = request.data || {};
+  const { workspaceId, action, question, entryId, preference, exerciseName, imageBase64, imageMediaType, images } = request.data || {};
   if (!workspaceId || !action) throw new HttpsError('invalid-argument', 'Не хватает параметров.');
 
   const info = await getMember(workspaceId, uid);
@@ -595,25 +595,46 @@ ${current.ingredients && current.ingredients.length ? `Используй эти
   }
 
   if (action === 'parse_workout_photo') {
-    if (!imageBase64 || !imageMediaType) throw new HttpsError('invalid-argument', 'Не передано изображение.');
+    // Поддерживаем и одно фото (imageBase64/imageMediaType), и несколько сразу (images: [{base64, mediaType}])
+    const photoList = Array.isArray(images) && images.length > 0
+      ? images
+      : imageBase64 && imageMediaType
+        ? [{ base64: imageBase64, mediaType: imageMediaType }]
+        : [];
+    if (photoList.length === 0) throw new HttpsError('invalid-argument', 'Не передано изображение.');
 
     const prompt = `${SAFETY_NOTE}
 
-На фото — рукописная (или напечатанная) запись тренировки из тетради/блокнота пользователя. Распознай упражнения,
-подходы, повторения и вес (если указан), и название/тип тренировки, если понятно из контекста.
+На фото — тренировка. Это может быть рукописная запись из тетради, ИЛИ скриншот(ы) из фитнес-приложения со списком
+упражнений на английском языке (например "T Chin-Ups", "Windmill", "Mountain Walkers") с временем на каждое —
+обычно указано как "30 c", "30 s", "30 sec" рядом с названием — это ВСЕГДА означает 30 СЕКУНД на упражнение (интервальная
+тренировка), а не количество повторений. Переведи названия упражнений на русский язык (по смыслу движения, а не дословно).
+
+${photoList.length > 1 ? `Тебе передано ${photoList.length} фото — это могут быть скриншоты одного и того же списка упражнений,
+сделанные при прокрутке (то есть один и тот же список, снятый по частям, с пересечением между кадрами). ВНИМАТЕЛЬНО
+сравни упражнения между фото — если одно и то же упражнение (по названию и позиции в списке) видно на двух соседних
+фото, посчитай его только ОДИН раз в итоговом списке, не дублируй.` : ''}
+
+Для каждого упражнения:
+- Если это интервальная тренировка (указано время вроде "30 c"/"30 s") — верни sets: [{"durationSeconds": 30}]
+- Если это силовое упражнение с подходами/повторениями/весом — верни sets: [{"reps":10,"weight":60}, ...] как обычно
+
+Общую длительность тренировки (durationMinutes) посчитай как СУММУ времени всех упражнений (переведи секунды в минуты,
+округли вверх), а не бери произвольное число. Например, если упражнений 20 и у каждого по 30 секунд — это 600 секунд = 10 минут.
 
 Ответь СТРОГО в формате JSON без текста до/после:
-{"name":"Название тренировки","type":"strength","durationMinutes":45,"exercises":[{"name":"Приседания","sets":[{"reps":10,"weight":60},{"reps":8,"weight":65}]}]}
-type — один из: strength, cardio, flexibility, sport, other. Если что-то не удаётся разобрать — оставь разумное значение по умолчанию, не выдумывай числа, которых не видно на фото.`;
+{"name":"Название тренировки","type":"strength","durationMinutes":45,"exercises":[{"name":"Приседания","sets":[{"reps":10,"weight":60}]}]}
+type — один из: strength, cardio, flexibility, sport, other (для интервальных тренировок с разными упражнениями обычно strength или cardio, смотри по содержанию).
+Если что-то не удаётся разобрать — оставь разумное значение по умолчанию, не выдумывай числа, которых не видно на фото.`;
 
     const msg = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 2000,
+      model: 'claude-sonnet-5',
+      max_tokens: 3000,
       messages: [
         {
           role: 'user',
           content: [
-            { type: 'image', source: { type: 'base64', media_type: imageMediaType, data: imageBase64 } },
+            ...photoList.map((p) => ({ type: 'image', source: { type: 'base64', media_type: p.mediaType, data: p.base64 } })),
             { type: 'text', text: prompt },
           ],
         },
@@ -1584,17 +1605,20 @@ async function handleTripAssistant(request) {
               result = { ok: false, error: `Google Places вернул ошибку ${placesRes.status}: ${rawBody.slice(0, 300)}` };
             } else {
               const placesData = JSON.parse(rawBody);
-              const hotels = (placesData.places || []).slice(0, 6).map((p) => ({
-                id: p.id,
-                name: (p.displayName && p.displayName.text) || 'Отель',
-                rating: p.rating,
-                address: p.formattedAddress,
-                photoUrl:
-                  p.photos && p.photos[0]
-                    ? `https://places.googleapis.com/v1/${p.photos[0].name}/media?maxWidthPx=500&key=${placesApiKey}`
-                    : undefined,
-                mapsUrl: p.googleMapsUri,
-              }));
+              const hotels = (placesData.places || []).slice(0, 6).map((p) => {
+                const photoUrls = (p.photos || [])
+                  .slice(0, 6)
+                  .map((photo) => `https://places.googleapis.com/v1/${photo.name}/media?maxWidthPx=800&key=${placesApiKey}`);
+                return {
+                  id: p.id,
+                  name: (p.displayName && p.displayName.text) || 'Отель',
+                  rating: p.rating,
+                  address: p.formattedAddress,
+                  photoUrl: photoUrls[0],
+                  photoUrls: photoUrls.length > 0 ? photoUrls : undefined,
+                  mapsUrl: p.googleMapsUri,
+                };
+              });
               lastHotels = hotels;
               result = { ok: true, hotels: hotels.map((h) => ({ name: h.name, rating: h.rating, address: h.address })) };
             }

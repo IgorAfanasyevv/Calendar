@@ -4,6 +4,7 @@ import { Sparkles, Send, Loader2, Star, MapPin } from 'lucide-react';
 import { functions } from '../lib/firebase';
 import { useTripStore } from '../store/tripStore';
 import Modal from './Modal';
+import HotelGalleryModal from './HotelGalleryModal';
 import type { FavoriteHotel, Trip } from '../types';
 
 interface AnthropicMessage {
@@ -55,6 +56,7 @@ export default function TripAssistantModal({
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [galleryHotel, setGalleryHotel] = useState<FavoriteHotel | null>(null);
 
   async function send(text: string) {
     if (!text.trim() || loading) return;
@@ -76,6 +78,7 @@ export default function TripAssistantModal({
   const favoriteIds = new Set((trip.favoriteHotels || []).map((h) => h.id));
 
   return (
+    <>
     <Modal title={`ИИ-помощник — ${tripName}`} onClose={onClose} wide>
       <div className="flex flex-col h-[65vh]">
         <div className="flex-1 overflow-y-auto space-y-3 mb-3 pr-1">
@@ -103,7 +106,9 @@ export default function TripAssistantModal({
                     return (
                       <div key={hotel.id} className="rounded-xl overflow-hidden glass">
                         {hotel.photoUrl && (
-                          <img src={hotel.photoUrl} alt={hotel.name} className="w-full h-28 object-cover" />
+                          <button onClick={() => setGalleryHotel(hotel)} className="block w-full">
+                            <img src={hotel.photoUrl} alt={hotel.name} className="w-full h-28 object-cover" />
+                          </button>
                         )}
                         <div className="p-2.5">
                           <p className="text-sm font-medium truncate">{hotel.name}</p>
@@ -165,5 +170,8 @@ export default function TripAssistantModal({
         </div>
       </div>
     </Modal>
+
+    {galleryHotel && <HotelGalleryModal hotel={galleryHotel} onClose={() => setGalleryHotel(null)} />}
+    </>
   );
 }

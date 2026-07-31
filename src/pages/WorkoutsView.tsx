@@ -15,7 +15,14 @@ import WorkoutAssistant from '../components/WorkoutAssistant';
 import type { BodyMeasurement, ExerciseSet, WorkoutEntry, WorkoutExercise, WorkoutTemplate, WorkoutType } from '../types';
 
 const fitnessAssistantCall = httpsCallable<
-  { workspaceId: string; action: string; exerciseName?: string; imageBase64?: string; imageMediaType?: string },
+  {
+    workspaceId: string;
+    action: string;
+    exerciseName?: string;
+    imageBase64?: string;
+    imageMediaType?: string;
+    images?: { base64: string; mediaType: string }[];
+  },
   { text?: string; parsed?: { name?: string; type?: WorkoutType; durationMinutes?: number; exercises?: WorkoutExercise[] } }
 >(functions, 'fitnessAssistant');
 
@@ -45,8 +52,13 @@ function formatDate(dateStr: string): string {
 // Понятное описание подходов: "3 подхода: 10 повт. × 50 кг, 8 повт. × 55 кг, ..."
 function formatSets(sets: ExerciseSet[]): string {
   if (sets.length === 0) return 'Без указанных подходов';
+  // Интервальное упражнение (например "30 сек") — обычно один "подход" с durationSeconds
+  if (sets.length === 1 && sets[0].durationSeconds && !sets[0].reps && !sets[0].weight) {
+    return `${sets[0].durationSeconds} сек`;
+  }
   const setsText = sets
     .map((s) => {
+      if (s.durationSeconds) return `${s.durationSeconds} сек`;
       const reps = s.reps ? `${s.reps} повт.` : 'повт. не указаны';
       const weight = s.weight ? ` × ${s.weight} кг` : '';
       return `${reps}${weight}`;
@@ -156,19 +168,19 @@ export default function WorkoutsView({ workspaceId }: { workspaceId: string }) {
   );
 
   async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files || []);
     e.target.value = '';
-    if (!file) return;
+    if (files.length === 0) return;
     setImportingPhoto(true);
     setPhotoError(null);
     setPhotoSuccess(null);
     try {
-      const { base64, mediaType } = await resizeImageToBase64(file);
+      const encoded = await Promise.all(files.map((f) => resizeImageToBase64(f)));
+      const images = encoded.map((r) => ({ base64: r.base64, mediaType: r.mediaType }));
       const res = await fitnessAssistantCall({
         workspaceId,
         action: 'parse_workout_photo',
-        imageBase64: base64,
-        imageMediaType: mediaType,
+        images,
       });
       if (res.data.parsed) {
         const p = res.data.parsed;
@@ -203,10 +215,13 @@ export default function WorkoutsView({ workspaceId }: { workspaceId: string }) {
           <Dumbbell size={18} /> Тренировки
         </h2>
         <div className="flex items-center gap-2">
-          <label className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-sm font-medium cursor-pointer hover:bg-neutral-200 dark:hover:bg-neutral-700">
+          <label
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-sm font-medium cursor-pointer hover:bg-neutral-200 dark:hover:bg-neutral-700"
+            title="Можно выбрать сразу несколько фото — они объединятся в одну тренировку"
+          >
             {importingPhoto ? <Loader2 size={15} className="animate-spin" /> : <Camera size={15} />}
             <span className="hidden sm:inline">{importingPhoto ? 'Распознаю...' : 'Фото тренировки'}</span>
-            <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} disabled={importingPhoto} />
+            <input type="file" accept="image/*" multiple className="hidden" onChange={handlePhotoUpload} disabled={importingPhoto} />
           </label>
           <button
             onClick={() => setAdding(true)}

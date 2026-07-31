@@ -5,8 +5,9 @@ import { useSavingsStore } from '../store/savingsStore';
 import { useAuthStore } from '../store/authStore';
 import Modal from '../components/Modal';
 import TripAssistantModal from '../components/TripAssistantModal';
+import HotelGalleryModal from '../components/HotelGalleryModal';
 import { currencySymbol } from '../lib/currency';
-import type { PackingItem, Trip, TripItineraryItem } from '../types';
+import type { FavoriteHotel, PackingItem, Trip, TripItineraryItem } from '../types';
 
 function formatRange(start?: string, end?: string): string {
   if (!start) return '';
@@ -161,6 +162,7 @@ function TripDetail({
   const [newItemDate, setNewItemDate] = useState(trip.startDate || '');
   const [newPackingName, setNewPackingName] = useState('');
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [galleryHotel, setGalleryHotel] = useState<FavoriteHotel | null>(null);
 
   async function addItineraryItem() {
     if (!newItemTitle.trim()) return;
@@ -317,7 +319,11 @@ function TripDetail({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {(trip.favoriteHotels || []).map((hotel) => (
             <div key={hotel.id} className="rounded-xl overflow-hidden glass">
-              {hotel.photoUrl && <img src={hotel.photoUrl} alt={hotel.name} className="w-full h-28 object-cover" />}
+              {hotel.photoUrl && (
+                <button onClick={() => setGalleryHotel(hotel)} className="block w-full">
+                  <img src={hotel.photoUrl} alt={hotel.name} className="w-full h-28 object-cover" />
+                </button>
+              )}
               <div className="p-2.5">
                 <p className="text-sm font-medium truncate">{hotel.name}</p>
                 {hotel.rating && <p className="text-xs text-amber-500">★ {hotel.rating}</p>}
@@ -355,6 +361,8 @@ function TripDetail({
           onClose={() => setAssistantOpen(false)}
         />
       )}
+
+      {galleryHotel && <HotelGalleryModal hotel={galleryHotel} onClose={() => setGalleryHotel(null)} />}
     </div>
   );
 }
