@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Droplet, Moon, Plus, Minus } from 'lucide-react';
+import { Droplet, Moon, Plus, Minus, Check } from 'lucide-react';
 import { useDailyTrackerStore } from '../store/dailyTrackerStore';
 import { useAuthStore } from '../store/authStore';
 import { useWorkspaceStore } from '../store/workspaceStore';
@@ -23,6 +23,17 @@ export default function HydrationSleepView({ workspaceId }: { workspaceId: strin
 
   const myToday = trackers.find((t) => t.uid === uid && t.date === today);
   const waterToday = myToday?.waterGlasses || 0;
+
+  const [sleepInput, setSleepInput] = useState(myToday?.sleepHours ? String(myToday.sleepHours) : '');
+  const [sleepSaved, setSleepSaved] = useState(false);
+
+  async function saveSleep() {
+    const val = Number(sleepInput);
+    if (!(val >= 0)) return;
+    await setSleep(workspaceId, uid, today, val);
+    setSleepSaved(true);
+    setTimeout(() => setSleepSaved(false), 1500);
+  }
 
   const weekData = useMemo(() => {
     const days: string[] = [];
@@ -106,13 +117,21 @@ export default function HydrationSleepView({ workspaceId }: { workspaceId: strin
             step={0.5}
             className="input flex-1"
             placeholder="Часов сна"
-            defaultValue={myToday?.sleepHours || ''}
-            onBlur={(e) => {
-              const val = Number(e.target.value);
-              if (val >= 0) setSleep(workspaceId, uid, today, val);
-            }}
+            value={sleepInput}
+            onChange={(e) => setSleepInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && saveSleep()}
           />
           <span className="text-xs text-neutral-400 shrink-0">часов</span>
+          <button
+            onClick={saveSleep}
+            disabled={!sleepInput}
+            className={`shrink-0 px-3 py-2 rounded-xl text-xs font-medium transition disabled:opacity-50 flex items-center gap-1 ${
+              sleepSaved ? 'bg-emerald-500 text-white' : 'bg-indigo-500 text-white hover:brightness-105'
+            }`}
+          >
+            {sleepSaved ? <Check size={13} /> : null}
+            {sleepSaved ? 'Сохранено' : 'Сохранить'}
+          </button>
         </div>
         <ResponsiveContainer width="100%" height={120}>
           <LineChart data={weekData}>
