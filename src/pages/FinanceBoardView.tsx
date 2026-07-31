@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Trash2, Wallet, TrendingUp, TrendingDown, PiggyBank, Pencil, Check, CalendarClock, ChevronLeft, ChevronRight, Calendar, Repeat, Pause, Play } from 'lucide-react';
+import { Plus, Trash2, Wallet, TrendingUp, TrendingDown, PiggyBank, Pencil, Check, CalendarClock, ChevronLeft, ChevronRight, Calendar, Repeat, Pause, Play, Sparkles } from 'lucide-react';
 import {
   PieChart,
   Pie,
@@ -20,6 +20,7 @@ import { useAuthStore } from '../store/authStore';
 import type { FinanceBoard, FinanceEntry, FinanceType, RecurringRule } from '../types';
 import { CURRENCIES, currencySymbol } from '../lib/currency';
 import { localDateStr } from '../lib/timezone';
+import FinanceAssistantModal from '../components/FinanceAssistantModal';
 
 const PIE_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#94a3b8'];
 const NEW_CATEGORY = '__new__';
@@ -74,6 +75,7 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
   const actor = { uid: firebaseUser?.uid || '', name: profile?.displayName || '' };
   const boardRules = useMemo(() => rules.filter((r) => r.boardId === board.id), [rules, board.id]);
   const [addingRule, setAddingRule] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
 
   useEffect(() => listenRules(workspaceId), [workspaceId, listenRules]);
   useEffect(() => {
@@ -177,6 +179,12 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
               <option key={code} value={code}>{c.label}</option>
             ))}
           </select>
+          <button
+            onClick={() => setAssistantOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white text-xs font-medium shrink-0"
+          >
+            <Sparkles size={13} /> ИИ-помощник
+          </button>
           <button
             onClick={() => setAdding(true)}
             className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white text-sm font-medium shadow-lg shadow-indigo-500/25"
@@ -483,6 +491,15 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
             setAddingRule(false);
           }}
           onClose={() => setAddingRule(false)}
+        />
+      )}
+
+      {assistantOpen && (
+        <FinanceAssistantModal
+          workspaceId={workspaceId}
+          boardId={board.id}
+          boardName={board.name}
+          onClose={() => setAssistantOpen(false)}
         />
       )}
     </div>

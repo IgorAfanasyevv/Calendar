@@ -1799,3 +1799,180 @@ async function handleTripAssistant(request) {
     hotelsNextPageToken: lastHotelsPageToken,
   };
 }
+
+exports.financeAssistant = onCall({ secrets: ['ANTHROPIC_API_KEY'] }, async (request) => {
+  try {
+    return await handleFinanceAssistant(request);
+  } catch (err) {
+    if (err instanceof HttpsError) throw err;
+    logger.error('financeAssistant error', err);
+    throw new HttpsError('internal', (err && err.message) || 'Внутренняя ошибка сервера');
+  }
+});
+
+async function handleFinanceAssistant(request) {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'Нужно войти в аккаунт.');
+
+  const { workspaceId, boardId, message, history } = request.data || {};
+  if (!workspaceId || !boardId || !message) throw new HttpsError('invalid-argument', 'Не хватает параметров.');
+
+  const info = await getMember(workspaceId, uid);
+  if (!info) throw new HttpsError('permission-denied', 'Вы не участник этого пространства.');
+  const actorName = (info.member && info.member.displayName) || 'Пользователь';
+
+  const boardRef = db.collection('workspaces').doc(workspaceId).collection('financeBoards').doc(boardId);
+  const boardSnap = await boardRef.get();
+  if (!boardSnap.exists) throw new HttpsError('not-found', 'Вкладка финансов не найдена.');
+  const board = boardSnap.data();
+  const currency = board.currency || 'RUB';
+
+  // Немного контекста: последние операции и текущие регулярные платежи этой вкладки
+  const entriesSnap = await boardRef.collection('entries').orderBy('date', 'desc').limit(20).get();
+  const recentEntries = entriesSnap.docs.map((d) => d.data());
+  const recentSummary =
+    recentEntries
+      .map((e) => `- ${e.date} ${e.type === 'income' ? '+' : '-'}${e.amount} ${currency} (${e.category}${e.note ? `, ${e.note}` : ''})`)
+      .join('\n') || 'пока нет операций';
+
+  const rulesSnap = await db
+    .collection('workspaces')
+    .doc(workspaceId)
+    .collection('recurringRules')
+    .where('boardId', '==', boardId)
+    .where('active', '==', true)
+    .get();
+  const recurringSummary =
+    rulesSnap.docs
+      .map((d) => {
+        const r = d.data();
+        return `- ${r.type === 'income' ? '+' : '-'}${r.amount} ${currency} каждое ${r.dayOfMonth}-е число (${r.category})`;
+      })
+      .join('\n') || 'пока нет регулярных платежей';
+
+  // Ближайшие незавершённые задачи — вдруг там что-то, что подразумевает будущие траты
+  const tasksSnap = await db
+    .collection('workspaces')
+    .doc(workspaceId)
+    .collection('tasks')
+    .where('done', '==', false)
+    .limit(15)
+    .get();
+  const tasksSummary =
+    tasksSnap.docs
+      .map((d) => d.data())
+      .filter((t) => t.date)
+      .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+      .slice(0, 10)
+      .map((t) => `- ${t.date}${t.time ? ` ${t.time}` : ''}: ${t.title}`)
+      .join('\n') || 'нет предстоящих задач с датой';
+
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+  const financeTools = [
+    { type: 'web_search_20250305', name: 'web_search' },
+    {
+      name: 'add_recurring_rule',
+      description:
+        'Добавить регулярный (ежемесячный) доход или расход в эту вкладку финансов — используй, когда пользователь согласился завести конкретный пункт бюджета (например зарплату или аренду).',
+      input_schema: {
+        type: 'object',
+        properties: {
+          type: { type: 'string', enum: ['income', 'expense'] },
+          amount: { type: 'number' },
+          category: { type: 'string' },
+          dayOfMonth: { type: 'number', description: 'Число месяца, 1-31' },
+          note: { type: 'string' },
+        },
+        required: ['type', 'amount', 'category', 'dayOfMonth'],
+      },
+    },
+    {
+      name: 'set_board_budget',
+      description: 'Установить месячный бюджет (лимит расходов) для этой вкладки финансов.',
+      input_schema: {
+        type: 'object',
+        properties: { amount: { type: 'number' } },
+        required: ['amount'],
+      },
+    },
+  ];
+
+  const systemPrompt =
+    `Ты — помощник по личным финансам в приложении-органайзере для пары, помогаешь именно с вкладкой финансов «${board.name}» (валюта: ${currency}). ` +
+    `Твоя задача — помочь составить реалистичный бюджет с учётом ЗАРПЛАТЫ пользователя, его страны/города проживания и того, сколько там реально стоят вещи. ` +
+    `Если пользователь не назвал зарплату, город/страну — сначала коротко спроси (можно один вопрос за раз, не засыпай анкетой). ` +
+    `Когда узнаешь город/страну — используй веб-поиск, чтобы найти РЕАЛЬНЫЕ актуальные ориентировочные цены на типичные категории расходов там ` +
+    `(аренда жилья, продукты, коммунальные, транспорт и т.п.) — не используй устаревшие или общие цифры "для всех стран", ищи именно под названный город. ` +
+    `Учитывай упомянутые пользователем крупные предстоящие траты и его ближайшие задачи (возможно, там есть события, подразумевающие расходы — свадьба, поездка, ремонт и т.п.): \n${tasksSummary}\n\n` +
+    `Текущие регулярные платежи на этой вкладке:\n${recurringSummary}\n\n` +
+    `Последние операции на этой вкладке:\n${recentSummary}\n\n` +
+    `Когда предложишь конкретную статью бюджета и пользователь согласится — используй инструмент add_recurring_rule, чтобы сразу завести её как повторяющийся платёж. ` +
+    `Если предлагаешь общий месячный лимit по вкладке — можешь использовать set_board_budget. ` +
+    `Отвечай по-русски, по-дружески, но по делу — не будь занудным финансовым консультантом, у собеседника (${actorName}) обычная семейная жизнь, а не корпорация.`;
+
+  const messages = [...(Array.isArray(history) ? history.slice(-10) : []), { role: 'user', content: message }];
+
+  let response = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 2048,
+    system: systemPrompt,
+    tools: financeTools,
+    messages,
+  });
+
+  let iterations = 0;
+  while (response.stop_reason === 'tool_use' && iterations < 6) {
+    const toolUseBlocks = response.content.filter((b) => b.type === 'tool_use');
+    const toolResults = [];
+    for (const block of toolUseBlocks) {
+      let result;
+      try {
+        if (block.name === 'add_recurring_rule') {
+          const ruleRef = db.collection('workspaces').doc(workspaceId).collection('recurringRules').doc();
+          await ruleRef.set(
+            stripUndefinedFields({
+              workspaceId,
+              boardId,
+              type: block.input.type,
+              amount: block.input.amount,
+              category: block.input.category,
+              dayOfMonth: block.input.dayOfMonth,
+              note: block.input.note,
+              active: true,
+              createdByName: actorName,
+              createdAt: Date.now(),
+            })
+          );
+          result = { ok: true, added: 'recurring_rule' };
+        } else if (block.name === 'set_board_budget') {
+          await boardRef.update({ monthlyBudget: block.input.amount });
+          result = { ok: true, budgetSet: block.input.amount };
+        } else {
+          result = { ok: false, error: `Неизвестный инструмент: ${block.name}` };
+        }
+      } catch (err) {
+        logger.error('Ошибка инструмента финансового помощника', err);
+        result = { ok: false, error: `Внутренняя ошибка: ${err && err.message}` };
+      }
+      toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(result) });
+    }
+    messages.push({ role: 'assistant', content: response.content });
+    messages.push({ role: 'user', content: toolResults });
+    response = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 2048,
+      system: systemPrompt,
+      tools: financeTools,
+      messages,
+    });
+    iterations++;
+  }
+
+  const finalTextBlocks = response.content.filter((b) => b.type === 'text');
+  const finalText = finalTextBlocks.map((b) => b.text).join('\n');
+  const updatedMessages =
+    finalTextBlocks.length > 0 ? messages.concat([{ role: 'assistant', content: finalTextBlocks }]) : messages;
+
+  return { text: finalText || 'Готово.', messages: updatedMessages };
+}
