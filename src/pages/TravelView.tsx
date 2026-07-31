@@ -248,7 +248,7 @@ function TripDetail({
           onClick={() => setTab('hotels')}
           className={`px-3 py-1.5 rounded-full text-xs font-medium transition ${tab === 'hotels' ? 'bg-indigo-500 text-white' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500'}`}
         >
-          Отели ⭐
+          Места ⭐
         </button>
       </div>
 
@@ -348,7 +348,7 @@ function TripDetail({
           ))}
           {(!trip.favoriteHotels || trip.favoriteHotels.length === 0) && (
             <p className="text-xs text-neutral-400 text-center py-8 col-span-2">
-              Пока нет избранных отелей — спросите у ИИ-помощника, и понравившиеся можно будет добавить сюда
+              Пока нет избранных мест — спросите у ИИ-помощника про отели, рестораны или красивые места, и понравившиеся можно будет добавить сюда
             </p>
           )}
         </div>

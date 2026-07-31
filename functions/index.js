@@ -1140,19 +1140,18 @@ function stripUndefinedFields(obj) {
   return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined));
 }
 
-/** Ищет отели через Google Places (New) — переиспользуется и инструментом ИИ, и кнопкой "Ещё". */
-async function searchPlacesHotels(location, apiKey, pageToken) {
+/** Ищет любые места через Google Places (New) по готовому текстовому запросу —
+ * переиспользуется и для отелей, и для достопримечательностей/ресторанов/красивых мест. */
+async function searchGooglePlaces(textQuery, apiKey, pageToken) {
   const placesRes = await fetch('https://places.googleapis.com/v1/places:searchText', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'X-Goog-Api-Key': apiKey,
       'X-Goog-FieldMask':
-        'places.id,places.displayName,places.formattedAddress,places.rating,places.photos,places.googleMapsUri,nextPageToken',
+        'places.id,places.displayName,places.formattedAddress,places.rating,places.photos,places.googleMapsUri,places.editorialSummary,nextPageToken',
     },
-    body: JSON.stringify(
-      stripUndefinedFields({ textQuery: `отели в ${location}`, maxResultCount: 6, pageToken })
-    ),
+    body: JSON.stringify(stripUndefinedFields({ textQuery, maxResultCount: 6, pageToken })),
   });
   const rawBody = await placesRes.text();
   if (!placesRes.ok) {
@@ -1160,21 +1159,22 @@ async function searchPlacesHotels(location, apiKey, pageToken) {
     return { ok: false, error: `Google Places вернул ошибку ${placesRes.status}: ${rawBody.slice(0, 300)}` };
   }
   const placesData = JSON.parse(rawBody);
-  const hotels = (placesData.places || []).slice(0, 6).map((p) => {
+  const places = (placesData.places || []).slice(0, 6).map((p) => {
     const photoUrls = (p.photos || [])
       .slice(0, 6)
       .map((photo) => `https://places.googleapis.com/v1/${photo.name}/media?maxWidthPx=800&key=${apiKey}`);
     return {
       id: p.id,
-      name: (p.displayName && p.displayName.text) || 'Отель',
+      name: (p.displayName && p.displayName.text) || 'Место',
       rating: p.rating,
       address: p.formattedAddress,
+      description: p.editorialSummary && p.editorialSummary.text,
       photoUrl: photoUrls[0],
       photoUrls: photoUrls.length > 0 ? photoUrls : undefined,
       mapsUrl: p.googleMapsUri,
     };
   });
-  return { ok: true, hotels, nextPageToken: placesData.nextPageToken };
+  return { ok: true, places, nextPageToken: placesData.nextPageToken };
 }
 
 /** Находит самый часто используемый цвет задач у конкретного человека — чтобы ИИ мог
@@ -1575,10 +1575,10 @@ exports.searchMoreHotels = onCall({ secrets: ['GOOGLE_PLACES_API_KEY'] }, async 
     const placesApiKey = process.env.GOOGLE_PLACES_API_KEY;
     if (!placesApiKey) throw new HttpsError('failed-precondition', 'Поиск отелей не настроен на сервере (нет ключа Google Places).');
 
-    const searchResult = await searchPlacesHotels(location, placesApiKey, pageToken);
+    const searchResult = await searchGooglePlaces(location, placesApiKey, pageToken);
     if (!searchResult.ok) throw new HttpsError('internal', searchResult.error);
 
-    return { hotels: searchResult.hotels, nextPageToken: searchResult.nextPageToken };
+    return { hotels: searchResult.places, nextPageToken: searchResult.nextPageToken };
   } catch (err) {
     if (err instanceof HttpsError) throw err;
     logger.error('searchMoreHotels error', err);
@@ -1651,6 +1651,23 @@ async function handleTripAssistant(request) {
         required: ['location'],
       },
     },
+    {
+      name: 'search_places',
+      description:
+        'Найти реальные достопримечательности/красивые места/рестораны/кафе/парки и т.п. через Google Places — возвращает настоящие названия, рейтинг, адрес, фото и (если есть) краткое описание места. ' +
+        'Используй это, когда пользователь спрашивает "куда сходить", "какие красивые места", "где поесть/отдохнуть", "что посмотреть" и т.п. — НЕ выдумывай места сам, всегда используй этот инструмент.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description:
+              'Полный поисковый запрос на русском, например: "красивые смотровые площадки в Тбилиси", "лучшие рестораны грузинской кухни в Тбилиси", "куда сходить вечером в Тбилиси". Обязательно включи город/район.',
+          },
+        },
+        required: ['query'],
+      },
+    },
   ];
 
   const itineraryText =
@@ -1672,7 +1689,9 @@ async function handleTripAssistant(request) {
     `а не выдумывать их самому. Если инструмент вернул ok:false — ОБЯЗАТЕЛЬНО процитируй пользователю ПОЛНЫЙ текст поля error ` +
     `из результата инструмента дословно (например "Ошибка: Google Places вернул ошибку 403: ..."), а не просто скажи "не сработало" ` +
     `— это техническая диагностика, она нужна пользователю, чтобы понять, что не так с настройкой сервиса. Только после точной цитаты ошибки предлагай альтернативы. ` +
-    `Про экскурсии/рестораны можно использовать обычный веб-поиск. ` +
+    `Про красивые места, куда сходить, где поесть/отдохнуть, достопримечательности — используй инструмент search_places (не выдумывай места сам). ` +
+    `Для каждого места в текстовом ответе коротко (1 предложение) напиши, чем оно интересно/красиво — используй описание из результата инструмента, ` +
+    `если оно есть, или своё общее знание о городе — так пользователю проще выбрать. Карточки с фото покажутся отдельно, не нужно их пересказывать подробно. ` +
     `Когда пользователь соглашается добавить что-то конкретное в маршрут — используй инструмент add_itinerary_items. ` +
     `Отвечай по-русски, кратко и по делу. Собеседника зовут ${actorName}.`;
 
@@ -1711,14 +1730,32 @@ async function handleTripAssistant(request) {
           if (!placesApiKey) {
             result = { ok: false, error: 'Поиск отелей не настроен на сервере (нет ключа Google Places).' };
           } else {
-            const searchResult = await searchPlacesHotels(block.input.location, placesApiKey);
+            const searchResult = await searchGooglePlaces(`отели в ${block.input.location}`, placesApiKey);
             if (!searchResult.ok) {
               result = searchResult;
             } else {
-              lastHotels = searchResult.hotels;
-              lastHotelsLocation = block.input.location;
+              lastHotels = searchResult.places;
+              lastHotelsLocation = `отели в ${block.input.location}`;
               lastHotelsPageToken = searchResult.nextPageToken;
-              result = { ok: true, hotels: searchResult.hotels.map((h) => ({ name: h.name, rating: h.rating, address: h.address })) };
+              result = { ok: true, hotels: searchResult.places.map((h) => ({ name: h.name, rating: h.rating, address: h.address })) };
+            }
+          }
+        } else if (block.name === 'search_places') {
+          const placesApiKey = process.env.GOOGLE_PLACES_API_KEY;
+          if (!placesApiKey) {
+            result = { ok: false, error: 'Поиск мест не настроен на сервере (нет ключа Google Places).' };
+          } else {
+            const searchResult = await searchGooglePlaces(block.input.query, placesApiKey);
+            if (!searchResult.ok) {
+              result = searchResult;
+            } else {
+              lastHotels = searchResult.places;
+              lastHotelsLocation = block.input.query;
+              lastHotelsPageToken = searchResult.nextPageToken;
+              result = {
+                ok: true,
+                places: searchResult.places.map((p) => ({ name: p.name, rating: p.rating, address: p.address, description: p.description })),
+              };
             }
           }
         } else {

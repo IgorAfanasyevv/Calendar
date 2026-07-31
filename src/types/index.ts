@@ -378,6 +378,7 @@ export interface FavoriteHotel {
   name: string;
   rating?: number;
   address?: string;
+  description?: string;
   photoUrl?: string;
   photoUrls?: string[];
   mapsUrl?: string;

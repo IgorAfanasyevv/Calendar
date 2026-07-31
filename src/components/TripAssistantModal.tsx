@@ -135,7 +135,7 @@ export default function TripAssistantModal({
               <p className="flex items-center gap-1.5 font-medium text-indigo-500">
                 <Sparkles size={13} /> Могу помочь спланировать поездку
               </p>
-              <p>Например: «Найди билеты из Алматы в Тбилиси на 20 августа» или «Предложи отели в центре» — для билетов дам ссылку на живые цены, для отелей покажу настоящие варианты с фото, которые можно добавить в избранное.</p>
+              <p>Например: «Найди билеты из Алматы в Тбилиси на 20 августа», «Предложи отели в центре» или «Какие красивые места посмотреть» — для билетов дам ссылку на живые цены, для отелей и мест покажу настоящие варианты с фото и описанием, которые можно добавить в избранное.</p>
             </div>
           )}
           {chat.map((m, i) => (
@@ -165,6 +165,9 @@ export default function TripAssistantModal({
                             <p className="text-[11px] text-neutral-400 truncate flex items-center gap-1">
                               <MapPin size={10} className="shrink-0" /> {hotel.address}
                             </p>
+                          )}
+                          {hotel.description && (
+                            <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-1 line-clamp-2">{hotel.description}</p>
                           )}
                           <div className="flex items-center gap-2 mt-1.5">
                             {hotel.mapsUrl && (
