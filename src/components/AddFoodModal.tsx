@@ -36,24 +36,15 @@ export default function AddFoodModal({
   onClose: () => void;
 }) {
   const { presets, addPreset, deletePreset } = useFoodStore();
-  const firstPreset = presets.length > 0 ? presets[0] : undefined;
-  const [selected, setSelected] = useState(editingEntry ? NEW_FOOD : firstPreset ? firstPreset.id : NEW_FOOD);
-  const [name, setName] = useState(editingEntry?.name || firstPreset?.name || '');
-  const [grams, setGrams] = useState(
-    editingEntry?.grams ? String(editingEntry.grams) : firstPreset?.grams ? String(firstPreset.grams) : ''
-  );
-  const [calories, setCalories] = useState(
-    editingEntry ? String(editingEntry.calories) : firstPreset ? String(firstPreset.calories) : ''
-  );
-  const [protein, setProtein] = useState(
-    editingEntry?.protein ? String(editingEntry.protein) : firstPreset?.protein ? String(firstPreset.protein) : ''
-  );
-  const [fat, setFat] = useState(
-    editingEntry?.fat ? String(editingEntry.fat) : firstPreset?.fat ? String(firstPreset.fat) : ''
-  );
-  const [carbs, setCarbs] = useState(
-    editingEntry?.carbs ? String(editingEntry.carbs) : firstPreset?.carbs ? String(firstPreset.carbs) : ''
-  );
+  // По умолчанию всегда открываем пустую форму "Своя еда" — даже если есть сохранённые
+  // блюда, не подставляем их автоматически. Выбрать готовое можно вручную из списка.
+  const [selected, setSelected] = useState(NEW_FOOD);
+  const [name, setName] = useState(editingEntry?.name || '');
+  const [grams, setGrams] = useState(editingEntry?.grams ? String(editingEntry.grams) : '');
+  const [calories, setCalories] = useState(editingEntry ? String(editingEntry.calories) : '');
+  const [protein, setProtein] = useState(editingEntry?.protein ? String(editingEntry.protein) : '');
+  const [fat, setFat] = useState(editingEntry?.fat ? String(editingEntry.fat) : '');
+  const [carbs, setCarbs] = useState(editingEntry?.carbs ? String(editingEntry.carbs) : '');
   const [saveAsPreset, setSaveAsPreset] = useState(false);
   const [saving, setSaving] = useState(false);
   const [ingredientsText, setIngredientsText] = useState('');
@@ -67,13 +58,13 @@ export default function AddFoodModal({
   const [perGramRates, setPerGramRates] = useState<{
     calories?: number; protein?: number; fat?: number; carbs?: number;
   } | null>(() => {
-    const base = editingEntry?.grams ? editingEntry : firstPreset?.grams ? firstPreset : null;
-    if (!base || !base.grams) return null;
+    if (!editingEntry?.grams) return null;
+    const base = editingEntry;
     return {
-      calories: base.calories != null ? base.calories / base.grams : undefined,
-      protein: base.protein != null ? base.protein / base.grams : undefined,
-      fat: base.fat != null ? base.fat / base.grams : undefined,
-      carbs: base.carbs != null ? base.carbs / base.grams : undefined,
+      calories: base.calories != null ? base.calories / base.grams! : undefined,
+      protein: base.protein != null ? base.protein / base.grams! : undefined,
+      fat: base.fat != null ? base.fat / base.grams! : undefined,
+      carbs: base.carbs != null ? base.carbs / base.grams! : undefined,
     };
   });
 
