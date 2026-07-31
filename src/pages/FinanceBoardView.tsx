@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Plus, Trash2, Wallet, TrendingUp, TrendingDown, PiggyBank, Pencil, Check, CalendarClock, ChevronLeft, ChevronRight, Calendar, Repeat, Pause, Play, Sparkles } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Plus, Trash2, Wallet, TrendingUp, TrendingDown, PiggyBank, Pencil, Check, CalendarClock, ChevronLeft, ChevronRight, Calendar, Sparkles } from 'lucide-react';
 import {
   PieChart,
   Pie,
@@ -15,9 +15,8 @@ import {
 } from 'recharts';
 import { useFinanceStore } from '../store/financeStore';
 import { useFinanceBoardStore } from '../store/financeBoardStore';
-import { useRecurringRuleStore } from '../store/recurringRuleStore';
 import { useAuthStore } from '../store/authStore';
-import type { FinanceBoard, FinanceEntry, FinanceType, RecurringRule } from '../types';
+import type { FinanceBoard, FinanceEntry, FinanceType } from '../types';
 import { CURRENCIES, currencySymbol } from '../lib/currency';
 import { localDateStr } from '../lib/timezone';
 import FinanceAssistantModal from '../components/FinanceAssistantModal';
@@ -70,18 +69,10 @@ function shiftMonth(key: string, delta: number): string {
 export default function FinanceBoardView({ workspaceId, board }: { workspaceId: string; board: FinanceBoard }) {
   const { entriesByBoard, addEntry, deleteEntry, payInstallment } = useFinanceStore();
   const { setBudget, setCurrency } = useFinanceBoardStore();
-  const { rules, listen: listenRules, addRule, toggleActive, deleteRule, checkAndCreateDue } = useRecurringRuleStore();
   const { firebaseUser, profile } = useAuthStore();
   const actor = { uid: firebaseUser?.uid || '', name: profile?.displayName || '' };
-  const boardRules = useMemo(() => rules.filter((r) => r.boardId === board.id), [rules, board.id]);
-  const [addingRule, setAddingRule] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
 
-  useEffect(() => listenRules(workspaceId), [workspaceId, listenRules]);
-  useEffect(() => {
-    if (firebaseUser) checkAndCreateDue(workspaceId, board.id, board.currency, actor);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId, board.id, rules.length, firebaseUser?.uid]);
   const allEntries = entriesByBoard[board.id] || [];
   // Предстоящие (запланированные, ещё не оплаченные) траты не участвуют в подсчёте
   // фактических расходов/бюджета/диаграмм — только в своём отдельном разделе.
@@ -390,47 +381,6 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
         )}
       </div>
 
-      {/* Повторяющиеся платежи — сами появляются каждый месяц (аренда, зарплата, подписки) */}
-      <div className="rounded-2xl glass p-4">
-        <div className="flex items-center justify-between mb-3">
-          <span className="flex items-center gap-1.5 text-sm font-semibold text-violet-600 dark:text-violet-400">
-            <Repeat size={15} /> Повторяющиеся платежи
-          </span>
-          <button
-            onClick={() => setAddingRule(true)}
-            className="flex items-center gap-1 text-[11px] font-medium text-violet-600 bg-violet-50 dark:bg-violet-500/10 px-2 py-1 rounded-lg"
-          >
-            <Plus size={12} /> Добавить
-          </button>
-        </div>
-        {boardRules.length > 0 ? (
-          <div className="space-y-1.5">
-            {boardRules.map((r) => (
-              <div key={r.id} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${r.active ? 'bg-violet-50/60 dark:bg-violet-500/10' : 'bg-neutral-100 dark:bg-neutral-800 opacity-60'}`}>
-                <span className={`w-2 h-2 rounded-full shrink-0 ${r.type === 'income' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm truncate">{r.category}{r.note ? ` — ${r.note}` : ''}</p>
-                  <p className="text-[11px] text-neutral-400">{r.dayOfMonth}-е число каждого месяца</p>
-                </div>
-                <span className={`text-sm font-semibold shrink-0 ${r.type === 'income' ? 'text-emerald-500' : 'text-rose-500'}`}>
-                  {r.type === 'income' ? '+' : '-'}{fmt(r.amount)}
-                </span>
-                <button onClick={() => toggleActive(r)} className="text-neutral-400 hover:text-violet-500 shrink-0" title={r.active ? 'Приостановить' : 'Возобновить'}>
-                  {r.active ? <Pause size={14} /> : <Play size={14} />}
-                </button>
-                <button onClick={() => deleteRule(r)} className="text-neutral-400 hover:text-rose-500 shrink-0">
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-xs text-neutral-400">
-            Нет регулярных платежей — добавьте, например, аренду или зарплату, чтобы они появлялись сами каждый месяц
-          </p>
-        )}
-      </div>
-
       {/* Список операций за выбранный месяц */}
       <div>
         <h3 className="text-xs font-semibold text-neutral-400 uppercase tracking-wide mb-2">
@@ -484,16 +434,6 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
         />
       )}
 
-      {addingRule && (
-        <AddRecurringRuleModal
-          onSave={async (data) => {
-            await addRule(workspaceId, { ...data, boardId: board.id }, actor);
-            setAddingRule(false);
-          }}
-          onClose={() => setAddingRule(false)}
-        />
-      )}
-
       {assistantOpen && (
         <FinanceAssistantModal
           workspaceId={workspaceId}
@@ -502,72 +442,6 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
           onClose={() => setAssistantOpen(false)}
         />
       )}
-    </div>
-  );
-}
-
-function AddRecurringRuleModal({
-  onSave,
-  onClose,
-}: {
-  onSave: (data: Partial<RecurringRule>) => Promise<void>;
-  onClose: () => void;
-}) {
-  const [type, setType] = useState<FinanceType>('expense');
-  const [amount, setAmount] = useState('');
-  const [category, setCategory] = useState('');
-  const [note, setNote] = useState('');
-  const [dayOfMonth, setDayOfMonth] = useState('1');
-  const [saving, setSaving] = useState(false);
-
-  async function handleSave() {
-    const val = Number(amount);
-    const day = Number(dayOfMonth);
-    if (!val || val <= 0 || !category.trim() || day < 1 || day > 31) return;
-    setSaving(true);
-    try {
-      await onSave({ type, amount: val, category: category.trim(), note, dayOfMonth: day });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4" onClick={onClose}>
-      <div
-        className="w-full max-w-sm rounded-3xl bg-white dark:bg-neutral-900 shadow-2xl p-6 space-y-3"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="text-lg font-semibold mb-1">Новый регулярный платёж</h2>
-        <div className="flex bg-neutral-100 dark:bg-neutral-800 rounded-xl p-1 text-sm font-medium">
-          <button
-            onClick={() => setType('expense')}
-            className={`flex-1 py-2 rounded-lg transition ${type === 'expense' ? 'bg-white dark:bg-neutral-700 shadow text-rose-500' : 'text-neutral-500'}`}
-          >
-            Расход
-          </button>
-          <button
-            onClick={() => setType('income')}
-            className={`flex-1 py-2 rounded-lg transition ${type === 'income' ? 'bg-white dark:bg-neutral-700 shadow text-emerald-500' : 'text-neutral-500'}`}
-          >
-            Доход
-          </button>
-        </div>
-        <input type="number" className="input" placeholder="Сумма" value={amount} onChange={(e) => setAmount(e.target.value)} />
-        <input className="input" placeholder="Категория (например: Аренда, Зарплата)" value={category} onChange={(e) => setCategory(e.target.value)} />
-        <input className="input" placeholder="Заметка (необязательно)" value={note} onChange={(e) => setNote(e.target.value)} />
-        <div>
-          <label className="block text-xs font-medium text-neutral-500 mb-1">Какого числа каждый месяц</label>
-          <input type="number" min={1} max={31} className="input" value={dayOfMonth} onChange={(e) => setDayOfMonth(e.target.value)} />
-        </div>
-        <button
-          onClick={handleSave}
-          disabled={saving || !amount || !category.trim()}
-          className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white font-medium text-sm disabled:opacity-50"
-        >
-          Создать
-        </button>
-      </div>
     </div>
   );
 }

@@ -1895,22 +1895,6 @@ async function handleFinanceAssistant(request) {
   const financeTools = [
     { type: 'web_search_20250305', name: 'web_search' },
     {
-      name: 'add_recurring_rule',
-      description:
-        'Добавить регулярный (ежемесячный) доход или расход в эту вкладку финансов — используй, когда пользователь согласился завести конкретный пункт бюджета (например зарплату или аренду).',
-      input_schema: {
-        type: 'object',
-        properties: {
-          type: { type: 'string', enum: ['income', 'expense'] },
-          amount: { type: 'number' },
-          category: { type: 'string' },
-          dayOfMonth: { type: 'number', description: 'Число месяца, 1-31' },
-          note: { type: 'string' },
-        },
-        required: ['type', 'amount', 'category', 'dayOfMonth'],
-      },
-    },
-    {
       name: 'set_board_budget',
       description: 'Установить месячный бюджет (лимит расходов) для этой вкладки финансов.',
       input_schema: {
@@ -1930,8 +1914,7 @@ async function handleFinanceAssistant(request) {
     `Учитывай упомянутые пользователем крупные предстоящие траты и его ближайшие задачи (возможно, там есть события, подразумевающие расходы — свадьба, поездка, ремонт и т.п.): \n${tasksSummary}\n\n` +
     `Текущие регулярные платежи на этой вкладке:\n${recurringSummary}\n\n` +
     `Последние операции на этой вкладке:\n${recentSummary}\n\n` +
-    `Когда предложишь конкретную статью бюджета и пользователь согласится — используй инструмент add_recurring_rule, чтобы сразу завести её как повторяющийся платёж. ` +
-    `Если предлагаешь общий месячный лимit по вкладке — можешь использовать set_board_budget. ` +
+    `Если предлагаешь общий месячный лимит по вкладке — можешь использовать set_board_budget, чтобы сразу его выставить. ` +
     `Отвечай по-русски, по-дружески, но по делу — не будь занудным финансовым консультантом, у собеседника (${actorName}) обычная семейная жизнь, а не корпорация.`;
 
   const messages = [...(Array.isArray(history) ? history.slice(-10) : []), { role: 'user', content: message }];
@@ -1951,24 +1934,7 @@ async function handleFinanceAssistant(request) {
     for (const block of toolUseBlocks) {
       let result;
       try {
-        if (block.name === 'add_recurring_rule') {
-          const ruleRef = db.collection('workspaces').doc(workspaceId).collection('recurringRules').doc();
-          await ruleRef.set(
-            stripUndefinedFields({
-              workspaceId,
-              boardId,
-              type: block.input.type,
-              amount: block.input.amount,
-              category: block.input.category,
-              dayOfMonth: block.input.dayOfMonth,
-              note: block.input.note,
-              active: true,
-              createdByName: actorName,
-              createdAt: Date.now(),
-            })
-          );
-          result = { ok: true, added: 'recurring_rule' };
-        } else if (block.name === 'set_board_budget') {
+        if (block.name === 'set_board_budget') {
           await boardRef.update({ monthlyBudget: block.input.amount });
           result = { ok: true, budgetSet: block.input.amount };
         } else {
