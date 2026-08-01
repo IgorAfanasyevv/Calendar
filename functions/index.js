@@ -1027,18 +1027,27 @@ const ASSISTANT_TOOLS = [
   },
   {
     name: 'update_task',
-    description: 'Изменить существующую задачу (найди по названию среди активных задач в контексте) — например, поменять цвет, категорию, приоритет, дату, время или исполнителя.',
+    description:
+      'Изменить существующую задачу — например, поменять цвет, категорию, приоритет, дату, время или исполнителя. ' +
+      'ВАЖНО: если по названию находится НЕСКОЛЬКО задач (например повторяющаяся серия "каждую среду") — изменение применится СРАЗУ КО ВСЕМ найденным, это одно действие, не нужно вызывать инструмент много раз.',
     input_schema: {
       type: 'object',
       properties: {
-        title: { type: 'string', description: 'Точное или похожее название задачи, которую нужно найти' },
+        title: { type: 'string', description: 'Точное или похожее название задачи, которую нужно найти (или всей серии одноимённых задач)' },
         new_title: { type: 'string', description: 'Новое название, если нужно переименовать' },
         color: {
           type: 'string',
           description:
             'Новый цвет — одно из точных значений: #6366f1 (индиго), #ec4899 (розовый), #f59e0b (янтарный), #10b981 (изумрудный), #3b82f6 (синий), #8b5cf6 (фиолетовый), #ef4444 (красный), #14b8a6 (бирюзовый), #f97316 (оранжевый), #84cc16 (лайм), gradient-heart (градиент индиго-розовый, как сердечко в логотипе — используй, если попросят "цвет как в логотипе"/"градиент"/"сердечко").',
         },
-        date: { type: 'string', description: 'Новая дата YYYY-MM-DD' },
+        date: { type: 'string', description: 'Новая дата YYYY-MM-DD — используй, если нужно переставить на ОДНУ конкретную дату (не для серии на разные дни)' },
+        shift_days: {
+          type: 'number',
+          description:
+            'Сдвинуть дату КАЖДОЙ найденной задачи на N дней относительно её собственной текущей даты — используй именно это для запросов вида ' +
+            '"перенеси все задачи X со среды на вторник" (там shift_days = -1, т.к. вторник на день раньше среды) или "перенеси на день позже" (shift_days = 1). ' +
+            'Так серия из разных дат сдвинется вся сразу, сохраняя день недели/паттерн.',
+        },
         time: { type: 'string', description: 'Новое время HH:mm' },
         end_time: { type: 'string', description: 'Новое время окончания HH:mm, если нужен диапазон (например "с 6 до 18")' },
         category: { type: 'string' },
@@ -1050,10 +1059,12 @@ const ASSISTANT_TOOLS = [
   },
   {
     name: 'delete_task',
-    description: 'Удалить задачу (найди по названию среди активных задач в контексте).',
+    description:
+      'Удалить задачу (найди по названию среди активных задач в контексте). ВАЖНО: если по названию находится НЕСКОЛЬКО ' +
+      'задач (например повторяющаяся серия "каждую среду") — удалятся СРАЗУ ВСЕ найденные, это одно действие, не нужно вызывать инструмент много раз подряд.',
     input_schema: {
       type: 'object',
-      properties: { title: { type: 'string', description: 'Точное или похожее название задачи' } },
+      properties: { title: { type: 'string', description: 'Точное или похожее название задачи (или всей серии одноимённых задач)' } },
       required: ['title'],
     },
   },
@@ -1582,41 +1593,65 @@ async function executeAssistantTool(name, input, ctx) {
 
   if (name === 'update_task') {
     const tasksSnap = await db.collection('workspaces').doc(workspaceId).collection('tasks').where('done', '==', false).get();
-    const match = tasksSnap.docs.find((d) => (d.data().title || '').toLowerCase().includes((input.title || '').toLowerCase()));
-    if (!match) return { ok: false, error: `Задача «${input.title}» не найдена` };
+    const matches = tasksSnap.docs.filter((d) => (d.data().title || '').toLowerCase().includes((input.title || '').toLowerCase()));
+    if (matches.length === 0) return { ok: false, error: `Задача «${input.title}» не найдена` };
 
-    let durationMinutes;
-    const effectiveStartTime = input.time || match.data().time;
-    if (input.end_time && effectiveStartTime) {
-      const [sh, sm] = effectiveStartTime.split(':').map(Number);
-      const [eh, em] = input.end_time.split(':').map(Number);
-      let diff = eh * 60 + em - (sh * 60 + sm);
-      if (diff <= 0) diff += 24 * 60;
-      durationMinutes = diff;
-    }
+    const batch = db.batch();
+    matches.forEach((docSnap) => {
+      const existing = docSnap.data();
 
-    const patch = stripUndefinedFields({
-      title: input.new_title,
-      color: input.color,
-      date: input.date,
-      time: input.time,
-      durationMinutes,
-      category: input.category,
-      priority: input.priority,
-      assignee: input.assignee,
+      let durationMinutes;
+      const effectiveStartTime = input.time || existing.time;
+      if (input.end_time && effectiveStartTime) {
+        const [sh, sm] = effectiveStartTime.split(':').map(Number);
+        const [eh, em] = input.end_time.split(':').map(Number);
+        let diff = eh * 60 + em - (sh * 60 + sm);
+        if (diff <= 0) diff += 24 * 60;
+        durationMinutes = diff;
+      }
+
+      // shift_days — сдвинуть дату КАЖДОЙ подходящей задачи на N дней относительно её
+      // собственной текущей даты (например "перенеси все со среды на вторник" = -1 день).
+      let newDate = input.date;
+      if (input.shift_days != null && existing.date) {
+        const d = new Date(existing.date + 'T00:00:00Z');
+        d.setUTCDate(d.getUTCDate() + input.shift_days);
+        newDate = d.toISOString().slice(0, 10);
+      }
+
+      const patch = stripUndefinedFields({
+        title: input.new_title,
+        color: input.color,
+        date: newDate,
+        time: input.time,
+        durationMinutes,
+        category: input.category,
+        priority: input.priority,
+        assignee: input.assignee,
+      });
+
+      // Если поменялись дата и/или время — пересчитываем точный момент для напоминаний/календаря
+      const finalDate = patch.date || existing.date;
+      const finalTime = patch.time || existing.time;
+      if ((patch.date || patch.time) && finalDate && finalTime && timezone) {
+        patch.dueAtUtc = zonedTimeToUtc(finalDate, finalTime, timezone);
+      }
+
+      if (Object.keys(patch).length > 0) batch.update(docSnap.ref, patch);
     });
-    if (Object.keys(patch).length === 0) return { ok: false, error: 'Не указано, что именно менять' };
+    await batch.commit();
 
-    await match.ref.update(patch);
-    return { ok: true, updated: 'task', title: input.new_title || match.data().title, changes: Object.keys(patch) };
+    return { ok: true, updated: 'task', title: input.new_title || matches[0].data().title, count: matches.length };
   }
 
   if (name === 'delete_task') {
     const tasksSnap = await db.collection('workspaces').doc(workspaceId).collection('tasks').where('done', '==', false).get();
-    const match = tasksSnap.docs.find((d) => (d.data().title || '').toLowerCase().includes((input.title || '').toLowerCase()));
-    if (!match) return { ok: false, error: `Задача «${input.title}» не найдена` };
-    await match.ref.delete();
-    return { ok: true, deleted: 'task', title: match.data().title };
+    const matches = tasksSnap.docs.filter((d) => (d.data().title || '').toLowerCase().includes((input.title || '').toLowerCase()));
+    if (matches.length === 0) return { ok: false, error: `Задача «${input.title}» не найдена` };
+    const batch = db.batch();
+    matches.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+    return { ok: true, deleted: 'task', title: matches[0].data().title, count: matches.length };
   }
 
   if (name === 'delete_shopping_item') {
@@ -1732,6 +1767,7 @@ async function handleAssistant(request) {
     `Ты можешь отвечать на вопросы по данным пространства и создавать/дополнять записи через инструменты. ` +
     `У тебя есть доступ к веб-поиску — используй его, когда нужны реальные актуальные данные, которых нет в контексте (например, точный список фильмов определённой франшизы, актёрский состав, даты выхода), прежде чем добавлять что-то в "Смотрим" или отвечать на фактический вопрос. ` +
     `Если пользователь просит что-то создать, изменить или удалить — используй подходящий инструмент, не выдумывай, что уже сделано, пока реально не вызвал инструмент. Перед удалением можешь кратко уточнить, если не уверен(а), что нашёл именно нужный элемент, но если запрос однозначный — просто удаляй/меняй. ` +
+    `Инструменты удаления/изменения задач сами находят и обрабатывают ВСЕ подходящие по названию задачи за один вызов и возвращают поле count с точным числом затронутых — всегда называй пользователю именно это число из результата инструмента, не предполагай и не округляй сам. ` +
     `Если пользователь просит ПОВТОРЯЮЩУЮСЯ задачу (например "каждую среду до конца года", "каждый день на этой неделе") — используй в create_task поля repeat_frequency + repeat_until вместе с date (первое вхождение), сервер сам создаст все нужные повторения одним действием, не нужно вызывать create_task много раз подряд самому. Если пользователь не назвал явную дату окончания повтора ("до конца года", "до июня") — переведи это в конкретную дату (например "до конца года" = 31 декабря текущего года). ` +
     `Если данных не хватает для действия (например, не нашлась вкладка финансов или цель) — прямо скажи об этом. ` +
     `Отвечай по-русски, кратко и по-дружески.\n\n${context}`;
