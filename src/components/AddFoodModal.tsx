@@ -50,6 +50,8 @@ export default function AddFoodModal({
   const [ingredientsText, setIngredientsText] = useState('');
   const [recognizingPhoto, setRecognizingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
+  const [presetSearch, setPresetSearch] = useState('');
+  const [presetDropdownOpen, setPresetDropdownOpen] = useState(false);
 
   // Коэффициенты "на грамм" — если заданы, изменение граммовки пересчитывает
   // калории/БЖУ пропорционально. Появляются после фото/выбора готового блюда/
@@ -216,28 +218,64 @@ export default function AddFoodModal({
         {photoError && <p className="text-[11px] text-rose-500 -mt-1">{photoError}</p>}
 
         {!editingEntry && presets.length > 0 && (
-          <div className="flex gap-2">
-            <select className="input flex-1" value={selected} onChange={(e) => handleSelectChange(e.target.value)}>
-              {presets.map((p) => (
-                <option key={p.id} value={p.id}>{p.name} — {p.calories} ккал{p.grams ? ` (${p.grams} г)` : ''}</option>
-              ))}
-              <option value={NEW_FOOD}>+ Своя еда...</option>
-            </select>
-            {selected !== NEW_FOOD && (
-              <button
-                onClick={() => {
-                  const preset = presets.find((p) => p.id === selected);
-                  if (preset && confirm(`Удалить «${preset.name}» из сохранённой еды?`)) {
-                    deletePreset(preset);
-                    handleSelectChange(presets.find((p) => p.id !== selected)?.id || NEW_FOOD);
-                  }
-                }}
-                className="shrink-0 w-10 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-neutral-400 hover:text-rose-500 flex items-center justify-center"
-                title="Удалить это сохранённое блюдо"
-              >
-                <Trash2 size={15} />
-              </button>
-            )}
+          <div className="relative">
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <input
+                  className="input"
+                  placeholder="Искать среди сохранённой еды..."
+                  value={selected === NEW_FOOD ? presetSearch : presets.find((p) => p.id === selected)?.name || ''}
+                  onFocus={() => {
+                    setPresetDropdownOpen(true);
+                    if (selected !== NEW_FOOD) setPresetSearch('');
+                  }}
+                  onChange={(e) => {
+                    setPresetSearch(e.target.value);
+                    if (selected !== NEW_FOOD) handleSelectChange(NEW_FOOD);
+                    setPresetDropdownOpen(true);
+                  }}
+                  onBlur={() => setTimeout(() => setPresetDropdownOpen(false), 150)}
+                />
+                {presetDropdownOpen && (
+                  <div className="absolute z-10 mt-1 w-full max-h-56 overflow-y-auto rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 shadow-lg">
+                    {presets
+                      .filter((p) => p.name.toLowerCase().includes(presetSearch.toLowerCase()))
+                      .map((p) => (
+                        <button
+                          key={p.id}
+                          onMouseDown={() => {
+                            handleSelectChange(p.id);
+                            setPresetSearch('');
+                            setPresetDropdownOpen(false);
+                          }}
+                          className="w-full text-left px-3 py-2 text-xs hover:bg-neutral-100 dark:hover:bg-neutral-800 border-b border-neutral-100 dark:border-neutral-800 last:border-0"
+                        >
+                          <div className="font-medium truncate">{p.name}</div>
+                          <div className="text-neutral-400">{p.calories} ккал{p.grams ? ` · ${p.grams} г` : ''}</div>
+                        </button>
+                      ))}
+                    {presets.filter((p) => p.name.toLowerCase().includes(presetSearch.toLowerCase())).length === 0 && (
+                      <p className="px-3 py-2 text-xs text-neutral-400">Ничего не найдено</p>
+                    )}
+                  </div>
+                )}
+              </div>
+              {selected !== NEW_FOOD && (
+                <button
+                  onClick={() => {
+                    const preset = presets.find((p) => p.id === selected);
+                    if (preset && confirm(`Удалить «${preset.name}» из сохранённой еды?`)) {
+                      deletePreset(preset);
+                      handleSelectChange(NEW_FOOD);
+                    }
+                  }}
+                  className="shrink-0 w-10 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-neutral-400 hover:text-rose-500 flex items-center justify-center"
+                  title="Удалить это сохранённое блюдо"
+                >
+                  <Trash2 size={15} />
+                </button>
+              )}
+            </div>
           </div>
         )}
 
