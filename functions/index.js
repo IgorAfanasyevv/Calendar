@@ -818,7 +818,8 @@ const ASSISTANT_TOOLS = [
   {
     name: 'add_watchlist_items',
     description:
-      'Добавить один или несколько фильмов/сериалов в раздел "Смотрим" (список "хотим посмотреть"). Если нужно найти актуальный список реальных названий (например "все фильмы про Человека-паука с определённым актёром") — сначала поищи в интернете точные названия, и только потом вызови этот инструмент с найденными названиями.',
+      'Добавить один или несколько фильмов/сериалов в раздел "Смотрим" (список "хотим посмотреть"). Если нужно найти актуальный список реальных названий (например "все фильмы про Человека-паука с определённым актёром") — сначала поищи в интернете точные названия, и только потом вызови этот инструмент с найденными названиями. ' +
+      'Для КАЖДОГО элемента укажи search_title — оригинальное/английское название (нужно для точного поиска постера, база постеров плохо ищет по русским названиям).',
     input_schema: {
       type: 'object',
       properties: {
@@ -827,7 +828,8 @@ const ASSISTANT_TOOLS = [
           items: {
             type: 'object',
             properties: {
-              title: { type: 'string' },
+              title: { type: 'string', description: 'Название для отображения на карточке (обычно по-русски)' },
+              search_title: { type: 'string', description: 'Оригинальное/английское название — для точного поиска постера' },
               type: { type: 'string', enum: ['movie', 'series', 'other'] },
             },
             required: ['title'],
@@ -842,14 +844,24 @@ const ASSISTANT_TOOLS = [
     description:
       'Найти и добавить постеры фильмам/сериалам, которые уже есть в разделе "Смотрим", но у них ещё нет обложки ' +
       '(например добавлены до появления этой функции, или вручную без постера). Используй, когда пользователь просит ' +
-      '"добавь обложки к уже добавленным фильмам" и т.п. Если конкретные названия не указаны — обработает ВСЕ карточки без постера сразу.',
+      '"добавь обложки к уже добавленным фильмам" и т.п. ВАЖНО: база постеров (TMDB) плохо ищет по русским названиям — ' +
+      'для КАЖДОГО фильма/сериала укажи его настоящее оригинальное/английское название в search_title (ты его знаешь), ' +
+      'а в title — точное название карточки как оно указано в контексте (по-русски), чтобы найти нужную запись. ' +
+      'Если не знаешь оригинальное название конкретного фильма — сначала поищи в интернете. Если items не переданы — ' +
+      'обработает ВСЕ карточки без постера, пытаясь искать напрямую по их текущему названию (менее надёжно).',
     input_schema: {
       type: 'object',
       properties: {
-        titles: {
+        items: {
           type: 'array',
-          items: { type: 'string' },
-          description: 'Конкретные названия, если нужно обновить только их. Если не указано — обрабатываются все карточки без постера.',
+          items: {
+            type: 'object',
+            properties: {
+              title: { type: 'string', description: 'Название карточки как оно есть в "Смотрим" (по-русски) — чтобы найти нужную запись' },
+              search_title: { type: 'string', description: 'Оригинальное/английское название этого фильма/сериала — для точного поиска постера' },
+            },
+            required: ['title', 'search_title'],
+          },
         },
       },
     },
@@ -1428,13 +1440,22 @@ async function fetchTmdbPoster(title, type, apiKey) {
   if (!apiKey) return null;
   try {
     const endpoint = type === 'series' ? 'tv' : type === 'movie' ? 'movie' : 'multi';
-    const url = `https://api.themoviedb.org/3/search/${endpoint}?api_key=${apiKey}&query=${encodeURIComponent(title)}&language=ru-RU`;
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const data = await res.json();
-    const result = (data.results || [])[0];
-    if (!result || !result.poster_path) return null;
-    return `https://image.tmdb.org/t/p/w500${result.poster_path}`;
+    const tryFetch = async (ep) => {
+      const url = `https://api.themoviedb.org/3/search/${ep}?api_key=${apiKey}&query=${encodeURIComponent(title)}`;
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const data = await res.json();
+      const result = (data.results || []).find((r) => r.poster_path);
+      return result ? result.poster_path : null;
+    };
+
+    let posterPath = await tryFetch(endpoint);
+    // Если точный тип (фильм/сериал) не дал результата — пробуем универсальный поиск на всякий случай
+    if (!posterPath && endpoint !== 'multi') {
+      posterPath = await tryFetch('multi');
+    }
+    if (!posterPath) return null;
+    return `https://image.tmdb.org/t/p/w500${posterPath}`;
   } catch (err) {
     logger.error('Не удалось получить постер TMDB', err);
     return null;
@@ -1448,7 +1469,7 @@ async function fetchTmdbPoster(title, type, apiKey) {
 
     const tmdbApiKey = process.env.TMDB_API_KEY;
     const posterUrls = await Promise.all(
-      validItems.map((item) => fetchTmdbPoster(item.title.trim(), item.type || 'movie', tmdbApiKey))
+      validItems.map((item) => fetchTmdbPoster(item.search_title || item.title.trim(), item.type || 'movie', tmdbApiKey))
     );
 
     const batch = db.batch();
@@ -1476,15 +1497,10 @@ async function fetchTmdbPoster(title, type, apiKey) {
   if (name === 'add_posters_to_existing_watchlist') {
     const col = db.collection('workspaces').doc(workspaceId).collection('watchlist');
     const snap = await col.get();
-    let candidates = snap.docs.filter((d) => !d.data().posterUrl);
+    const withoutPoster = snap.docs.filter((d) => !d.data().posterUrl);
 
-    if (Array.isArray(input.titles) && input.titles.length > 0) {
-      const titlesLower = input.titles.map((t) => t.toLowerCase());
-      candidates = candidates.filter((d) => titlesLower.some((t) => (d.data().title || '').toLowerCase().includes(t)));
-    }
-
-    if (candidates.length === 0) {
-      return { ok: true, updated: 0, message: 'Обновлять нечего — либо у всех уже есть постеры, либо не найдено совпадений по названию' };
+    if (withoutPoster.length === 0) {
+      return { ok: true, updated: 0, message: 'Обновлять нечего — у всех карточек уже есть постеры' };
     }
 
     const tmdbApiKey = process.env.TMDB_API_KEY;
@@ -1492,24 +1508,44 @@ async function fetchTmdbPoster(title, type, apiKey) {
       return { ok: false, error: 'Поиск постеров не настроен на сервере (нет ключа TMDB).' };
     }
 
+    const items = Array.isArray(input.items) ? input.items : [];
+
+    // Сопоставляем переданные пары title/search_title с реальными карточками по названию
+    let targets;
+    if (items.length > 0) {
+      targets = items
+        .map((item) => {
+          const doc = withoutPoster.find((d) => (d.data().title || '').toLowerCase().includes((item.title || '').toLowerCase()));
+          return doc ? { doc, searchTitle: item.search_title || item.title } : null;
+        })
+        .filter(Boolean);
+    } else {
+      // Без явных пар — пробуем искать напрямую по текущему названию карточки (менее надёжно для русских названий)
+      targets = withoutPoster.map((doc) => ({ doc, searchTitle: doc.data().title }));
+    }
+
+    if (targets.length === 0) {
+      return { ok: true, updated: 0, message: 'Не нашлось карточек без постера, совпадающих с переданными названиями' };
+    }
+
     const posterUrls = await Promise.all(
-      candidates.map((d) => fetchTmdbPoster(d.data().title, d.data().type, tmdbApiKey))
+      targets.map((t) => fetchTmdbPoster(t.searchTitle, t.doc.data().type, tmdbApiKey))
     );
 
     const batch = db.batch();
     let updatedCount = 0;
     const notFoundTitles = [];
-    candidates.forEach((d, i) => {
+    targets.forEach((t, i) => {
       if (posterUrls[i]) {
-        batch.update(d.ref, { posterUrl: posterUrls[i] });
+        batch.update(t.doc.ref, { posterUrl: posterUrls[i] });
         updatedCount++;
       } else {
-        notFoundTitles.push(d.data().title);
+        notFoundTitles.push(t.doc.data().title);
       }
     });
     await batch.commit();
 
-    return { ok: true, updated: updatedCount, checked: candidates.length, notFound: notFoundTitles };
+    return { ok: true, updated: updatedCount, checked: targets.length, notFound: notFoundTitles };
   }
 
   return { ok: false, error: `Неизвестный инструмент: ${name}` };
