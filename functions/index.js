@@ -1449,28 +1449,40 @@ async function executeAssistantTool(name, input, ctx) {
 
 /** Ищет постер фильма/сериала через TMDB (The Movie Database) по названию. */
 async function fetchTmdbPoster(title, type, apiKey) {
-  if (!apiKey) return null;
+  if (!apiKey) return { url: null, error: 'Ключ TMDB не настроен на сервере' };
   try {
     const endpoint = type === 'series' ? 'tv' : type === 'movie' ? 'movie' : 'multi';
     const tryFetch = async (ep) => {
       const url = `https://api.themoviedb.org/3/search/${ep}?api_key=${apiKey}&query=${encodeURIComponent(title)}`;
       const res = await fetch(url);
-      if (!res.ok) return null;
-      const data = await res.json();
+      const bodyText = await res.text();
+      if (!res.ok) {
+        logger.error('TMDB вернул ошибку', { status: res.status, body: bodyText.slice(0, 300), title, endpoint: ep });
+        return { posterPath: null, httpError: `TMDB ${res.status}: ${bodyText.slice(0, 200)}` };
+      }
+      let data;
+      try {
+        data = JSON.parse(bodyText);
+      } catch {
+        return { posterPath: null, httpError: `TMDB вернул не-JSON ответ: ${bodyText.slice(0, 200)}` };
+      }
       const result = (data.results || []).find((r) => r.poster_path);
-      return result ? result.poster_path : null;
+      return { posterPath: result ? result.poster_path : null, httpError: null };
     };
 
-    let posterPath = await tryFetch(endpoint);
+    let { posterPath, httpError } = await tryFetch(endpoint);
     // Если точный тип (фильм/сериал) не дал результата — пробуем универсальный поиск на всякий случай
-    if (!posterPath && endpoint !== 'multi') {
-      posterPath = await tryFetch('multi');
+    if (!posterPath && !httpError && endpoint !== 'multi') {
+      const second = await tryFetch('multi');
+      posterPath = second.posterPath;
+      httpError = second.httpError;
     }
-    if (!posterPath) return null;
-    return `https://image.tmdb.org/t/p/w500${posterPath}`;
+    if (httpError) return { url: null, error: httpError };
+    if (!posterPath) return { url: null, error: null }; // реально не нашлось — не ошибка сервиса
+    return { url: `https://image.tmdb.org/t/p/w500${posterPath}`, error: null };
   } catch (err) {
     logger.error('Не удалось получить постер TMDB', err);
-    return null;
+    return { url: null, error: `Внутренняя ошибка: ${err && err.message}` };
   }
 }
 
@@ -1480,9 +1492,10 @@ async function fetchTmdbPoster(title, type, apiKey) {
     const validItems = list.filter((item) => item.title && item.title.trim());
 
     const tmdbApiKey = process.env.TMDB_API_KEY;
-    const posterUrls = await Promise.all(
+    const posterResults = await Promise.all(
       validItems.map((item) => fetchTmdbPoster(item.search_title || item.title.trim(), item.type || 'movie', tmdbApiKey))
     );
+    const firstError = posterResults.find((r) => r.error)?.error;
 
     const batch = db.batch();
     const col = db.collection('workspaces').doc(workspaceId).collection('watchlist');
@@ -1495,7 +1508,7 @@ async function fetchTmdbPoster(title, type, apiKey) {
           title: item.title.trim(),
           type: item.type || 'movie',
           status: 'to_watch',
-          posterUrl: posterUrls[i] || undefined,
+          posterUrl: posterResults[i].url || undefined,
           createdBy: uid,
           createdByName: actorName,
           createdAt: Date.now(),
@@ -1503,7 +1516,14 @@ async function fetchTmdbPoster(title, type, apiKey) {
       );
     });
     await batch.commit();
-    return { ok: true, created: 'watchlist_items', count: validItems.length, titles: validItems.map((i) => i.title) };
+    return {
+      ok: true,
+      created: 'watchlist_items',
+      count: validItems.length,
+      titles: validItems.map((i) => i.title),
+      postersFound: posterResults.filter((r) => r.url).length,
+      posterServiceError: firstError || undefined,
+    };
   }
 
   if (name === 'add_posters_to_existing_watchlist') {
@@ -1540,16 +1560,17 @@ async function fetchTmdbPoster(title, type, apiKey) {
       return { ok: true, updated: 0, message: 'Не нашлось карточек без постера, совпадающих с переданными названиями' };
     }
 
-    const posterUrls = await Promise.all(
+    const posterResults = await Promise.all(
       targets.map((t) => fetchTmdbPoster(t.searchTitle, t.doc.data().type, tmdbApiKey))
     );
+    const firstError = posterResults.find((r) => r.error)?.error;
 
     const batch = db.batch();
     let updatedCount = 0;
     const notFoundTitles = [];
     targets.forEach((t, i) => {
-      if (posterUrls[i]) {
-        batch.update(t.doc.ref, { posterUrl: posterUrls[i] });
+      if (posterResults[i].url) {
+        batch.update(t.doc.ref, { posterUrl: posterResults[i].url });
         updatedCount++;
       } else {
         notFoundTitles.push(t.doc.data().title);
@@ -1557,7 +1578,13 @@ async function fetchTmdbPoster(title, type, apiKey) {
     });
     await batch.commit();
 
-    return { ok: true, updated: updatedCount, checked: targets.length, notFound: notFoundTitles };
+    return {
+      ok: true,
+      updated: updatedCount,
+      checked: targets.length,
+      notFound: notFoundTitles,
+      posterServiceError: firstError || undefined,
+    };
   }
 
   return { ok: false, error: `Неизвестный инструмент: ${name}` };
@@ -1590,6 +1617,7 @@ async function handleAssistant(request) {
     `У тебя есть доступ к веб-поиску — используй его, когда нужны реальные актуальные данные, которых нет в контексте (например, точный список фильмов определённой франшизы, актёрский состав, даты выхода), прежде чем добавлять что-то в "Смотрим" или отвечать на фактический вопрос. ` +
     `Если пользователь просит что-то создать, изменить или удалить — используй подходящий инструмент, не выдумывай, что уже сделано, пока реально не вызвал инструмент. Перед удалением можешь кратко уточнить, если не уверен(а), что нашёл именно нужный элемент, но если запрос однозначный — просто удаляй/меняй. ` +
     `Не спрашивай подтверждение для действий с низким риском, которые сам умеешь выполнить без человека (например перевод названия на английский, поиск фактов) — если знаешь ответ, сразу используй его и вызывай инструмент, а не перечисляй варианты в чате в ожидании "да, добавь". Уточняй только когда реально не уверен(а) в конкретном элементе или запрос неоднозначен. ` +
+    `Если инструмент добавления постеров вернул поле posterServiceError — ОБЯЗАТЕЛЬНО процитируй пользователю его значение дословно (это реальная техническая ошибка сервиса TMDB, например неверный ключ), а не выдумывай общие предположения вроде "может быть проблема с индексацией" — если этого поля нет, но постеры всё равно не нашлись, тогда это значит именно "не нашлось в базе", так и скажи. ` +
     `Инструменты удаления/изменения задач сами находят и обрабатывают ВСЕ подходящие по названию задачи за один вызов и возвращают поле count с точным числом затронутых — всегда называй пользователю именно это число из результата инструмента, не предполагай и не округляй сам. ` +
     `Если пользователь просит ПОВТОРЯЮЩУЮСЯ задачу (например "каждую среду до конца года", "каждый день на этой неделе") — используй в create_task поля repeat_frequency + repeat_until вместе с date (первое вхождение), сервер сам создаст все нужные повторения одним действием, не нужно вызывать create_task много раз подряд самому. Если пользователь не назвал явную дату окончания повтора ("до конца года", "до июня") — переведи это в конкретную дату (например "до конца года" = 31 декабря текущего года). ` +
     `Если данных не хватает для действия (например, не нашлась вкладка финансов или цель) — прямо скажи об этом. ` +
