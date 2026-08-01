@@ -263,6 +263,7 @@ export interface Habit {
   name: string;
   icon: string; // lucide icon name, e.g. 'Droplet', 'BookOpen', 'Dumbbell'
   color: string;
+  assignee?: Assignee; // 'me' | 'partner' | 'together' — относительно создателя, как и у задач; по умолчанию 'together' (для старых привычек)
   createdBy: string;
   createdByName: string;
   createdAt: number;

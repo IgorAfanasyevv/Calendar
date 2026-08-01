@@ -5,7 +5,7 @@ import { useWorkspaceStore } from '../store/workspaceStore';
 import { useAuthStore } from '../store/authStore';
 import Modal from '../components/Modal';
 import { localDateStr } from '../lib/timezone';
-import type { Habit } from '../types';
+import type { Assignee, Habit } from '../types';
 
 const ICON_MAP: Record<string, typeof Sparkles> = {
   Droplet,
@@ -81,7 +81,14 @@ export default function HabitsView({ workspaceId }: { workspaceId: string }) {
             </div>
 
             <div className="space-y-3">
-              {members.map((m) => {
+              {members
+                .filter((m) => {
+                  const assignee = habit.assignee || 'together';
+                  if (assignee === 'together') return true;
+                  const isCreator = m.uid === habit.createdBy;
+                  return assignee === 'me' ? isCreator : !isCreator;
+                })
+                .map((m) => {
                 const streak = computeStreak(logs, habit.id, m.uid, today);
                 const isMe = m.uid === firebaseUser?.uid;
                 return (
@@ -144,10 +151,36 @@ function NewHabitForm({ onSave }: { onSave: (data: Partial<Habit>) => Promise<vo
   const [name, setName] = useState('');
   const [icon, setIcon] = useState(ICON_OPTIONS[0]);
   const [color, setColor] = useState(COLOR_OPTIONS[0]);
+  const [assignee, setAssignee] = useState<Assignee>('together');
+  const { workspace } = useWorkspaceStore();
+  const { firebaseUser, profile } = useAuthStore();
+  const myName = profile?.displayName || 'Я';
+  const partnerName = workspace?.members.find((m) => m.uid !== firebaseUser?.uid)?.displayName || 'Партнёр';
 
   return (
     <div className="space-y-3">
       <input className="input" placeholder="Например: Пить воду" value={name} onChange={(e) => setName(e.target.value)} />
+
+      <div>
+        <label className="block text-xs font-medium text-neutral-500 mb-1.5">Кто выполняет</label>
+        <div className="flex gap-2">
+          {([
+            ['me', myName],
+            ['partner', partnerName],
+            ['together', 'Вместе'],
+          ] as [Assignee, string][]).map(([val, label]) => (
+            <button
+              key={val}
+              onClick={() => setAssignee(val)}
+              className={`flex-1 py-2 rounded-xl text-xs font-medium transition ${
+                assignee === val ? 'bg-indigo-500 text-white' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div>
         <label className="block text-xs font-medium text-neutral-500 mb-1.5">Иконка</label>
@@ -182,7 +215,7 @@ function NewHabitForm({ onSave }: { onSave: (data: Partial<Habit>) => Promise<vo
 
       <button
         disabled={!name.trim()}
-        onClick={() => onSave({ name: name.trim(), icon, color })}
+        onClick={() => onSave({ name: name.trim(), icon, color, assignee })}
         className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white font-medium text-sm disabled:opacity-50"
       >
         Создать привычку
