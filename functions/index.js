@@ -837,6 +837,23 @@ const ASSISTANT_TOOLS = [
       required: ['items'],
     },
   },
+  {
+    name: 'add_posters_to_existing_watchlist',
+    description:
+      'Найти и добавить постеры фильмам/сериалам, которые уже есть в разделе "Смотрим", но у них ещё нет обложки ' +
+      '(например добавлены до появления этой функции, или вручную без постера). Используй, когда пользователь просит ' +
+      '"добавь обложки к уже добавленным фильмам" и т.п. Если конкретные названия не указаны — обработает ВСЕ карточки без постера сразу.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        titles: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Конкретные названия, если нужно обновить только их. Если не указано — обрабатываются все карточки без постера.',
+        },
+      },
+    },
+  },
 ];
 
 async function buildAssistantContext(workspaceId, uid, actorName) {
@@ -1454,6 +1471,45 @@ async function fetchTmdbPoster(title, type, apiKey) {
     });
     await batch.commit();
     return { ok: true, created: 'watchlist_items', count: validItems.length, titles: validItems.map((i) => i.title) };
+  }
+
+  if (name === 'add_posters_to_existing_watchlist') {
+    const col = db.collection('workspaces').doc(workspaceId).collection('watchlist');
+    const snap = await col.get();
+    let candidates = snap.docs.filter((d) => !d.data().posterUrl);
+
+    if (Array.isArray(input.titles) && input.titles.length > 0) {
+      const titlesLower = input.titles.map((t) => t.toLowerCase());
+      candidates = candidates.filter((d) => titlesLower.some((t) => (d.data().title || '').toLowerCase().includes(t)));
+    }
+
+    if (candidates.length === 0) {
+      return { ok: true, updated: 0, message: 'Обновлять нечего — либо у всех уже есть постеры, либо не найдено совпадений по названию' };
+    }
+
+    const tmdbApiKey = process.env.TMDB_API_KEY;
+    if (!tmdbApiKey) {
+      return { ok: false, error: 'Поиск постеров не настроен на сервере (нет ключа TMDB).' };
+    }
+
+    const posterUrls = await Promise.all(
+      candidates.map((d) => fetchTmdbPoster(d.data().title, d.data().type, tmdbApiKey))
+    );
+
+    const batch = db.batch();
+    let updatedCount = 0;
+    const notFoundTitles = [];
+    candidates.forEach((d, i) => {
+      if (posterUrls[i]) {
+        batch.update(d.ref, { posterUrl: posterUrls[i] });
+        updatedCount++;
+      } else {
+        notFoundTitles.push(d.data().title);
+      }
+    });
+    await batch.commit();
+
+    return { ok: true, updated: updatedCount, checked: candidates.length, notFound: notFoundTitles };
   }
 
   return { ok: false, error: `Неизвестный инструмент: ${name}` };
