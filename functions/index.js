@@ -157,6 +157,164 @@ exports.sendImportantDateReminders = onSchedule('every day 08:00', async () => {
   }
 });
 
+/**
+ * Каждое утро — персональное письмо каждому участнику с тем, что у НЕГО запланировано
+ * сегодня: задачи (свои + общие "вместе"), важные даты сегодня. Если на сегодня ничего
+ * нет — письмо не отправляется, чтобы не присылать пустые уведомления.
+ */
+exports.sendMorningDigest = onSchedule('every day 07:30', async () => {
+  const today = new Date().toISOString().slice(0, 10);
+  const todayMD = today.slice(5); // MM-DD, для сравнения важных дат без учёта года
+
+  const workspacesSnap = await db.collection('workspaces').get();
+
+  for (const wsDoc of workspacesSnap.docs) {
+    const workspace = wsDoc.data();
+    const workspaceId = wsDoc.id;
+    const members = workspace.members || [];
+    if (members.length === 0) continue;
+
+    try {
+      const tasksSnap = await db
+        .collection('workspaces')
+        .doc(workspaceId)
+        .collection('tasks')
+        .where('done', '==', false)
+        .where('date', '==', today)
+        .get();
+      const todayTasks = tasksSnap.docs.map((d) => d.data()).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+
+      const datesSnap = await db.collection('workspaces').doc(workspaceId).collection('importantDates').get();
+      const todayDates = datesSnap.docs.map((d) => d.data()).filter((dt) => dt.date && dt.date.slice(5) === todayMD);
+
+      for (const member of members) {
+        if (!member.email) continue;
+
+        const myTasks = todayTasks.filter((t) => {
+          if (t.assignee === 'together') return true;
+          const isCreator = t.createdBy === member.uid;
+          return t.assignee === 'me' ? isCreator : !isCreator;
+        });
+
+        if (myTasks.length === 0 && todayDates.length === 0) continue;
+
+        const tasksHtml = myTasks
+          .map((t) => `<li>${escapeHtml(t.title)}${t.time ? ` — ${escapeHtml(t.time)}` : ''}</li>`)
+          .join('');
+        const datesHtml = todayDates.map((d) => `<li>🎉 ${escapeHtml(d.title)}</li>`).join('');
+
+        await db.collection('mail').add({
+          to: [member.email],
+          message: {
+            subject: `Ваш день сегодня — ${workspace.name || 'Календарь'}`,
+            html:
+              `<p>Доброе утро, ${escapeHtml(member.displayName || '')}!</p>` +
+              (myTasks.length ? `<p><strong>Сегодня по плану:</strong></p><ul>${tasksHtml}</ul>` : '') +
+              (todayDates.length ? `<p><strong>Важные даты сегодня:</strong></p><ul>${datesHtml}</ul>` : ''),
+          },
+        });
+      }
+    } catch (err) {
+      logger.error(`Не удалось отправить утреннюю сводку для пространства ${workspaceId}`, err);
+    }
+  }
+});
+
+/**
+ * Раз в неделю (воскресенье вечером) — общий дайджест на обоих участников: сколько
+ * потрачено/заработано за неделю по всем вкладкам финансов, как дела с привычками,
+ * и что по задачам ждёт на следующей неделе.
+ */
+exports.sendWeeklyDigest = onSchedule('every sunday 19:00', async () => {
+  const now = new Date();
+  const weekAgo = new Date(now.getTime() - 7 * ONE_DAY_MS);
+  const weekAgoStr = weekAgo.toISOString().slice(0, 10);
+  const todayStr = now.toISOString().slice(0, 10);
+  const nextWeekStr = new Date(now.getTime() + 7 * ONE_DAY_MS).toISOString().slice(0, 10);
+
+  const workspacesSnap = await db.collection('workspaces').get();
+
+  for (const wsDoc of workspacesSnap.docs) {
+    const workspace = wsDoc.data();
+    const workspaceId = wsDoc.id;
+    const members = workspace.members || [];
+    const recipients = members.map((m) => m.email).filter(Boolean);
+    if (recipients.length === 0) continue;
+
+    try {
+      // Финансы — суммируем по всем вкладкам за последнюю неделю
+      const boardsSnap = await db.collection('workspaces').doc(workspaceId).collection('financeBoards').get();
+      let totalIncome = 0;
+      let totalExpense = 0;
+      const currency = boardsSnap.docs[0]?.data()?.currency || '';
+      for (const boardDoc of boardsSnap.docs) {
+        const entriesSnap = await boardDoc.ref
+          .collection('entries')
+          .where('date', '>=', weekAgoStr)
+          .where('date', '<=', todayStr)
+          .get();
+        entriesSnap.docs.forEach((d) => {
+          const e = d.data();
+          if (e.planned) return;
+          if (e.type === 'income') totalIncome += e.amount || 0;
+          else totalExpense += e.amount || 0;
+        });
+      }
+
+      // Привычки — сколько раз отмечена каждая за неделю, по каждому участнику
+      const habitsSnap = await db.collection('workspaces').doc(workspaceId).collection('habits').get();
+      const activeHabits = habitsSnap.docs.filter((d) => !d.data().archived);
+      const logsSnap = await db
+        .collection('workspaces')
+        .doc(workspaceId)
+        .collection('habitLogs')
+        .where('date', '>=', weekAgoStr)
+        .where('date', '<=', todayStr)
+        .get();
+      const habitLines = activeHabits.map((hDoc) => {
+        const h = hDoc.data();
+        const count = logsSnap.docs.filter((l) => l.data().habitId === hDoc.id).length;
+        return `<li>${escapeHtml(h.name)} — отмечено ${count} раз(а) за неделю</li>`;
+      });
+
+      // Задачи на следующую неделю
+      const upcomingSnap = await db
+        .collection('workspaces')
+        .doc(workspaceId)
+        .collection('tasks')
+        .where('done', '==', false)
+        .get();
+      const upcomingTasks = upcomingSnap.docs
+        .map((d) => d.data())
+        .filter((t) => t.date && t.date > todayStr && t.date <= nextWeekStr)
+        .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+        .slice(0, 10);
+      const upcomingHtml = upcomingTasks
+        .map((t) => `<li>${t.date} — ${escapeHtml(t.title)}</li>`)
+        .join('');
+
+      const hasAnyContent = totalIncome || totalExpense || habitLines.length > 0 || upcomingTasks.length > 0;
+      if (!hasAnyContent) continue;
+
+      await db.collection('mail').add({
+        to: recipients,
+        message: {
+          subject: `Итоги недели — ${workspace.name || 'Календарь'}`,
+          html:
+            `<p>Как прошла неделя:</p>` +
+            (totalIncome || totalExpense
+              ? `<p><strong>Финансы:</strong> доходы ${totalIncome} ${currency}, расходы ${totalExpense} ${currency}</p>`
+              : '') +
+            (habitLines.length ? `<p><strong>Привычки:</strong></p><ul>${habitLines.join('')}</ul>` : '') +
+            (upcomingTasks.length ? `<p><strong>Ждёт на следующей неделе:</strong></p><ul>${upcomingHtml}</ul>` : ''),
+        },
+      });
+    } catch (err) {
+      logger.error(`Не удалось отправить недельный дайджест для пространства ${workspaceId}`, err);
+    }
+  }
+});
+
 // ---------------------------------------------------------------------------
 // ИИ-помощник по питанию: подсказки меню, авто-меню на неделю, анализ дневника
 // ---------------------------------------------------------------------------
