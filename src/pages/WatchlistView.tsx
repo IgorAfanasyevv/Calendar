@@ -58,9 +58,17 @@ export default function WatchlistView({ workspaceId }: { workspaceId: string }) 
           const Icon = TYPE_ICONS[item.type];
           return (
             <div key={item.id} className="flex items-center gap-3 rounded-2xl glass p-4">
-              <div className="w-9 h-9 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center shrink-0 text-neutral-500">
-                <Icon size={16} />
-              </div>
+              {item.posterUrl ? (
+                <img
+                  src={item.posterUrl}
+                  alt={item.title}
+                  className="w-12 h-16 rounded-lg object-cover shrink-0 shadow-sm"
+                />
+              ) : (
+                <div className="w-9 h-9 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center shrink-0 text-neutral-500">
+                  <Icon size={16} />
+                </div>
+              )}
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium truncate">{item.title}</p>
                 <p className="text-[11px] text-neutral-400">

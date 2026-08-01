@@ -332,6 +332,7 @@ export interface WatchlistItem {
   rating?: number; // 1-5
   note?: string;
   url?: string;
+  posterUrl?: string;
   createdBy: string;
   createdByName: string;
   createdAt: number;

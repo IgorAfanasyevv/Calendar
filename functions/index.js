@@ -1406,34 +1406,60 @@ async function executeAssistantTool(name, input, ctx) {
     return { ok: true, deleted: 'finance_entry', board: targetBoard.data().name, category: match.data().category };
   }
 
+/** Ищет постер фильма/сериала через TMDB (The Movie Database) по названию. */
+async function fetchTmdbPoster(title, type, apiKey) {
+  if (!apiKey) return null;
+  try {
+    const endpoint = type === 'series' ? 'tv' : type === 'movie' ? 'movie' : 'multi';
+    const url = `https://api.themoviedb.org/3/search/${endpoint}?api_key=${apiKey}&query=${encodeURIComponent(title)}&language=ru-RU`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const result = (data.results || [])[0];
+    if (!result || !result.poster_path) return null;
+    return `https://image.tmdb.org/t/p/w500${result.poster_path}`;
+  } catch (err) {
+    logger.error('Не удалось получить постер TMDB', err);
+    return null;
+  }
+}
+
   if (name === 'add_watchlist_items') {
     const list = Array.isArray(input.items) ? input.items : [];
     if (list.length === 0) return { ok: false, error: 'Не передан список фильмов/сериалов' };
+    const validItems = list.filter((item) => item.title && item.title.trim());
+
+    const tmdbApiKey = process.env.TMDB_API_KEY;
+    const posterUrls = await Promise.all(
+      validItems.map((item) => fetchTmdbPoster(item.title.trim(), item.type || 'movie', tmdbApiKey))
+    );
+
     const batch = db.batch();
     const col = db.collection('workspaces').doc(workspaceId).collection('watchlist');
-    let count = 0;
-    list.forEach((item) => {
-      if (!item.title || !item.title.trim()) return;
+    validItems.forEach((item, i) => {
       const ref = col.doc();
-      batch.set(ref, {
-        workspaceId,
-        title: item.title.trim(),
-        type: item.type || 'movie',
-        status: 'to_watch',
-        createdBy: uid,
-        createdByName: actorName,
-        createdAt: Date.now(),
-      });
-      count++;
+      batch.set(
+        ref,
+        stripUndefinedFields({
+          workspaceId,
+          title: item.title.trim(),
+          type: item.type || 'movie',
+          status: 'to_watch',
+          posterUrl: posterUrls[i] || undefined,
+          createdBy: uid,
+          createdByName: actorName,
+          createdAt: Date.now(),
+        })
+      );
     });
     await batch.commit();
-    return { ok: true, created: 'watchlist_items', count, titles: list.map((i) => i.title) };
+    return { ok: true, created: 'watchlist_items', count: validItems.length, titles: validItems.map((i) => i.title) };
   }
 
   return { ok: false, error: `Неизвестный инструмент: ${name}` };
 }
 
-exports.assistant = onCall({ secrets: ['ANTHROPIC_API_KEY'] }, async (request) => {
+exports.assistant = onCall({ secrets: ['ANTHROPIC_API_KEY', 'TMDB_API_KEY'] }, async (request) => {
   try {
     return await handleAssistant(request);
   } catch (err) {
