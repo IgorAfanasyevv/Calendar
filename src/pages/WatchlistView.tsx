@@ -3,6 +3,7 @@ import { Plus, Trash2, Star, Clapperboard, Tv, Film, Check, ExternalLink, Link2 
 import { useWatchlistStore } from '../store/watchlistStore';
 import { useAuthStore } from '../store/authStore';
 import Modal from '../components/Modal';
+import ChangePosterModal from '../components/ChangePosterModal';
 import type { WatchlistItem, WatchType } from '../types';
 
 const TYPE_LABELS: Record<WatchType, string> = { movie: 'Фильм', series: 'Сериал', other: 'Другое' };
@@ -13,6 +14,7 @@ export default function WatchlistView({ workspaceId }: { workspaceId: string }) 
   const { firebaseUser, profile } = useAuthStore();
   const actor = { uid: firebaseUser?.uid || '', name: profile?.displayName || '' };
   const [creating, setCreating] = useState(false);
+  const [changingPosterFor, setChangingPosterFor] = useState<WatchlistItem | null>(null);
   const [ratingFor, setRatingFor] = useState<WatchlistItem | null>(null);
   const [linkFor, setLinkFor] = useState<WatchlistItem | null>(null);
   const [tab, setTab] = useState<'to_watch' | 'watched'>('to_watch');
@@ -58,17 +60,19 @@ export default function WatchlistView({ workspaceId }: { workspaceId: string }) 
           const Icon = TYPE_ICONS[item.type];
           return (
             <div key={item.id} className="flex items-center gap-3 rounded-2xl glass p-4">
-              {item.posterUrl ? (
-                <img
-                  src={item.posterUrl}
-                  alt={item.title}
-                  className="w-12 h-16 rounded-lg object-cover shrink-0 shadow-sm"
-                />
-              ) : (
-                <div className="w-9 h-9 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center shrink-0 text-neutral-500">
-                  <Icon size={16} />
-                </div>
-              )}
+              <button onClick={() => setChangingPosterFor(item)} className="shrink-0" title="Сменить постер">
+                {item.posterUrl ? (
+                  <img
+                    src={item.posterUrl}
+                    alt={item.title}
+                    className="w-12 h-16 rounded-lg object-cover shadow-sm hover:opacity-80 transition"
+                  />
+                ) : (
+                  <div className="w-9 h-9 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-700">
+                    <Icon size={16} />
+                  </div>
+                )}
+              </button>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium truncate">{item.title}</p>
                 <p className="text-[11px] text-neutral-400">
@@ -156,6 +160,14 @@ export default function WatchlistView({ workspaceId }: { workspaceId: string }) 
             }}
           />
         </Modal>
+      )}
+
+      {changingPosterFor && (
+        <ChangePosterModal
+          workspaceId={workspaceId}
+          item={changingPosterFor}
+          onClose={() => setChangingPosterFor(null)}
+        />
       )}
     </div>
   );

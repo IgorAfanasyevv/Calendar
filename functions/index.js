@@ -1679,6 +1679,42 @@ async function handleAssistant(request) {
   return { text: finalText || 'Готово.', messages: updatedMessages };
 }
 
+exports.searchMoviePosters = onCall({ secrets: ['TMDB_API_KEY'] }, async (request) => {
+  try {
+    const uid = request.auth && request.auth.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Нужно войти в аккаунт.');
+    const { workspaceId, query } = request.data || {};
+    if (!workspaceId || !query) throw new HttpsError('invalid-argument', 'Не хватает параметров.');
+
+    const info = await getMember(workspaceId, uid);
+    if (!info) throw new HttpsError('permission-denied', 'Вы не участник этого пространства.');
+
+    const apiKey = process.env.TMDB_API_KEY;
+    if (!apiKey) throw new HttpsError('failed-precondition', 'Поиск постеров не настроен на сервере (нет ключа TMDB).');
+
+    const url = `https://api.themoviedb.org/3/search/multi?api_key=${apiKey}&query=${encodeURIComponent(query)}`;
+    const res = await fetch(url);
+    const bodyText = await res.text();
+    if (!res.ok) throw new HttpsError('internal', `TMDB ${res.status}: ${bodyText.slice(0, 200)}`);
+
+    const data = JSON.parse(bodyText);
+    const candidates = (data.results || [])
+      .filter((r) => r.poster_path)
+      .slice(0, 8)
+      .map((r) => ({
+        title: r.title || r.name || 'Без названия',
+        year: (r.release_date || r.first_air_date || '').slice(0, 4),
+        posterUrl: `https://image.tmdb.org/t/p/w500${r.poster_path}`,
+      }));
+
+    return { candidates };
+  } catch (err) {
+    if (err instanceof HttpsError) throw err;
+    logger.error('searchMoviePosters error', err);
+    throw new HttpsError('internal', (err && err.message) || 'Внутренняя ошибка сервера');
+  }
+});
+
 exports.searchMoreHotels = onCall({ secrets: ['GOOGLE_PLACES_API_KEY'] }, async (request) => {
   try {
     const uid = request.auth && request.auth.uid;
