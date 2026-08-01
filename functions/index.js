@@ -875,7 +875,7 @@ const ASSISTANT_TOOLS = [
 async function buildAssistantContext(workspaceId, uid, actorName) {
   const today = todayStr();
 
-  const [tasksSnap, goalsSnap, shoppingSnap, boardsSnap, foodSnap, workoutsSnap, wsSnap] = await Promise.all([
+  const [tasksSnap, goalsSnap, shoppingSnap, boardsSnap, foodSnap, workoutsSnap, wsSnap, watchlistSnap] = await Promise.all([
     db.collection('workspaces').doc(workspaceId).collection('tasks').where('done', '==', false).limit(30).get(),
     db.collection('workspaces').doc(workspaceId).collection('goals').limit(20).get(),
     db.collection('workspaces').doc(workspaceId).collection('shopping').where('bought', '==', false).limit(30).get(),
@@ -883,6 +883,7 @@ async function buildAssistantContext(workspaceId, uid, actorName) {
     db.collection('workspaces').doc(workspaceId).collection('food').where('createdBy', '==', uid).where('date', '==', today).get(),
     db.collection('workspaces').doc(workspaceId).collection('workouts').where('createdBy', '==', uid).limit(10).get(),
     db.collection('workspaces').doc(workspaceId).get(),
+    db.collection('workspaces').doc(workspaceId).collection('watchlist').limit(50).get(),
   ]);
 
   const tasks = tasksSnap.docs.map((d) => {
@@ -945,6 +946,11 @@ async function buildAssistantContext(workspaceId, uid, actorName) {
     return { name: w.name, date: w.date, durationMinutes: w.durationMinutes, caloriesBurned: w.caloriesBurned || null };
   });
 
+  const watchlist = watchlistSnap.docs.map((d) => {
+    const w = d.data();
+    return { title: w.title, type: w.type, status: w.status, hasPoster: !!w.posterUrl };
+  });
+
   return `Сегодня ${today}. Текущий пользователь: ${actorName}.
 
 Активные задачи (до 30): ${JSON.stringify(tasks)}
@@ -956,7 +962,9 @@ async function buildAssistantContext(workspaceId, uid, actorName) {
 Вкладки финансов (доходы/расходы за этот месяц, без учёта запланированных): ${JSON.stringify(boards)}
 
 Фитнес — дневная цель по калориям: ${calorieGoal || 'не задана'}. Съедено сегодня: ${todaysCalories} ккал (${JSON.stringify(todaysFood)}).
-Последние тренировки: ${JSON.stringify(recentWorkouts)}`;
+Последние тренировки: ${JSON.stringify(recentWorkouts)}
+
+Раздел "Смотрим" (фильмы/сериалы, hasPoster показывает, есть ли уже обложка): ${JSON.stringify(watchlist)}`;
 }
 
 /**
