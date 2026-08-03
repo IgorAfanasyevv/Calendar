@@ -3,17 +3,19 @@ import { Plus, Search, Check, Clock, MapPin } from 'lucide-react';
 import { useTaskStore } from '../store/taskStore';
 import { useAuthStore } from '../store/authStore';
 import { useWorkspaceStore } from '../store/workspaceStore';
+import { useLanguageStore } from '../store/languageStore';
 import type { Task } from '../types';
 import TaskModal from './TaskModal';
 import { effectiveDate, formatTimeRange } from '../lib/timezone';
 import { taskColorStyle } from '../lib/taskColor';
 
 function assigneeLabel(task: Task, members: { uid: string; displayName: string }[]): string {
-  if (task.assignee === 'together') return 'Вместе';
+  const t = useLanguageStore.getState().t;
+  if (task.assignee === 'together') return t('assignee_together');
   if (task.assignee === 'me') return task.createdByName;
   // 'partner' — тот участник пространства, кто НЕ создавал эту задачу
   const other = members.find((m) => m.uid !== task.createdBy);
-  return other?.displayName || 'Партнёр';
+  return other?.displayName || t('assignee_partner_fallback');
 }
 
 // Показываем дату понятно, с днём недели — "Пн, 3 авг" вместо "2026-08-03"
@@ -27,6 +29,7 @@ export default function TaskListPanel({ workspaceId }: { workspaceId: string }) 
   const { tasks, toggleDone } = useTaskStore();
   const { firebaseUser, profile } = useAuthStore();
   const { workspace } = useWorkspaceStore();
+  const { t } = useLanguageStore();
   const members = workspace?.members || [];
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<'date' | 'priority'>('date');
@@ -53,7 +56,7 @@ export default function TaskListPanel({ workspaceId }: { workspaceId: string }) 
   return (
     <div className="flex flex-col h-full p-3 sm:p-4 gap-3">
       <div className="flex items-center justify-between">
-        <h2 className="font-semibold text-sm">Задачи</h2>
+        <h2 className="font-semibold text-sm">{t('tasks_title')}</h2>
         <button
           onClick={() => setCreating(true)}
           className="w-8 h-8 flex items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-rose-400 text-white shadow-md"
@@ -67,7 +70,7 @@ export default function TaskListPanel({ workspaceId }: { workspaceId: string }) 
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Поиск задач..."
+          placeholder={t('tasks_search')}
           className="w-full pl-8 pr-3 py-2 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400"
         />
       </div>
@@ -81,7 +84,7 @@ export default function TaskListPanel({ workspaceId }: { workspaceId: string }) 
               filter === f ? 'bg-indigo-500 text-white' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500'
             }`}
           >
-            {f === 'active' ? 'Активные' : f === 'all' ? 'Все' : 'Готово'}
+            {f === 'active' ? t('tasks_filter_active') : f === 'all' ? t('tasks_filter_all') : t('tasks_filter_done')}
           </button>
         ))}
         <select
@@ -89,14 +92,14 @@ export default function TaskListPanel({ workspaceId }: { workspaceId: string }) 
           onChange={(e) => setSort(e.target.value as 'date' | 'priority')}
           className="ml-auto text-[11px] bg-transparent text-neutral-400"
         >
-          <option value="date">По дате</option>
-          <option value="priority">По приоритету</option>
+          <option value="date">{t('tasks_sort_date')}</option>
+          <option value="priority">{t('tasks_sort_priority')}</option>
         </select>
       </div>
 
       <div className="flex-1 overflow-y-auto space-y-2 -mx-1 px-1">
         {filtered.length === 0 && (
-          <p className="text-xs text-neutral-400 text-center py-8">Нет задач — самое время добавить первую 🎯</p>
+          <p className="text-xs text-neutral-400 text-center py-8">{t('tasks_empty')}</p>
         )}
         {filtered.map((task) => (
           <div

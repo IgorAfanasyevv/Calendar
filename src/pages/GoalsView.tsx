@@ -5,6 +5,7 @@ import { useAuthStore } from '../store/authStore';
 import { useTaskStore } from '../store/taskStore';
 import { useSavingsStore } from '../store/savingsStore';
 import { currencySymbol } from '../lib/currency';
+import { useLanguageStore } from '../store/languageStore';
 import Modal from '../components/Modal';
 import TaskModal from '../components/TaskModal';
 import type { ChecklistItem, Goal, Task } from '../types';
@@ -12,6 +13,7 @@ import type { ChecklistItem, Goal, Task } from '../types';
 export default function GoalsView({ workspaceId }: { workspaceId: string }) {
   const { goals, addGoal, updateGoal, deleteGoal } = useGoalStore();
   const { firebaseUser, profile } = useAuthStore();
+  const { t } = useLanguageStore();
   const [creating, setCreating] = useState(false);
   const actor = { uid: firebaseUser?.uid || '', name: profile?.displayName || '' };
 
@@ -19,13 +21,13 @@ export default function GoalsView({ workspaceId }: { workspaceId: string }) {
     <div className="p-4 sm:p-6 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-semibold">Наши цели</h1>
+          <h1 className="text-xl font-semibold">{t('goals_title')}</h1>
         </div>
         <button
           onClick={() => setCreating(true)}
           className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white text-sm font-medium shadow-lg shadow-indigo-500/25"
         >
-          <Plus size={15} /> Новая цель
+          <Plus size={15} /> {t('goals_new')}
         </button>
       </div>
 
@@ -34,14 +36,14 @@ export default function GoalsView({ workspaceId }: { workspaceId: string }) {
           <GoalCard key={g.id} goal={g} workspaceId={workspaceId} onUpdate={updateGoal} onDelete={deleteGoal} />
         ))}
         {goals.length === 0 && (
-          <p className="text-sm text-neutral-400 col-span-2 text-center py-12">Пока нет целей — добавьте первую мечту ✨</p>
+          <p className="text-sm text-neutral-400 col-span-2 text-center py-12">{t('goals_empty')}</p>
         )}
       </div>
 
       {creating && (
-        <Modal title="Новая цель" onClose={() => setCreating(false)}>
+        <Modal title={t('goals_new')} onClose={() => setCreating(false)}>
           <GoalForm
-            submitLabel="Создать цель"
+            submitLabel={t('goals_create')}
             onSave={async (data) => {
               await addGoal(workspaceId, data, actor);
               setCreating(false);
@@ -69,6 +71,7 @@ function GoalCard({
   const [editingStepText, setEditingStepText] = useState('');
   const { tasks, toggleDone } = useTaskStore();
   const { firebaseUser, profile } = useAuthStore();
+  const { t } = useLanguageStore();
   const [addingTask, setAddingTask] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | undefined>(undefined);
   const [editingGoal, setEditingGoal] = useState(false);
@@ -146,7 +149,7 @@ function GoalCard({
 
       <div className="mb-3">
         <div className="flex justify-between text-xs mb-1">
-          <span>Прогресс</span>
+          <span>{t('goals_progress')}</span>
           <span className="font-semibold">{goal.progress}%</span>
         </div>
         <div className="h-2 rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
@@ -200,7 +203,7 @@ function GoalCard({
             value={newStep}
             onChange={(e) => setNewStep(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addStep())}
-            placeholder="Добавить шаг..."
+            placeholder={t('goals_add_step_placeholder')}
             className="input flex-1 text-xs py-1.5"
           />
           <button onClick={addStep} className="px-2.5 rounded-lg bg-neutral-100 dark:bg-neutral-800">
@@ -242,7 +245,7 @@ function GoalCard({
               {t.date && <span className="text-neutral-400 shrink-0">{t.date}</span>}
             </div>
           ))}
-          {linkedTasks.length === 0 && <p className="text-[11px] text-neutral-400">Пока нет задач для этой цели</p>}
+          {linkedTasks.length === 0 && <p className="text-[11px] text-neutral-400">{t('goals_no_tasks')}</p>}
         </div>
       </div>
 
@@ -253,10 +256,10 @@ function GoalCard({
         <TaskModal workspaceId={workspaceId} initial={editingTask} onClose={() => setEditingTask(undefined)} />
       )}
       {editingGoal && (
-        <Modal title="Редактировать цель" onClose={() => setEditingGoal(false)}>
+        <Modal title={t('goals_edit')} onClose={() => setEditingGoal(false)}>
           <GoalForm
             initial={goal}
-            submitLabel="Сохранить"
+            submitLabel={t('goals_save')}
             onSave={async (data) => {
               onUpdate(goal.id, data);
               setEditingGoal(false);
@@ -282,17 +285,18 @@ function GoalForm({
   const [deadline, setDeadline] = useState(initial?.deadline || '');
   const [savingsPotId, setSavingsPotId] = useState(initial?.savingsPotId || '');
   const { pots } = useSavingsStore();
+  const { t } = useLanguageStore();
 
   return (
     <div className="space-y-3">
-      <input className="input" placeholder="Например: Поехать в Японию" value={title} onChange={(e) => setTitle(e.target.value)} />
-      <textarea className="input resize-none" rows={2} placeholder="Описание" value={description} onChange={(e) => setDescription(e.target.value)} />
+      <input className="input" placeholder={t('goals_title_placeholder')} value={title} onChange={(e) => setTitle(e.target.value)} />
+      <textarea className="input resize-none" rows={2} placeholder={t('goals_description_placeholder')} value={description} onChange={(e) => setDescription(e.target.value)} />
       <input type="date" className="input" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
       {pots.length > 0 && (
         <div>
-          <label className="block text-xs font-medium text-neutral-500 mb-1">Связать с копилкой (необязательно)</label>
+          <label className="block text-xs font-medium text-neutral-500 mb-1">{t('goals_link_savings')}</label>
           <select className="input" value={savingsPotId} onChange={(e) => setSavingsPotId(e.target.value)}>
-            <option value="">Не связывать</option>
+            <option value="">{t('goals_no_link')}</option>
             {pots.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}

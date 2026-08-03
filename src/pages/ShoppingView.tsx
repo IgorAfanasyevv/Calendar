@@ -3,6 +3,7 @@ import { Plus, Trash2, EyeOff, Eye, Wallet } from 'lucide-react';
 import { useShoppingStore } from '../store/shoppingStore';
 import { useWorkspaceStore } from '../store/workspaceStore';
 import { useFinanceBoardStore } from '../store/financeBoardStore';
+import { useLanguageStore } from '../store/languageStore';
 import { useAuthStore } from '../store/authStore';
 import { CURRENCIES, currencySymbol } from '../lib/currency';
 import Modal from '../components/Modal';
@@ -15,6 +16,7 @@ export default function ShoppingView({ workspaceId }: { workspaceId: string }) {
   const { workspace, setShoppingFinanceBoard } = useWorkspaceStore();
   const { boards } = useFinanceBoardStore();
   const { firebaseUser, profile } = useAuthStore();
+  const { t } = useLanguageStore();
   const actor = { uid: firebaseUser?.uid || '', name: profile?.displayName || '' };
   const defaultCurrency = workspace?.currency || 'RUB';
   const [name, setName] = useState('');
@@ -81,11 +83,11 @@ export default function ShoppingView({ workspaceId }: { workspaceId: string }) {
     <div className="p-4 sm:p-6 max-w-3xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-semibold">Список покупок</h1>
+          <h1 className="text-xl font-semibold">{t('shopping_title')}</h1>
           <p className="text-sm text-neutral-400">
             {totalsByCurrency.length > 0
-              ? `Осталось купить на ${totalsByCurrency.map(([cur, sum]) => `${sum.toLocaleString('ru-RU')} ${currencySymbol(cur)}`).join(' + ')}`
-              : 'Осталось купить на 0'}
+              ? `${t('shopping_remaining')} ${totalsByCurrency.map(([cur, sum]) => `${sum.toLocaleString('ru-RU')} ${currencySymbol(cur)}`).join(' + ')}`
+              : `${t('shopping_remaining')} 0`}
           </p>
         </div>
         <button
@@ -93,7 +95,7 @@ export default function ShoppingView({ workspaceId }: { workspaceId: string }) {
           className="flex items-center gap-1.5 px-3 py-2 rounded-xl glass text-xs"
         >
           {hideBought ? <Eye size={14} /> : <EyeOff size={14} />}
-          {hideBought ? 'Показать купленное' : 'Скрыть купленное'}
+          {hideBought ? t('shopping_show_bought') : t('shopping_hide_bought')}
         </button>
       </div>
 
@@ -116,14 +118,14 @@ export default function ShoppingView({ workspaceId }: { workspaceId: string }) {
 
       <div className="rounded-2xl glass p-3 mb-4 flex items-center gap-2 flex-wrap">
         <span className="flex items-center gap-1.5 text-xs font-medium text-neutral-500 shrink-0">
-          <Wallet size={13} /> Учитывать покупки {selectedMember?.displayName || ''} в финансах:
+          <Wallet size={13} /> {t('shopping_track_finance')} {selectedMember?.displayName || ''} {t('shopping_track_finance_in')}
         </span>
         <select
           className="input flex-1 min-w-[160px] py-1.5 text-xs"
           value={selectedMember?.shoppingFinanceBoardId || ''}
           onChange={(e) => selectedUid && setShoppingFinanceBoard(workspaceId, selectedUid, e.target.value || null)}
         >
-          <option value="">Не учитывать</option>
+          <option value="">{t('shopping_dont_track')}</option>
           {boards.map((b) => (
             <option key={b.id} value={b.id}>{b.name}</option>
           ))}
@@ -140,7 +142,7 @@ export default function ShoppingView({ workspaceId }: { workspaceId: string }) {
         <form onSubmit={handleAdd} className="rounded-2xl glass p-4 mb-6 grid grid-cols-2 sm:grid-cols-4 gap-2">
           <input
             className="input sm:col-span-2"
-            placeholder="Что купить?"
+            placeholder={t('shopping_new_item')}
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
@@ -189,7 +191,7 @@ export default function ShoppingView({ workspaceId }: { workspaceId: string }) {
           </div>
         ))}
         {Object.keys(grouped).length === 0 && (
-          <p className="text-sm text-neutral-400 text-center py-12">Список пуст 🛒</p>
+          <p className="text-sm text-neutral-400 text-center py-12">{t('shopping_list_empty')}</p>
         )}
       </div>
 
@@ -228,6 +230,7 @@ function PriceModal({
   const [price, setPrice] = useState(item.price ? String(item.price) : '');
   const [currency, setCurrency] = useState(item.currency || defaultCurrency);
   const [saving, setSaving] = useState(false);
+  const { t } = useLanguageStore();
 
   async function handleConfirm() {
     const val = Number(price);
@@ -250,14 +253,14 @@ function PriceModal({
   }
 
   return (
-    <Modal title={`Сколько стоило «${item.name}»?`} onClose={onClose}>
+    <Modal title={`${t('shopping_price_question')} «${item.name}»?`} onClose={onClose}>
       <div className="space-y-3">
         <div className="grid gap-2" style={{ gridTemplateColumns: '1fr 90px' }}>
           <input
             autoFocus
             type="number"
             className="input text-lg font-semibold"
-            placeholder="Цена"
+            placeholder={t('shopping_price')}
             value={price}
             onChange={(e) => setPrice(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleConfirm()}
@@ -273,14 +276,14 @@ function PriceModal({
           disabled={saving || !price}
           className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white font-medium text-sm disabled:opacity-50"
         >
-          Отметить купленным
+          {t('shopping_mark_bought')}
         </button>
         <button
           onClick={handleSkip}
           disabled={saving}
           className="w-full py-2 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-xs font-medium text-neutral-500 disabled:opacity-50"
         >
-          Пропустить (без цены)
+          {t('shopping_skip_price')}
         </button>
       </div>
     </Modal>
