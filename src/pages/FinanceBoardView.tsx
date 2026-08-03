@@ -106,7 +106,15 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
   const symbol = currencySymbol(board.currency);
   const fmt = (n: number) => `${n.toLocaleString('ru-RU')} ${symbol}`;
 
-  const monthEntries = useMemo(() => entries.filter((e) => monthKey(e.date) === selectedMonth), [entries, selectedMonth]);
+  // ВАЖНО: запланированные операции (planned: true) — это ещё НЕ фактические траты/доходы,
+  // они показываются отдельно в "Предстоящих тратах". Если их не исключить отсюда, они
+  // будут задваиваться в итогах: по факту трата ещё не произошла, а сумма уже посчитана,
+  // и когда её реально оплатят (payInstallment создаёт отдельную запись о платеже) — сумма
+  // фактически посчитается ещё раз.
+  const monthEntries = useMemo(
+    () => entries.filter((e) => monthKey(e.date) === selectedMonth && !e.planned),
+    [entries, selectedMonth]
+  );
   const income = useMemo(() => monthEntries.filter((e) => e.type === 'income').reduce((s, e) => s + e.amount, 0), [monthEntries]);
   const expense = useMemo(() => monthEntries.filter((e) => e.type === 'expense').reduce((s, e) => s + e.amount, 0), [monthEntries]);
   const balance = income - expense;
@@ -128,11 +136,13 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
   // навигация стрелками сдвигает и её тоже, а не только текущий месяц.
   const monthlyData = useMemo(() => {
     const byMonth: Record<string, { income: number; expense: number }> = {};
-    entries.forEach((e) => {
-      const key = monthKey(e.date);
-      byMonth[key] = byMonth[key] || { income: 0, expense: 0 };
-      byMonth[key][e.type] += e.amount;
-    });
+    entries
+      .filter((e) => !e.planned)
+      .forEach((e) => {
+        const key = monthKey(e.date);
+        byMonth[key] = byMonth[key] || { income: 0, expense: 0 };
+        byMonth[key][e.type] += e.amount;
+      });
     const window: string[] = [];
     for (let i = 5; i >= 0; i--) window.push(shiftMonth(selectedMonth, -i));
     return window.map((key) => ({
