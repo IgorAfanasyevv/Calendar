@@ -1,14 +1,16 @@
 import { useState } from 'react';
-import { Copy, Check, Moon, Sun, LogOut, UserX, Download, Loader2 } from 'lucide-react';
+import { Copy, Check, Moon, Sun, LogOut, UserX, Download, Loader2, Globe } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useWorkspaceStore } from '../store/workspaceStore';
 import { useThemeStore } from '../store/themeStore';
+import { useLanguageStore } from '../store/languageStore';
 import { exportWorkspaceData } from '../lib/exportData';
 
 export default function SettingsView() {
   const { profile, logOut } = useAuthStore();
   const { workspace, removeMember } = useWorkspaceStore();
   const { dark, toggle } = useThemeStore();
+  const { language, setLanguage, t } = useLanguageStore();
   const [copied, setCopied] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -44,7 +46,7 @@ export default function SettingsView() {
 
   return (
     <div className="p-4 sm:p-6 max-w-xl mx-auto space-y-6">
-      <h1 className="text-xl font-semibold">Настройки</h1>
+      <h1 className="text-xl font-semibold">{t('settings_title')}</h1>
 
       <div className="rounded-2xl glass p-5 space-y-4">
         <h2 className="text-sm font-semibold text-neutral-500">Профиль</h2>
@@ -60,6 +62,29 @@ export default function SettingsView() {
       </div>
 
       <div className="rounded-2xl glass p-5 space-y-4">
+        <h2 className="text-sm font-semibold text-neutral-500">{t('settings_language')}</h2>
+        <div className="flex bg-neutral-100 dark:bg-neutral-800 rounded-xl p-1 text-sm font-medium">
+          <button
+            onClick={() => setLanguage('ru')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg transition ${language === 'ru' ? 'bg-white dark:bg-neutral-700 shadow text-indigo-600 dark:text-indigo-400' : 'text-neutral-500'}`}
+          >
+            <Globe size={14} /> Русский
+          </button>
+          <button
+            onClick={() => setLanguage('en')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg transition ${language === 'en' ? 'bg-white dark:bg-neutral-700 shadow text-indigo-600 dark:text-indigo-400' : 'text-neutral-500'}`}
+          >
+            <Globe size={14} /> English
+          </button>
+        </div>
+        <p className="text-[11px] text-neutral-400">
+          {language === 'ru'
+            ? 'Пока переведена только навигация и этот экран — остальные разделы переводим постепенно.'
+            : 'Only navigation and this screen are translated so far — other sections are being translated gradually.'}
+        </p>
+      </div>
+
+      <div className="rounded-2xl glass p-5 space-y-4">
         <h2 className="text-sm font-semibold text-neutral-500">Пространство</h2>
         <div className="flex items-center justify-between text-sm">
           <span>{workspace?.name}</span>
@@ -69,7 +94,7 @@ export default function SettingsView() {
           className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-sm font-medium"
         >
           {copied ? <Check size={15} /> : <Copy size={15} />}
-          Код приглашения: {workspace?.inviteCode}
+          {t('settings_invite_code')}: {workspace?.inviteCode}
         </button>
         <div className="space-y-1.5">
           {workspace?.members.map((m) => (
@@ -98,28 +123,26 @@ export default function SettingsView() {
       </div>
 
       <div className="rounded-2xl glass p-5 space-y-4">
-        <h2 className="text-sm font-semibold text-neutral-500">Оформление</h2>
+        <h2 className="text-sm font-semibold text-neutral-500">{t('settings_theme')}</h2>
         <button
           onClick={toggle}
           className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-sm font-medium"
         >
           {dark ? <Sun size={15} /> : <Moon size={15} />}
-          {dark ? 'Светлая тема' : 'Тёмная тема'}
+          {dark ? t('settings_theme_light') : t('settings_theme_dark')}
         </button>
       </div>
 
       <div className="rounded-2xl glass p-5 space-y-3">
-        <h2 className="text-sm font-semibold text-neutral-500">Экспорт данных</h2>
-        <p className="text-xs text-neutral-400">
-          Выгрузить все ваши данные (задачи, финансы, дневник и т.д.) в один файл — на случай бэкапа.
-        </p>
+        <h2 className="text-sm font-semibold text-neutral-500">{t('settings_export')}</h2>
+        <p className="text-xs text-neutral-400">{t('settings_export_desc')}</p>
         <button
           onClick={handleExport}
           disabled={exporting}
           className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-sm font-medium disabled:opacity-60"
         >
           {exporting ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
-          {exporting ? 'Собираю данные...' : 'Скачать бэкап (JSON)'}
+          {exporting ? t('settings_export_loading') : t('settings_export_button')}
         </button>
         {exportError && <p className="text-xs text-rose-500">{exportError}</p>}
       </div>
@@ -128,7 +151,7 @@ export default function SettingsView() {
         onClick={logOut}
         className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-rose-50 dark:bg-rose-500/10 text-rose-500 text-sm font-medium"
       >
-        <LogOut size={15} /> Выйти из аккаунта
+        <LogOut size={15} /> {t('settings_logout')}
       </button>
     </div>
   );

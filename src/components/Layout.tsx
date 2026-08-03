@@ -21,24 +21,25 @@ import {
 import { useAuthStore } from '../store/authStore';
 import { useWorkspaceStore } from '../store/workspaceStore';
 import { useThemeStore } from '../store/themeStore';
+import { useLanguageStore, type TranslationKey } from '../store/languageStore';
 import { usePresence } from '../hooks/usePresence';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { WifiOff } from 'lucide-react';
 
 export type Tab = 'home' | 'goals' | 'shopping' | 'finance' | 'fitness' | 'dates' | 'habits' | 'journal' | 'watchlist' | 'travel' | 'settings';
 
-const NAV: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = [
-  { id: 'home', label: 'Обзор', icon: LayoutDashboard },
-  { id: 'goals', label: 'Наши цели', icon: Target },
-  { id: 'shopping', label: 'Покупки', icon: ShoppingCart },
-  { id: 'finance', label: 'Финансы', icon: Wallet },
-  { id: 'fitness', label: 'Фитнес', icon: Dumbbell },
-  { id: 'habits', label: 'Привычки', icon: Flame },
-  { id: 'dates', label: 'Даты', icon: CalendarHeart },
-  { id: 'journal', label: 'Дневник', icon: BookHeart },
-  { id: 'watchlist', label: 'Смотрим', icon: Clapperboard },
-  { id: 'travel', label: 'Путешествия', icon: Plane },
-  { id: 'settings', label: 'Настройки', icon: SettingsIcon },
+const NAV: { id: Tab; labelKey: TranslationKey; icon: typeof LayoutDashboard }[] = [
+  { id: 'home', labelKey: 'nav_home', icon: LayoutDashboard },
+  { id: 'goals', labelKey: 'nav_goals', icon: Target },
+  { id: 'shopping', labelKey: 'nav_shopping', icon: ShoppingCart },
+  { id: 'finance', labelKey: 'nav_finance', icon: Wallet },
+  { id: 'fitness', labelKey: 'nav_fitness', icon: Dumbbell },
+  { id: 'habits', labelKey: 'nav_habits', icon: Flame },
+  { id: 'dates', labelKey: 'nav_dates', icon: CalendarHeart },
+  { id: 'journal', labelKey: 'nav_journal', icon: BookHeart },
+  { id: 'watchlist', labelKey: 'nav_watchlist', icon: Clapperboard },
+  { id: 'travel', labelKey: 'nav_travel', icon: Plane },
+  { id: 'settings', labelKey: 'nav_settings', icon: SettingsIcon },
 ];
 
 export default function Layout({
@@ -53,6 +54,7 @@ export default function Layout({
   const { profile, firebaseUser, logOut } = useAuthStore();
   const { workspace } = useWorkspaceStore();
   const { dark, toggle } = useThemeStore();
+  const { t } = useLanguageStore();
   const { isOnline } = usePresence(workspace?.id, firebaseUser?.uid);
   const browserOnline = useOnlineStatus();
   const [copied, setCopied] = useState(false);
@@ -77,7 +79,7 @@ export default function Layout({
           <div className="font-semibold text-sm truncate">{workspace?.name || 'Пространство'}</div>
         </div>
 
-        {NAV.map(({ id, label, icon: Icon }) => (
+        {NAV.map(({ id, labelKey, icon: Icon }) => (
           <button
             key={id}
             onClick={() => onTabChange(id)}
@@ -88,7 +90,7 @@ export default function Layout({
             }`}
           >
             <Icon size={17} />
-            {label}
+            {t(labelKey)}
           </button>
         ))}
 
@@ -97,7 +99,7 @@ export default function Layout({
             <div className="flex items-center gap-2 px-3 py-2 rounded-xl glass text-xs">
               <span className={`w-2 h-2 rounded-full ${isOnline(partner.uid) ? 'bg-emerald-500' : 'bg-neutral-300 dark:bg-neutral-600'}`} />
               <span className="truncate">{partner.displayName}</span>
-              <span className="ml-auto text-neutral-400">{isOnline(partner.uid) ? 'онлайн' : 'офлайн'}</span>
+              <span className="ml-auto text-neutral-400">{isOnline(partner.uid) ? t('common_online') : t('common_offline')}</span>
             </div>
           ) : (
             <button
@@ -131,7 +133,7 @@ export default function Layout({
 
       {/* Mobile top nav */}
       <div className="md:hidden fixed bottom-0 inset-x-0 z-30 glass border-t border-neutral-200/50 dark:border-neutral-800 flex overflow-x-auto py-2 px-1">
-        {NAV.map(({ id, label, icon: Icon }) => (
+        {NAV.map(({ id, labelKey, icon: Icon }) => (
           <button
             key={id}
             onClick={() => onTabChange(id)}
@@ -140,7 +142,7 @@ export default function Layout({
             }`}
           >
             <Icon size={18} />
-            {label}
+            {t(labelKey)}
           </button>
         ))}
       </div>
