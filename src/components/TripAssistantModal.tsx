@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { httpsCallable } from 'firebase/functions';
-import { Sparkles, Send, Loader2, Star, MapPin } from 'lucide-react';
+import { Sparkles, Send, Loader2, Star, MapPin, X } from 'lucide-react';
 import { functions } from '../lib/firebase';
 import { useTripStore } from '../store/tripStore';
 import Modal from './Modal';
 import HotelGalleryModal from './HotelGalleryModal';
+import PlacesMapView from './PlacesMapView';
 import type { FavoriteHotel, Trip } from '../types';
 
 interface AnthropicMessage {
@@ -70,6 +71,7 @@ export default function TripAssistantModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [galleryHotel, setGalleryHotel] = useState<FavoriteHotel | null>(null);
+  const [mapForHotel, setMapForHotel] = useState<FavoriteHotel | null>(null);
   const [loadingMoreIndex, setLoadingMoreIndex] = useState<number | null>(null);
 
   async function send(text: string) {
@@ -170,10 +172,13 @@ export default function TripAssistantModal({
                             <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-1 line-clamp-2">{hotel.description}</p>
                           )}
                           <div className="flex items-center gap-2 mt-1.5">
-                            {hotel.mapsUrl && (
-                              <a href={hotel.mapsUrl} target="_blank" rel="noopener noreferrer" className="text-[11px] text-indigo-500 hover:underline">
+                            {(hotel.lat != null || hotel.mapsUrl) && (
+                              <button
+                                onClick={() => setMapForHotel(hotel)}
+                                className="text-[11px] text-indigo-500 hover:underline"
+                              >
                                 На карте
-                              </a>
+                              </button>
                             )}
                             <button
                               onClick={() => !isFav && addFavoriteHotel(trip, hotel)}
@@ -233,6 +238,45 @@ export default function TripAssistantModal({
     </Modal>
 
     {galleryHotel && <HotelGalleryModal hotel={galleryHotel} onClose={() => setGalleryHotel(null)} />}
+
+    {mapForHotel && (
+      <div
+        className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+        onClick={() => setMapForHotel(null)}
+      >
+        <div
+          className="w-full max-w-md rounded-3xl bg-white dark:bg-neutral-900 shadow-2xl p-4"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-semibold truncate pr-2">{mapForHotel.name}</p>
+            <button
+              onClick={() => setMapForHotel(null)}
+              className="shrink-0 w-8 h-8 flex items-center justify-center rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400"
+            >
+              <X size={16} />
+            </button>
+          </div>
+          {mapForHotel.lat != null ? (
+            <PlacesMapView places={[mapForHotel]} />
+          ) : (
+            <div className="text-center py-8 space-y-2">
+              <p className="text-xs text-neutral-400">Координаты для этого места ещё не найдены.</p>
+              {mapForHotel.mapsUrl && (
+                <a
+                  href={mapForHotel.mapsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-indigo-500 hover:underline"
+                >
+                  Открыть в Google Maps
+                </a>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    )}
     </>
   );
 }
