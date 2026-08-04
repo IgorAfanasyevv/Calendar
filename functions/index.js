@@ -53,6 +53,9 @@ async function handleFitnessAssistant(request) {
   if (!info) throw new HttpsError('permission-denied', 'Вы не участник этого пространства.');
   const { member } = info;
   const goal = (member && member.calorieGoal) || null;
+  const proteinGoal = (member && member.proteinGoal) || null;
+  const fatGoal = (member && member.fatGoal) || null;
+  const carbsGoal = (member && member.carbsGoal) || null;
   const name = (member && member.displayName) || 'Пользователь';
   const prefs = (member && member.dietPreferences) || {};
   const cookingTimeLabel =
@@ -267,10 +270,25 @@ offset — через сколько дней от сегодня (0 = сего�
     return { text: `Готово! Добавил ${count} тренировок на ближайшую неделю.` };
   }
 
+  const macroGoalParts = [];
+  if (goal) macroGoalParts.push(`${goal} ккал`);
+  if (proteinGoal) macroGoalParts.push(`белки ~${proteinGoal} г`);
+  if (fatGoal) macroGoalParts.push(`жиры ~${fatGoal} г`);
+  if (carbsGoal) macroGoalParts.push(`углеводы ~${carbsGoal} г`);
+  const macroGoalText = macroGoalParts.length
+    ? `Дневная цель по КБЖУ для ${name}: ${macroGoalParts.join(', ')}. ` +
+      `ВАЖНО: это не просто ориентир — реально ПОДБИРАЙ блюда и порции так, чтобы СУММА калорий и, если задано, ` +
+      `белков/жиров/углеводов за завтрак+обед+ужин+перекус КАЖДОГО дня укладывалась в пределах примерно ±10% от этой цели ` +
+      `(не только калории — если цель по белку не выполняется одними блюдами, увеличь порцию белкового продукта или добавь ` +
+      `протеиновый перекус). Перед тем как финализировать день, мысленно просуммируй КБЖУ всех его приёмов пищи и проверь, ` +
+      `что итог близок к цели.`
+    : '';
+
   if (action === 'weekly_menu') {
     const prompt = `${SAFETY_NOTE}
 ${prefsText}
-Составь меню на 7 дней вперёд для ${name}${goal ? `, дневная цель — примерно ${goal} ккал` : ''}.
+${macroGoalText}
+Составь меню на 7 дней вперёд для ${name}.
 На каждый день — завтрак, обед, ужин и один перекус. Простые, реалистичные для готовки дома блюда, но по-настоящему вкусные и разнообразные — это важно:
 - Ни одно блюдо не должно повторяться в течение недели
 - Меняй основной источник белка от приёма к приёму (курица, рыба, говядина, индейка, яйца, бобовые/тофу, творог) — не бери один и тот же белок больше 2 раз за все 7 дней
