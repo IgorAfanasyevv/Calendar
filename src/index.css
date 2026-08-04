@@ -177,3 +177,21 @@ input[type='number'] {
   from { opacity: 0; transform: translateY(8px) scale(0.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
+
+/* Подсказка с фото места на карте (Путешествия) — убираем стандартные отступы
+   Leaflet, чтобы фото красиво заполняло карточку без белых полей вокруг. */
+.place-photo-tooltip {
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+  background: white !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18) !important;
+}
+.dark .place-photo-tooltip {
+  background: #262626 !important;
+  color: white;
+}
+.place-photo-tooltip::before {
+  display: none !important;
+}

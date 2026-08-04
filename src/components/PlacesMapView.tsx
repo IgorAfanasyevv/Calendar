@@ -33,11 +33,29 @@ export default function PlacesMapView({ places }: { places: FavoriteHotel[] }) {
       maxZoom: 19,
     }).addTo(map);
 
-    const markers = withCoords.map((p) =>
-      L.marker([p.lat!, p.lng!], { icon: defaultIcon })
-        .addTo(map)
-        .bindPopup(`<b>${escapeHtml(p.name)}</b>${p.address ? `<br/>${escapeHtml(p.address)}` : ''}`)
-    );
+    const markers = withCoords.map((p) => {
+      const marker = L.marker([p.lat!, p.lng!], { icon: defaultIcon }).addTo(map);
+
+      // Подсказка при наведении — с фото, если оно есть
+      const photo = p.photoUrl;
+      const tooltipHtml = `
+        <div style="width:160px">
+          ${photo ? `<img src="${escapeHtml(photo)}" style="width:100%;height:100px;object-fit:cover;border-radius:8px 8px 0 0;display:block" />` : ''}
+          <div style="padding:${photo ? '6px 8px' : '0'};font-weight:600;font-size:12px;line-height:1.3">${escapeHtml(p.name)}</div>
+        </div>
+      `;
+      marker.bindTooltip(tooltipHtml, {
+        direction: 'top',
+        offset: [0, -35],
+        opacity: 1,
+        className: 'place-photo-tooltip',
+      });
+
+      // Клик — чуть более подробная информация (название + адрес)
+      marker.bindPopup(`<b>${escapeHtml(p.name)}</b>${p.address ? `<br/>${escapeHtml(p.address)}` : ''}`);
+
+      return marker;
+    });
 
     if (markers.length === 1) {
       map.setView([withCoords[0].lat!, withCoords[0].lng!], 14);
