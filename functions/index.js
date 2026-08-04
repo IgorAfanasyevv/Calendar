@@ -1873,6 +1873,14 @@ async function handleTripAssistant(request) {
         required: ['query'],
       },
     },
+    {
+      name: 'add_coordinates_to_favorites',
+      description:
+        'Найти и добавить координаты (для показа на карте) избранным местам этой поездки, у которых их ещё нет — ' +
+        'например добавлены до появления вкладки "Карта". Используй, когда пользователь говорит "места не показываются на карте" ' +
+        'или просит "добавь координаты избранным местам". Не требует параметров — сам найдёт все места без координат в этой поездке.',
+      input_schema: { type: 'object', properties: {} },
+    },
   ];
 
   const itineraryText =
@@ -1901,6 +1909,7 @@ async function handleTripAssistant(request) {
     `Для каждого места в текстовом ответе коротко (1 предложение) напиши, чем оно интересно/красиво — используй описание из результата инструмента, ` +
     `если оно есть, или своё общее знание о городе — так пользователю проще выбрать. Карточки с фото покажутся отдельно, не нужно их пересказывать подробно. ` +
     `Когда пользователь соглашается добавить что-то конкретное в маршрут — используй инструмент add_itinerary_items. ` +
+    `Если пользователь говорит, что избранные места не отображаются на карте, или просит добавить координаты — используй инструмент add_coordinates_to_favorites. ` +
     `Отвечай по-русски, кратко и по делу. Собеседника зовут ${actorName}.`;
 
   const messages = [...(Array.isArray(history) ? history.slice(-10) : []), { role: 'user', content: message }];
@@ -1964,6 +1973,36 @@ async function handleTripAssistant(request) {
                 ok: true,
                 places: searchResult.places.map((p) => ({ name: p.name, rating: p.rating, address: p.address, description: p.description })),
               };
+            }
+          }
+        } else if (block.name === 'add_coordinates_to_favorites') {
+          const placesApiKey = process.env.GOOGLE_PLACES_API_KEY;
+          if (!placesApiKey) {
+            result = { ok: false, error: 'Поиск мест не настроен на сервере (нет ключа Google Places).' };
+          } else {
+            const currentSnap = await tripRef.get();
+            const currentFavorites = (currentSnap.data() || {}).favoriteHotels || [];
+            const missing = currentFavorites.filter((f) => f.lat == null || f.lng == null);
+            if (missing.length === 0) {
+              result = { ok: true, updated: 0, message: 'У всех избранных мест уже есть координаты' };
+            } else {
+              const searchResults = await Promise.all(
+                missing.map((f) => searchGooglePlaces(`${f.name} ${f.address || ''}`.trim(), placesApiKey))
+              );
+              let updatedCount = 0;
+              const updatedFavorites = currentFavorites.map((f) => {
+                if (f.lat != null && f.lng != null) return f;
+                const idx = missing.findIndex((m) => m.id === f.id);
+                const found = idx !== -1 ? searchResults[idx] : null;
+                const bestMatch = found && found.ok ? found.places[0] : null;
+                if (bestMatch && bestMatch.lat != null) {
+                  updatedCount++;
+                  return { ...f, lat: bestMatch.lat, lng: bestMatch.lng };
+                }
+                return f;
+              });
+              await tripRef.update({ favoriteHotels: updatedFavorites });
+              result = { ok: true, updated: updatedCount, checked: missing.length };
             }
           }
         } else {
