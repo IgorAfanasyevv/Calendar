@@ -152,9 +152,15 @@ export default function FinanceBoardView({ workspaceId, board }: { workspaceId: 
     }));
   }, [entries, selectedMonth]);
 
-  // Список операций именно за выбранный месяц (навигация стрелками выше)
+  // Список операций именно за выбранный месяц (навигация стрелками выше) —
+  // сначала недавние: по дате, а среди операций одного дня — по времени добавления.
   const monthTransactions = useMemo(
-    () => [...monthEntries].sort((a, b) => b.date.localeCompare(a.date)),
+    () =>
+      [...monthEntries].sort((a, b) => {
+        const dateDiff = b.date.localeCompare(a.date);
+        if (dateDiff !== 0) return dateDiff;
+        return (b.createdAt || 0) - (a.createdAt || 0);
+      }),
     [monthEntries]
   );
 
@@ -491,13 +497,20 @@ function PayInstallmentModal({
   const remaining = entry.amount - (entry.paidAmount || 0);
   const [amount, setAmount] = useState(String(remaining));
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleConfirm() {
     const val = Number(amount);
     if (!val || val <= 0) return;
     setSaving(true);
+    setError(null);
     try {
       await onPay(Math.min(val, remaining));
+    } catch (e) {
+      // Сама трата уже могла записаться (первая операция обычно проходит), но что-то
+      // пошло не так со второй — например, нестабильная сеть на телефоне. Показываем
+      // ошибку и НЕ закрываем окно молча, чтобы человек не думал, что оно зависло.
+      setError((e as { message?: string })?.message || 'Не удалось завершить платёж. Проверьте интернет и попробуйте ещё раз.');
     } finally {
       setSaving(false);
     }
@@ -533,12 +546,20 @@ function PayInstallmentModal({
           </button>
         </div>
 
+        {error && <p className="text-xs text-rose-500">{error}</p>}
+
         <button
           onClick={handleConfirm}
           disabled={saving || !amount || Number(amount) <= 0}
           className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white font-medium text-sm disabled:opacity-50"
         >
-          Подтвердить платёж
+          {saving ? 'Сохраняю...' : 'Подтвердить платёж'}
+        </button>
+        <button
+          onClick={onClose}
+          className="w-full py-2 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-xs font-medium text-neutral-500"
+        >
+          Отмена
         </button>
       </div>
     </div>

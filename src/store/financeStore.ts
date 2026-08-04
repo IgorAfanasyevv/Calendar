@@ -1,6 +1,6 @@
 import { localDateStr } from '../lib/timezone';
 import { create } from 'zustand';
-import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, writeBatch } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import type { FinanceEntry } from '../types';
 import { logActivity } from './activityStore';
@@ -68,9 +68,14 @@ export const useFinanceStore = create<FinanceState>((set) => ({
     const newPaid = alreadyPaid + amount;
     const remaining = entry.amount - newPaid;
 
-    // Сам платёж записываем как обычную (не запланированную) операцию —
-    // она попадёт в историю, бюджет и диаграммы как фактическая трата.
-    await addDoc(collection(db, 'workspaces', entry.workspaceId, 'financeBoards', entry.boardId, 'entries'), {
+    // Обе операции — запись самого платежа и обновление/удаление запланированной
+    // записи — идут одним пакетом (batch), чтобы либо обе прошли успешно, либо
+    // ни одна: раньше при сбое сети между двумя отдельными запросами платёж мог
+    // записаться, а окно оплаты — зависнуть с ошибкой, не закрывшись.
+    const batch = writeBatch(db);
+
+    const paymentRef = doc(collection(db, 'workspaces', entry.workspaceId, 'financeBoards', entry.boardId, 'entries'));
+    batch.set(paymentRef, {
       type: entry.type,
       category: entry.category,
       note: entry.note ? `Платёж: ${entry.note}` : `Платёж по «${entry.category}»`,
@@ -82,15 +87,16 @@ export const useFinanceStore = create<FinanceState>((set) => ({
       createdByName: actor.name,
     });
 
+    const plannedRef = doc(db, 'workspaces', entry.workspaceId, 'financeBoards', entry.boardId, 'entries', entry.id);
     if (remaining <= 0) {
       // Полностью погашено — саму запланированную запись удаляем, дальше её
       // представляют уже записанные фактические платежи.
-      await deleteDoc(doc(db, 'workspaces', entry.workspaceId, 'financeBoards', entry.boardId, 'entries', entry.id));
+      batch.delete(plannedRef);
     } else {
-      await updateDoc(doc(db, 'workspaces', entry.workspaceId, 'financeBoards', entry.boardId, 'entries', entry.id), {
-        paidAmount: newPaid,
-      });
+      batch.update(plannedRef, { paidAmount: newPaid });
     }
+
+    await batch.commit();
 
     logActivity(
       entry.workspaceId,
