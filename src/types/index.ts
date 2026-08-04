@@ -384,6 +384,8 @@ export interface FavoriteHotel {
   photoUrl?: string;
   photoUrls?: string[];
   mapsUrl?: string;
+  lat?: number;
+  lng?: number;
 }
 
 export interface UserProfile {

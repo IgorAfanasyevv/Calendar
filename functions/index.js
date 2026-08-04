@@ -1061,7 +1061,7 @@ async function searchGooglePlaces(textQuery, apiKey, pageToken) {
       'Content-Type': 'application/json',
       'X-Goog-Api-Key': apiKey,
       'X-Goog-FieldMask':
-        'places.id,places.displayName,places.formattedAddress,places.rating,places.photos,places.googleMapsUri,places.editorialSummary,nextPageToken',
+        'places.id,places.displayName,places.formattedAddress,places.rating,places.photos,places.googleMapsUri,places.editorialSummary,places.location,nextPageToken',
     },
     body: JSON.stringify(stripUndefinedFields({ textQuery, maxResultCount: 6, pageToken })),
   });
@@ -1084,6 +1084,8 @@ async function searchGooglePlaces(textQuery, apiKey, pageToken) {
       photoUrl: photoUrls[0],
       photoUrls: photoUrls.length > 0 ? photoUrls : undefined,
       mapsUrl: p.googleMapsUri,
+      lat: p.location && p.location.latitude,
+      lng: p.location && p.location.longitude,
     };
   });
   return { ok: true, places, nextPageToken: placesData.nextPageToken };

@@ -6,6 +6,7 @@ import { useAuthStore } from '../store/authStore';
 import Modal from '../components/Modal';
 import TripAssistantModal from '../components/TripAssistantModal';
 import HotelGalleryModal from '../components/HotelGalleryModal';
+import PlacesMapView from '../components/PlacesMapView';
 import { currencySymbol } from '../lib/currency';
 import type { FavoriteHotel, PackingItem, Trip, TripItineraryItem } from '../types';
 
@@ -157,7 +158,7 @@ function TripDetail({
   const { pots } = useSavingsStore();
   const { removeFavoriteHotel } = useTripStore();
   const linkedPot = pots.find((p) => p.id === trip.savingsPotId);
-  const [tab, setTab] = useState<'itinerary' | 'packing' | 'hotels'>('itinerary');
+  const [tab, setTab] = useState<'itinerary' | 'packing' | 'hotels' | 'map'>('itinerary');
   const [newItemTitle, setNewItemTitle] = useState('');
   const [newItemDate, setNewItemDate] = useState(trip.startDate || '');
   const [newPackingName, setNewPackingName] = useState('');
@@ -249,6 +250,12 @@ function TripDetail({
           className={`px-3 py-1.5 rounded-full text-xs font-medium transition ${tab === 'hotels' ? 'bg-indigo-500 text-white' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500'}`}
         >
           Места ⭐
+        </button>
+        <button
+          onClick={() => setTab('map')}
+          className={`px-3 py-1.5 rounded-full text-xs font-medium transition ${tab === 'map' ? 'bg-indigo-500 text-white' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500'}`}
+        >
+          Карта 🗺️
         </button>
       </div>
 
@@ -353,6 +360,8 @@ function TripDetail({
           )}
         </div>
       )}
+
+      {tab === 'map' && <PlacesMapView places={trip.favoriteHotels || []} />}
 
       {assistantOpen && (
         <TripAssistantModal
