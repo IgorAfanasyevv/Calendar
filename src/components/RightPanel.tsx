@@ -1,10 +1,12 @@
-import { useMemo } from 'react';
-import { AlertTriangle, CalendarClock, CheckCircle2, Target } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { AlertTriangle, CalendarClock, CheckCircle2, Target, Heart } from 'lucide-react';
 import { useTaskStore } from '../store/taskStore';
 import { useGoalStore } from '../store/goalStore';
+import { useWorkspaceStore } from '../store/workspaceStore';
 import CitiesWeatherCard from './CitiesWeatherCard';
 import CitiesTimeCard from './CitiesTimeCard';
 import ActivityCard from './ActivityCard';
+import DateNightModal from './DateNightModal';
 import { effectiveDate, effectiveTime, localDateStr } from '../lib/timezone';
 
 function startOfWeek(dateStr: string): string {
@@ -26,6 +28,8 @@ const WEEKDAY_LABELS = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
 export default function RightPanel() {
   const { tasks } = useTaskStore();
   const { goals } = useGoalStore();
+  const { workspace } = useWorkspaceStore();
+  const [dateNightOpen, setDateNightOpen] = useState(false);
 
   const today = localDateStr(Date.now());
 
@@ -76,6 +80,13 @@ export default function RightPanel() {
   return (
     <div className="h-full p-3 sm:p-4 space-y-4 overflow-y-auto">
       <ActivityCard />
+
+      <button
+        onClick={() => setDateNightOpen(true)}
+        className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white text-sm font-medium shadow-lg shadow-indigo-500/25"
+      >
+        <Heart size={15} fill="white" /> Идея для свидания
+      </button>
 
       <div className="rounded-2xl glass p-4 flex items-center justify-between">
         <span className="text-xs font-medium text-neutral-500">Прогресс задач</span>
@@ -148,6 +159,10 @@ export default function RightPanel() {
           </div>
         ))}
       </Section>
+
+      {dateNightOpen && workspace && (
+        <DateNightModal workspaceId={workspace.id} onClose={() => setDateNightOpen(false)} />
+      )}
     </div>
   );
 }

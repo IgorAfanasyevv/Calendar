@@ -1679,6 +1679,52 @@ async function handleAssistant(request) {
   return { text: finalText || 'Готово.', messages: updatedMessages };
 }
 
+exports.dateNightIdeas = onCall({ secrets: ['ANTHROPIC_API_KEY', 'GOOGLE_PLACES_API_KEY'] }, async (request) => {
+  try {
+    const uid = request.auth && request.auth.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Нужно войти в аккаунт.');
+    const { workspaceId, budget, mood, city } = request.data || {};
+    if (!workspaceId || !city) throw new HttpsError('invalid-argument', 'Не хватает параметров.');
+
+    const info = await getMember(workspaceId, uid);
+    if (!info) throw new HttpsError('permission-denied', 'Вы не участник этого пространства.');
+
+    const budgetLabel = { low: 'бюджетно', medium: 'средний бюджет', high: 'не экономя' }[budget] || 'средний бюджет';
+    const moodLabel = { active: 'активно/подвижно', calm: 'спокойно/расслабленно', romantic: 'романтично' }[mood] || 'романтично';
+
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+    const prompt =
+      `Предложи ровно 3 конкретные идеи для свидания в городе «${city}» — ${budgetLabel}, в настроении: ${moodLabel}. ` +
+      `Для каждой идеи используй веб-поиск, если нужно уточнить актуальные детали (события, часы работы и т.п.). ` +
+      `Ответь коротко — для каждой идеи 1-2 предложения, что это и почему подойдёт под запрошенное настроение/бюджет. ` +
+      `Не используй markdown-заголовки, просто пронумерованный список из 3 пунктов на русском.`;
+
+    const msg = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1000,
+      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+      messages: [{ role: 'user', content: prompt }],
+    });
+    const text = msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
+
+    // Дополнительно — реальные места под настроение через Google Places, с фото
+    let places = [];
+    const placesApiKey = process.env.GOOGLE_PLACES_API_KEY;
+    if (placesApiKey) {
+      const moodQuery = { active: 'активные развлечения', calm: 'уютные кафе', romantic: 'романтичные рестораны' }[mood] || 'романтичные места';
+      const searchResult = await searchGooglePlaces(`${moodQuery} в ${city}`, placesApiKey);
+      if (searchResult.ok) places = searchResult.places.slice(0, 6);
+    }
+
+    return { text, places };
+  } catch (err) {
+    if (err instanceof HttpsError) throw err;
+    logger.error('dateNightIdeas error', err);
+    throw new HttpsError('internal', (err && err.message) || 'Внутренняя ошибка сервера');
+  }
+});
+
 exports.searchMoviePosters = onCall({ secrets: ['TMDB_API_KEY'] }, async (request) => {
   try {
     const uid = request.auth && request.auth.uid;
