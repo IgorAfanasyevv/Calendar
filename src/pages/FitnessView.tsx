@@ -12,7 +12,7 @@ type FitnessTab = 'diary' | 'menu' | 'workouts' | 'hydration';
 
 export default function FitnessView({ workspaceId }: { workspaceId: string }) {
   const { listen: listenFood, listenPresets } = useFoodStore();
-  const { listen: listenWorkouts } = useWorkoutStore();
+  const { listen: listenWorkouts, listenMeasurements } = useWorkoutStore();
   const { listen: listenTrackers } = useDailyTrackerStore();
   const [tab, setTab] = useState<FitnessTab>('diary');
 
@@ -21,13 +21,15 @@ export default function FitnessView({ workspaceId }: { workspaceId: string }) {
     const unsubPresets = listenPresets(workspaceId);
     const unsubWorkouts = listenWorkouts(workspaceId);
     const unsubTrackers = listenTrackers(workspaceId);
+    const unsubMeasurements = listenMeasurements(workspaceId);
     return () => {
       unsubFood();
       unsubPresets();
       unsubWorkouts();
       unsubTrackers();
+      unsubMeasurements();
     };
-  }, [workspaceId, listenFood, listenPresets, listenWorkouts, listenTrackers]);
+  }, [workspaceId, listenFood, listenPresets, listenWorkouts, listenTrackers, listenMeasurements]);
 
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto">

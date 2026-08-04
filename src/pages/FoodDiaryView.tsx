@@ -34,7 +34,7 @@ function shiftDay(dateStr: string, delta: number): string {
 
 export default function FoodDiaryView({ workspaceId }: { workspaceId: string }) {
   const { entries, addEntry, updateEntry, deleteEntry } = useFoodStore();
-  const { workspace, setCalorieGoal } = useWorkspaceStore();
+  const { workspace, setNutritionGoals } = useWorkspaceStore();
   const { firebaseUser, profile } = useAuthStore();
   const actor = { uid: firebaseUser?.uid || '', name: profile?.displayName || '' };
 
@@ -45,6 +45,9 @@ export default function FoodDiaryView({ workspaceId }: { workspaceId: string }) 
   const [editingEntry, setEditingEntry] = useState<FoodEntry | null>(null);
   const [editingGoal, setEditingGoal] = useState(false);
   const [goalInput, setGoalInput] = useState('');
+  const [proteinInput, setProteinInput] = useState('');
+  const [fatInput, setFatInput] = useState('');
+  const [carbsInput, setCarbsInput] = useState('');
   const [showCalculator, setShowCalculator] = useState(false);
 
   const members = workspace?.members || [];
@@ -69,7 +72,12 @@ export default function FoodDiaryView({ workspaceId }: { workspaceId: string }) 
   async function saveGoal() {
     const val = Number(goalInput);
     if (!isNaN(val) && val >= 0 && selectedUid) {
-      await setCalorieGoal(workspaceId, selectedUid, val);
+      await setNutritionGoals(workspaceId, selectedUid, {
+        calorieGoal: val,
+        proteinGoal: proteinInput ? Number(proteinInput) : undefined,
+        fatGoal: fatInput ? Number(fatInput) : undefined,
+        carbsGoal: carbsInput ? Number(carbsInput) : undefined,
+      });
     }
     setEditingGoal(false);
   }
@@ -129,24 +137,53 @@ export default function FoodDiaryView({ workspaceId }: { workspaceId: string }) 
             <button onClick={() => setShowCalculator(true)} className="text-neutral-400 hover:text-indigo-500" title="Калькулятор КБЖУ">
               <Calculator size={14} />
             </button>
-            <button onClick={() => { setGoalInput(String(goal || '')); setEditingGoal(true); }} className="text-neutral-400 hover:text-indigo-500">
+            <button
+              onClick={() => {
+                setGoalInput(String(goal || ''));
+                setProteinInput(String(proteinGoal || ''));
+                setFatInput(String(fatGoal || ''));
+                setCarbsInput(String(carbsGoal || ''));
+                setEditingGoal(true);
+              }}
+              className="text-neutral-400 hover:text-indigo-500"
+            >
               <Pencil size={13} />
             </button>
           </div>
         </div>
 
         {editingGoal ? (
-          <div className="flex gap-2 mb-3">
-            <input
-              autoFocus
-              type="number"
-              className="input text-sm"
-              placeholder="Дневная цель, ккал"
-              value={goalInput}
-              onChange={(e) => setGoalInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && saveGoal()}
-            />
-            <button onClick={saveGoal} className="px-3 rounded-xl bg-indigo-500 text-white text-sm">OK</button>
+          <div className="space-y-2 mb-3">
+            <div>
+              <label className="block text-[10px] font-medium text-neutral-500 mb-1">Калории</label>
+              <input
+                autoFocus
+                type="number"
+                className="input text-sm"
+                placeholder="Дневная цель, ккал"
+                value={goalInput}
+                onChange={(e) => setGoalInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && saveGoal()}
+              />
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="block text-[10px] font-medium text-neutral-500 mb-1">Белки, г</label>
+                <input type="number" className="input text-sm" value={proteinInput} onChange={(e) => setProteinInput(e.target.value)} />
+              </div>
+              <div>
+                <label className="block text-[10px] font-medium text-neutral-500 mb-1">Жиры, г</label>
+                <input type="number" className="input text-sm" value={fatInput} onChange={(e) => setFatInput(e.target.value)} />
+              </div>
+              <div>
+                <label className="block text-[10px] font-medium text-neutral-500 mb-1">Углеводы, г</label>
+                <input type="number" className="input text-sm" value={carbsInput} onChange={(e) => setCarbsInput(e.target.value)} />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={saveGoal} className="flex-1 py-2 rounded-xl bg-indigo-500 text-white text-sm font-medium">Сохранить</button>
+              <button onClick={() => setEditingGoal(false)} className="px-4 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-sm">Отмена</button>
+            </div>
           </div>
         ) : (
           <div className="flex items-end justify-between mb-2">
