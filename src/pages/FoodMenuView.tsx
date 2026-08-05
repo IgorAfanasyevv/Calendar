@@ -1,7 +1,7 @@
 import { localDateStr } from '../lib/timezone';
 import { useEffect, useMemo, useState } from 'react';
 import { httpsCallable } from 'firebase/functions';
-import { Plus, Trash2, CalendarRange, RefreshCw, Loader2, ShoppingCart, BookOpen } from 'lucide-react';
+import { Plus, Trash2, CalendarRange, RefreshCw, Loader2, ShoppingCart, BookOpen, Image as ImageIcon } from 'lucide-react';
 import { useFoodStore } from '../store/foodStore';
 import { useAuthStore } from '../store/authStore';
 import { useWorkspaceStore } from '../store/workspaceStore';
@@ -19,6 +19,18 @@ const recipeCall = httpsCallable<
   { workspaceId: string; action: 'get_recipe'; entryId: string },
   { text: string }
 >(functions, 'fitnessAssistant');
+
+interface FoodPhoto {
+  url: string;
+  thumbUrl: string;
+  credit?: string;
+  creditLink?: string;
+}
+
+const searchFoodPhotoCall = httpsCallable<
+  { workspaceId: string; query: string },
+  { photos: FoodPhoto[] }
+>(functions, 'searchFoodPhoto');
 
 const MEAL_LABELS: Record<MealType, string> = {
   breakfast: 'Завтрак',
@@ -143,7 +155,12 @@ export default function FoodMenuView({ workspaceId }: { workspaceId: string }) {
                     <span className="text-xs font-medium text-neutral-500 shrink-0 w-16">{MEAL_LABELS[e.mealType]}</span>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm truncate">{e.name}</p>
-                      <p className="text-[11px] text-neutral-400">{e.grams ? `${e.grams} г · ` : ''}{e.calories} ккал</p>
+                      <p className="text-[11px] text-neutral-400">
+                        {e.grams ? `${e.grams} г · ` : ''}{e.calories} ккал
+                        {(e.protein || e.fat || e.carbs) && (
+                          <> · Б:{e.protein || 0} Ж:{e.fat || 0} У:{e.carbs || 0}</>
+                        )}
+                      </p>
                     </div>
                     {e.ingredients && e.ingredients.length > 0 ? (
                       <button
@@ -317,6 +334,10 @@ function RecipeModal({
   const [recipe, setRecipe] = useState<string | null>(entry.recipe || null);
   const [loading, setLoading] = useState(!entry.recipe);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<'text' | 'photo'>('text');
+  const [photos, setPhotos] = useState<FoodPhoto[] | null>(null);
+  const [photoLoading, setPhotoLoading] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
 
   useEffect(() => {
     if (entry.recipe) return;
@@ -339,19 +360,98 @@ function RecipeModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entry.id]);
 
+  function loadPhotos() {
+    if (photos || photoLoading) return;
+    setPhotoLoading(true);
+    setPhotoError(null);
+    searchFoodPhotoCall({ workspaceId, query: entry.name })
+      .then((res) => setPhotos(res.data.photos || []))
+      .catch((e) => setPhotoError((e as { message?: string })?.message || 'Не удалось найти фото. Попробуйте ещё раз.'))
+      .finally(() => setPhotoLoading(false));
+  }
+
+  function switchTab(t: 'text' | 'photo') {
+    setTab(t);
+    if (t === 'photo') loadPhotos();
+  }
+
   return (
     <Modal title={`Рецепт: ${entry.name}`} onClose={onClose} wide>
       <div className="space-y-3">
         <p className="text-xs text-neutral-400">
           {entry.grams ? `${entry.grams} г · ` : ''}{entry.calories} ккал
+          {(entry.protein || entry.fat || entry.carbs) && (
+            <> · Белки: {entry.protein || 0} г · Жиры: {entry.fat || 0} г · Углеводы: {entry.carbs || 0} г</>
+          )}
         </p>
-        {loading && (
-          <div className="flex items-center gap-2 text-sm text-neutral-400 py-8 justify-center">
-            <Loader2 size={16} className="animate-spin" /> Готовлю рецепт...
+
+        <div className="flex gap-1.5">
+          <button
+            onClick={() => switchTab('text')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition ${tab === 'text' ? 'bg-indigo-500 text-white' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500'}`}
+          >
+            <BookOpen size={12} /> Текстом
+          </button>
+          <button
+            onClick={() => switchTab('photo')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition ${tab === 'photo' ? 'bg-indigo-500 text-white' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500'}`}
+          >
+            <ImageIcon size={12} /> Фото
+          </button>
+        </div>
+
+        {tab === 'text' && (
+          <>
+            {loading && (
+              <div className="flex items-center gap-2 text-sm text-neutral-400 py-8 justify-center">
+                <Loader2 size={16} className="animate-spin" /> Готовлю рецепт...
+              </div>
+            )}
+            {error && <p className="text-xs text-rose-500">{error}</p>}
+            {recipe && <div className="text-sm whitespace-pre-wrap leading-relaxed">{recipe}</div>}
+          </>
+        )}
+
+        {tab === 'photo' && (
+          <div className="space-y-3">
+            {photoLoading && (
+              <div className="flex items-center gap-2 text-sm text-neutral-400 py-8 justify-center">
+                <Loader2 size={16} className="animate-spin" /> Ищу фото блюда...
+              </div>
+            )}
+            {photoError && <p className="text-xs text-rose-500">{photoError}</p>}
+            {photos && photos.length > 0 && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {photos.map((p, i) => (
+                  <div key={i} className="rounded-xl overflow-hidden">
+                    <img src={p.url} alt={entry.name} className="w-full aspect-square object-cover" />
+                    {p.credit && (
+                      <p className="text-[9px] text-neutral-400 px-1 py-0.5 truncate">
+                        Фото:{' '}
+                        {p.creditLink ? (
+                          <a href={p.creditLink} target="_blank" rel="noopener noreferrer" className="underline">
+                            {p.credit}
+                          </a>
+                        ) : (
+                          p.credit
+                        )}{' '}
+                        / Unsplash
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            {photos && photos.length === 0 && (
+              <p className="text-xs text-neutral-400 text-center py-8">Фото не нашлось — попробуйте посмотреть текстовый рецепт</p>
+            )}
+            {recipe && (
+              <div className="text-sm whitespace-pre-wrap leading-relaxed pt-2 border-t border-neutral-100 dark:border-neutral-800">
+                {recipe}
+              </div>
+            )}
           </div>
         )}
-        {error && <p className="text-xs text-rose-500">{error}</p>}
-        {recipe && <div className="text-sm whitespace-pre-wrap leading-relaxed">{recipe}</div>}
       </div>
     </Modal>
   );
