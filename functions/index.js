@@ -543,42 +543,66 @@ type — один из: strength, cardio, flexibility, sport, other (для ин
     return { parsed };
   }
 
-  if (action === 'replace_meal') {
+  if (action === 'suggest_meal_options') {
     if (!entryId) throw new HttpsError('invalid-argument', 'Не хватает параметров.');
     const entryRef = db.collection('workspaces').doc(workspaceId).collection('food').doc(entryId);
     const entrySnap = await entryRef.get();
     if (!entrySnap.exists) throw new HttpsError('not-found', 'Блюдо не найдено — возможно, уже удалено.');
     const current = entrySnap.data();
 
+    const excludeNames = Array.isArray(request.data.excludeNames) ? request.data.excludeNames : [];
     const mealTypeLabels = { breakfast: 'завтрак', lunch: 'обед', dinner: 'ужин', snack: 'перекус' };
     const prompt = `${SAFETY_NOTE}
 ${prefsText}
-Нужно заменить блюдо на ${mealTypeLabels[current.mealType] || current.mealType} в меню ${name}.
+Нужно предложить варианты замены блюда на ${mealTypeLabels[current.mealType] || current.mealType} в меню ${name}.
 Текущее блюдо: «${current.name}» (примерно ${current.calories} ккал${current.grams ? `, ${current.grams} г` : ''}).
-${preference && preference.trim() ? `Пожелание по замене: ${preference.trim()}.` : 'Пользователь не указал конкретное пожелание — подбери хорошую разнообразную альтернативу.'}
+${preference && preference.trim() ? `Пожелание по замене: ${preference.trim()}.` : 'Пользователь не указал конкретное пожелание — подбери хорошие разнообразные альтернативы.'}
+${excludeNames.length ? `Уже предлагались и не подошли: ${excludeNames.join(', ')} — не повторяй их, предложи что-то новое.` : ''}
 
-Предложи ОДНО блюдо на замену, максимально близкое по калорийности к текущему (в пределах ~15%), и короткий список продуктов/ингредиентов для него (2-6 штук) — у каждого продукта сразу укажи количество прямо в строке (граммы для веса или штуки для счётных продуктов, например "Куриная грудка — 300 г", "Яйца — 2 шт"). Ответь СТРОГО в формате JSON без текста до/после:
-{"name":"...","calories":123,"grams":250,"protein":10,"fat":5,"carbs":20,"ingredients":["...","..."]}`;
+Предложи РОВНО 4 разных блюда на замену, каждое максимально близкое по калорийности к текущему (в пределах ~15%), но заметно
+отличающихся друг от друга (разный белок/способ готовки/стиль). Для каждого — короткий список продуктов/ингредиентов (2-6 штук),
+у каждого продукта сразу укажи количество прямо в строке (граммы для веса или штуки для счётных продуктов, например
+"Куриная грудка — 300 г", "Яйца — 2 шт"). Ответь СТРОГО в формате JSON без текста до/после:
+{"options":[{"name":"...","calories":123,"grams":250,"protein":10,"fat":5,"carbs":20,"ingredients":["...","..."]}, ...]} — ровно 4 элемента в options.`;
 
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 400,
+      max_tokens: 1400,
       messages: [{ role: 'user', content: prompt }],
     });
     const raw = msg.content.map((b) => b.text || '').join('\n').trim();
 
-    let meal;
+    let parsed;
     try {
-      meal = extractJson(raw);
+      parsed = extractJson(raw);
     } catch (e) {
-      logger.error('Не удалось разобрать JSON замены блюда', e, raw);
+      logger.error('Не удалось разобрать JSON вариантов замены блюда', e, raw);
       throw new HttpsError('internal', `Не получилось разобрать ответ модели: ${e.message}`);
     }
 
-    const newIngredients = (meal.ingredients || [])
-      .map((ing) => String(ing).trim())
-      .filter(Boolean)
-      .map((ing) => ing.charAt(0).toUpperCase() + ing.slice(1));
+    const options = (parsed.options || []).map((meal) => ({
+      name: meal.name || 'Блюдо',
+      calories: Number(meal.calories) || 0,
+      grams: meal.grams ? Number(meal.grams) : undefined,
+      protein: meal.protein ? Number(meal.protein) : undefined,
+      fat: meal.fat ? Number(meal.fat) : undefined,
+      carbs: meal.carbs ? Number(meal.carbs) : undefined,
+      ingredients: (meal.ingredients || [])
+        .map((ing) => String(ing).trim())
+        .filter(Boolean)
+        .map((ing) => ing.charAt(0).toUpperCase() + ing.slice(1)),
+    }));
+
+    return { options };
+  }
+
+  if (action === 'apply_meal_option') {
+    if (!entryId || !request.data.option) throw new HttpsError('invalid-argument', 'Не хватает параметров.');
+    const entryRef = db.collection('workspaces').doc(workspaceId).collection('food').doc(entryId);
+    const entrySnap = await entryRef.get();
+    if (!entrySnap.exists) throw new HttpsError('not-found', 'Блюдо не найдено — возможно, уже удалено.');
+    const current = entrySnap.data();
+    const meal = request.data.option;
 
     await entryRef.update(
       stripUndefinedFields({
@@ -588,9 +612,10 @@ ${preference && preference.trim() ? `Пожелание по замене: ${pre
         protein: meal.protein ? Number(meal.protein) : undefined,
         fat: meal.fat ? Number(meal.fat) : undefined,
         carbs: meal.carbs ? Number(meal.carbs) : undefined,
-        ingredients: newIngredients.length ? newIngredients : undefined,
+        ingredients: meal.ingredients && meal.ingredients.length ? meal.ingredients : undefined,
         addedToShopping: false,
         recipe: null,
+        photoSearchTerm: null,
       })
     );
 

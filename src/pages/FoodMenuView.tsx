@@ -10,8 +10,23 @@ import Modal from '../components/Modal';
 import type { FoodEntry, MealType } from '../types';
 import AddFoodModal from '../components/AddFoodModal';
 
-const replaceMealCall = httpsCallable<
-  { workspaceId: string; action: 'replace_meal'; entryId: string; preference?: string },
+interface MealOption {
+  name: string;
+  calories: number;
+  grams?: number;
+  protein?: number;
+  fat?: number;
+  carbs?: number;
+  ingredients?: string[];
+}
+
+const suggestMealOptionsCall = httpsCallable<
+  { workspaceId: string; action: 'suggest_meal_options'; entryId: string; preference?: string; excludeNames?: string[] },
+  { options: MealOption[] }
+>(functions, 'fitnessAssistant');
+
+const applyMealOptionCall = httpsCallable<
+  { workspaceId: string; action: 'apply_meal_option'; entryId: string; option: MealOption },
   { text: string }
 >(functions, 'fitnessAssistant');
 
@@ -491,45 +506,95 @@ function ReplaceMealModal({
   onClose: () => void;
 }) {
   const [preference, setPreference] = useState('');
+  const [options, setOptions] = useState<MealOption[]>([]);
   const [loading, setLoading] = useState(false);
+  const [applyingIndex, setApplyingIndex] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleReplace() {
+  async function loadOptions() {
     setLoading(true);
     setError(null);
     try {
-      await replaceMealCall({ workspaceId, action: 'replace_meal', entryId: entry.id, preference: preference.trim() || undefined });
-      onClose();
+      const res = await suggestMealOptionsCall({
+        workspaceId,
+        action: 'suggest_meal_options',
+        entryId: entry.id,
+        preference: preference.trim() || undefined,
+        excludeNames: options.map((o) => o.name),
+      });
+      setOptions((prev) => [...prev, ...(res.data.options || [])]);
     } catch (e) {
-      setError((e as { message?: string })?.message || 'Не удалось заменить блюдо. Попробуйте ещё раз.');
+      setError((e as { message?: string })?.message || 'Не удалось подобрать варианты. Попробуйте ещё раз.');
     } finally {
       setLoading(false);
     }
   }
 
+  async function handlePick(option: MealOption, index: number) {
+    setApplyingIndex(index);
+    setError(null);
+    try {
+      await applyMealOptionCall({ workspaceId, action: 'apply_meal_option', entryId: entry.id, option });
+      onClose();
+    } catch (e) {
+      setError((e as { message?: string })?.message || 'Не удалось заменить блюдо. Попробуйте ещё раз.');
+      setApplyingIndex(null);
+    }
+  }
+
   return (
-    <Modal title={`Заменить «${entry.name}»`} onClose={onClose}>
+    <Modal title={`Заменить «${entry.name}»`} onClose={onClose} wide>
       <div className="space-y-3">
         <p className="text-xs text-neutral-400">
-          {MEAL_LABELS[entry.mealType]}, примерно {entry.calories} ккал — ИИ подберёт замену похожей калорийности.
+          {MEAL_LABELS[entry.mealType]}, примерно {entry.calories} ккал — ИИ подберёт несколько вариантов замены похожей калорийности.
         </p>
-        <input
-          autoFocus
-          className="input"
-          placeholder="Предпочтительное блюдо (необязательно), например: что-то с курицей"
-          value={preference}
-          onChange={(e) => setPreference(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleReplace()}
-        />
+        <div className="flex gap-2">
+          <input
+            autoFocus
+            className="input flex-1"
+            placeholder="Предпочтение (необязательно), например: что-то с курицей"
+            value={preference}
+            onChange={(e) => setPreference(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && loadOptions()}
+          />
+          <button
+            onClick={loadOptions}
+            disabled={loading}
+            className="px-4 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white font-medium text-sm disabled:opacity-50 flex items-center gap-2 shrink-0"
+          >
+            {loading && <Loader2 size={14} className="animate-spin" />}
+            {options.length === 0 ? 'Подобрать' : 'Ещё'}
+          </button>
+        </div>
+
         {error && <p className="text-xs text-rose-500">{error}</p>}
-        <button
-          onClick={handleReplace}
-          disabled={loading}
-          className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white font-medium text-sm disabled:opacity-50 flex items-center justify-center gap-2"
-        >
-          {loading && <Loader2 size={15} className="animate-spin" />}
-          Заменить блюдо
-        </button>
+
+        <div className="space-y-1.5 max-h-96 overflow-y-auto">
+          {options.map((o, i) => (
+            <button
+              key={i}
+              onClick={() => handlePick(o, i)}
+              disabled={applyingIndex !== null}
+              className="w-full text-left rounded-xl bg-neutral-100 dark:bg-neutral-800 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 px-3 py-2.5 transition disabled:opacity-50 flex items-center gap-3"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium truncate">{o.name}</p>
+                <p className="text-[11px] text-neutral-400">
+                  {o.grams ? `${o.grams} г · ` : ''}{o.calories} ккал
+                  {(o.protein || o.fat || o.carbs) && <> · Б:{o.protein || 0} Ж:{o.fat || 0} У:{o.carbs || 0}</>}
+                </p>
+              </div>
+              {applyingIndex === i ? (
+                <Loader2 size={15} className="animate-spin text-indigo-500 shrink-0" />
+              ) : (
+                <span className="text-[11px] font-medium text-indigo-500 shrink-0">Выбрать</span>
+              )}
+            </button>
+          ))}
+          {options.length === 0 && !loading && (
+            <p className="text-xs text-neutral-400 text-center py-6">Нажмите "Подобрать", чтобы увидеть варианты</p>
+          )}
+        </div>
       </div>
     </Modal>
   );
