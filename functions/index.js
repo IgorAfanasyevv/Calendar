@@ -380,10 +380,10 @@ offset — через сколько дней от сегодня (1 = завт�
     if (!entrySnap.exists) throw new HttpsError('not-found', 'Блюдо не найдено — возможно, уже удалено.');
     const current = entrySnap.data();
 
-    // Рецепт кешируется на самом блюде — повторное открытие ничего не стоит
-    // и не делает запрос к ИИ заново.
+    // Рецепт (и поисковый запрос для фото) кешируются на самом блюде — повторное
+    // открытие ничего не стоит и не делает запрос к ИИ заново.
     if (current.recipe) {
-      return { text: current.recipe };
+      return { text: current.recipe, searchTerm: current.photoSearchTerm || current.name };
     }
 
     const prompt = `${SAFETY_NOTE}
@@ -393,17 +393,25 @@ ${current.ingredients && current.ingredients.length ? `Используй эти
 
 Формат ответа (обычный текст, без markdown-заголовков и звёздочек):
 Сначала список ингредиентов с точной граммовкой/количеством на эту порцию (каждый с новой строки, например "Куриная грудка — 200 г").
-Затем пустая строка, затем пронумерованные шаги приготовления (коротко и по делу, разумное количество шагов для домашней готовки).`;
+Затем пустая строка, затем пронумерованные шаги приготовления (коротко и по делу, разумное количество шагов для домашней готовки).
+В самом конце, отдельной последней строкой, добавь: "SEARCH_TERM: " и после двоеточия — короткое настоящее название этого блюда
+на английском (2-4 слова, как оно реально называется в англоязычных источниках/фотостоках, например "Chicken Katsu" или "Beef Stroganoff") —
+это нужно для поиска фото блюда, база фотографий плохо ищет по русским названиям.`;
 
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 800,
       messages: [{ role: 'user', content: prompt }],
     });
-    const recipeText = msg.content.map((b) => b.text || '').join('\n').trim();
+    const rawText = msg.content.map((b) => b.text || '').join('\n').trim();
 
-    await entryRef.update({ recipe: recipeText });
-    return { text: recipeText };
+    // Отделяем строку с английским названием от самого текста рецепта
+    const searchTermMatch = rawText.match(/SEARCH_TERM:\s*(.+)\s*$/i);
+    const searchTerm = searchTermMatch ? searchTermMatch[1].trim() : current.name;
+    const recipeText = rawText.replace(/SEARCH_TERM:\s*.+\s*$/i, '').trim();
+
+    await entryRef.update({ recipe: recipeText, photoSearchTerm: searchTerm });
+    return { text: recipeText, searchTerm };
   }
 
   if (action === 'exercise_howto') {

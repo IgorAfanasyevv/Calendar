@@ -17,7 +17,7 @@ const replaceMealCall = httpsCallable<
 
 const recipeCall = httpsCallable<
   { workspaceId: string; action: 'get_recipe'; entryId: string },
-  { text: string }
+  { text: string; searchTerm?: string }
 >(functions, 'fitnessAssistant');
 
 interface FoodPhoto {
@@ -335,6 +335,7 @@ function RecipeModal({
   const [loading, setLoading] = useState(!entry.recipe);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<'text' | 'photo'>('text');
+  const [photoQuery, setPhotoQuery] = useState(entry.photoSearchTerm || entry.name);
   const [photos, setPhotos] = useState<FoodPhoto[] | null>(null);
   const [photoLoading, setPhotoLoading] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
@@ -346,7 +347,10 @@ function RecipeModal({
     setError(null);
     recipeCall({ workspaceId, action: 'get_recipe', entryId: entry.id })
       .then((res) => {
-        if (!cancelled) setRecipe(res.data.text);
+        if (!cancelled) {
+          setRecipe(res.data.text);
+          if (res.data.searchTerm) setPhotoQuery(res.data.searchTerm);
+        }
       })
       .catch((e) => {
         if (!cancelled) setError((e as { message?: string })?.message || 'Не удалось получить рецепт. Попробуйте ещё раз.');
@@ -360,11 +364,12 @@ function RecipeModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entry.id]);
 
-  function loadPhotos() {
-    if (photos || photoLoading) return;
+  function loadPhotos(query: string) {
+    if (!query.trim() || photoLoading) return;
     setPhotoLoading(true);
     setPhotoError(null);
-    searchFoodPhotoCall({ workspaceId, query: entry.name })
+    setPhotos(null);
+    searchFoodPhotoCall({ workspaceId, query: query.trim() })
       .then((res) => setPhotos(res.data.photos || []))
       .catch((e) => setPhotoError((e as { message?: string })?.message || 'Не удалось найти фото. Попробуйте ещё раз.'))
       .finally(() => setPhotoLoading(false));
@@ -372,7 +377,7 @@ function RecipeModal({
 
   function switchTab(t: 'text' | 'photo') {
     setTab(t);
-    if (t === 'photo') loadPhotos();
+    if (t === 'photo' && !photos) loadPhotos(photoQuery);
   }
 
   return (
@@ -414,6 +419,25 @@ function RecipeModal({
 
         {tab === 'photo' && (
           <div className="space-y-3">
+            <div className="flex gap-2">
+              <input
+                className="input flex-1 text-sm"
+                placeholder="Поисковый запрос (лучше искать по-английски)"
+                value={photoQuery}
+                onChange={(e) => setPhotoQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && loadPhotos(photoQuery)}
+              />
+              <button
+                onClick={() => loadPhotos(photoQuery)}
+                disabled={photoLoading || !photoQuery.trim()}
+                className="px-3 rounded-xl bg-indigo-500 text-white text-sm disabled:opacity-50 shrink-0"
+              >
+                {photoLoading ? <Loader2 size={15} className="animate-spin" /> : 'Найти'}
+              </button>
+            </div>
+            <p className="text-[11px] text-neutral-400 -mt-1">
+              Если фото не то — поправьте запрос на точное английское название блюда и нажмите "Найти" ещё раз
+            </p>
             {photoLoading && (
               <div className="flex items-center gap-2 text-sm text-neutral-400 py-8 justify-center">
                 <Loader2 size={16} className="animate-spin" /> Ищу фото блюда...

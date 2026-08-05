@@ -101,6 +101,7 @@ export interface FoodEntry {
   ingredients?: string[]; // продукты для этого блюда (из ИИ-меню), для добавления в покупки вручную
   addedToShopping?: boolean;
   recipe?: string; // полный пошаговый рецепт с граммовкой (генерируется ИИ по запросу, кешируется)
+  photoSearchTerm?: string; // английское название блюда для поиска фото (кешируется вместе с рецептом)
   createdBy: string;
   createdByName: string;
   createdAt: number;
