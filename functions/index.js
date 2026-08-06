@@ -299,23 +299,27 @@ offset — через сколько дней от сегодня (0 = сего�
     const prompt = `${SAFETY_NOTE}
 ${prefsText}
 ${macroGoalText}
-Составь меню на 7 дней вперёд для ${name}.
-На каждый день — завтрак, обед, ужин и один перекус.
+Составь меню на 7 дней вперёд для ${name}, но с одной важной особенностью: чтобы не готовить каждый день заново,
+одни и те же блюда (завтрак, обед, ужин, перекус) повторяются на протяжении КАЖДЫХ ДВУХ дней подряд, а затем меняются.
+То есть нужно всего 4 РАЗНЫХ набора блюд на всю неделю: набор 1 — на дни 1-2, набор 2 — на дни 3-4, набор 3 — на дни 5-6,
+набор 4 — только на день 7 (он один, без пары). Каждый набор используется РОВНО на своих днях, повторно не переиспользуется
+в других наборах — то есть за всю неделю должно быть 4 уникальных набора блюд, не меньше и не больше.
 
 ${SIMPLE_INGREDIENTS_NOTE}
 
-Простые, реалистичные для готовки дома блюда, но по-настоящему вкусные и разнообразные — это критически важно, разнообразие проверяется по всем 7 дням сразу:
-- Ни одно блюдо не должно повторяться в течение недели, включая перекусы
-- Меняй основной источник белка от приёма к приёму (курица, яйца, творог, фарш, печень, бобовые) — не бери один и тот же белок больше 2 раз за все 7 дней
-- Меняй гарнир/углеводную основу (рис, гречка, картофель, макароны) — не повторяй один и тот же гарнир больше 2 раз за неделю
+Простые, реалистичные для готовки дома блюда, но по-настоящему вкусные и разнообразные между 4 наборами — это критически важно:
+- Ни одно блюдо не должно повторяться между разными наборами (внутри одного набора блюда, конечно, одни и те же на оба дня — так и задумано)
+- Меняй основной источник белка от набора к набору (курица, яйца, творог, фарш, печень, бобовые) — не бери один и тот же белок больше 2 раз за все 4 набора
+- Меняй гарнир/углеводную основу (рис, гречка, картофель, макароны) — не повторяй один и тот же гарнир больше 2 раз за 4 набора
 - Меняй способ приготовления (варка, запекание, жарка на сковороде, тушение, сырые салаты) — избегай подряд идущих одинаковых способов
-- Меняй стиль блюда от приёма к приёму в рамках простой кухни (суп, запеканка, котлеты, салат, каша, омлет), а не 7 одинаковых "куриная грудка с рисом"
-- Завтраки тоже должны отличаться друг от друга (не 7 одинаковых овсянок) — чередуй яичные блюда, творожные, кашевые, бутербродные варианты
+- Меняй стиль блюда от набора к набору в рамках простой кухни (суп, запеканка, котлеты, салат, каша, омлет)
+- Завтраки тоже должны отличаться друг от друга между наборами (не 4 одинаковых овсянки)
 Для каждого блюда укажи короткий список основных продуктов/ингредиентов, которые для него нужны (2-6 штук), и у КАЖДОГО продукта сразу укажи нужное количество прямо в строке — граммы для веса или штуки для счётных продуктов, например: "Куриная грудка — 300 г", "Рис — 150 г", "Яйца — 2 шт", "Помидоры — 2 шт".
 
 Ответь СТРОГО в формате JSON без какого-либо текста до или после, вот такой структуры:
-{"days":[{"offset":1,"meals":[{"mealType":"breakfast","name":"...","calories":123,"grams":250,"protein":10,"fat":5,"carbs":20,"ingredients":["...","..."]}, ...]}]}
-offset — через сколько дней от сегодня (1 = завтра, 7 = через неделю). mealType — один из: breakfast, lunch, dinner, snack. grams — примерный вес порции в граммах.`;
+{"groups":[{"meals":[{"mealType":"breakfast","name":"...","calories":123,"grams":250,"protein":10,"fat":5,"carbs":20,"ingredients":["...","..."]}, ...]}]}
+Ровно 4 элемента в "groups" (в порядке: набор для дней 1-2, набор для дней 3-4, набор для дней 5-6, набор для дня 7).
+mealType — один из: breakfast, lunch, dinner, snack. grams — примерный вес порции в граммах.`;
 
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
@@ -348,36 +352,43 @@ offset — через сколько дней от сегодня (1 = завт�
     const foodCol = db.collection('workspaces').doc(workspaceId).collection('food');
     let count = 0;
 
-    (parsed.days || []).forEach((day) => {
-      const date = new Date();
-      date.setDate(date.getDate() + (day.offset || 0));
-      const dateStr = date.toISOString().slice(0, 10);
-      (day.meals || []).forEach((meal) => {
-        const ref = foodCol.doc();
-        const ingredients = (meal.ingredients || [])
-          .map((ing) => String(ing).trim())
-          .filter(Boolean)
-          .map((ing) => ing.charAt(0).toUpperCase() + ing.slice(1));
-        batch.set(
-          ref,
-          stripUndefinedFields({
-            workspaceId,
-            date: dateStr,
-            mealType: meal.mealType || 'snack',
-            name: meal.name || 'Блюдо',
-            calories: Number(meal.calories) || 0,
-            grams: meal.grams ? Number(meal.grams) : undefined,
-            protein: meal.protein ? Number(meal.protein) : undefined,
-            fat: meal.fat ? Number(meal.fat) : undefined,
-            carbs: meal.carbs ? Number(meal.carbs) : undefined,
-            ingredients: ingredients.length ? ingredients : undefined,
-            planned: true,
-            createdBy: uid,
-            createdByName: name,
-            createdAt: Date.now(),
-          })
-        );
-        count++;
+    // Каждой из 4 групп соответствуют свои дни календаря: группа 0 → дни 1-2, группа 1 → дни 3-4,
+    // группа 2 → дни 5-6, группа 3 → только день 7. Одни и те же блюда записываются на КАЖДЫЙ день пары.
+    const GROUP_OFFSETS = [[1, 2], [3, 4], [5, 6], [7]];
+
+    (parsed.groups || []).forEach((group, groupIndex) => {
+      const offsets = GROUP_OFFSETS[groupIndex] || [];
+      offsets.forEach((offset) => {
+        const date = new Date();
+        date.setDate(date.getDate() + offset);
+        const dateStr = date.toISOString().slice(0, 10);
+        (group.meals || []).forEach((meal) => {
+          const ref = foodCol.doc();
+          const ingredients = (meal.ingredients || [])
+            .map((ing) => String(ing).trim())
+            .filter(Boolean)
+            .map((ing) => ing.charAt(0).toUpperCase() + ing.slice(1));
+          batch.set(
+            ref,
+            stripUndefinedFields({
+              workspaceId,
+              date: dateStr,
+              mealType: meal.mealType || 'snack',
+              name: meal.name || 'Блюдо',
+              calories: Number(meal.calories) || 0,
+              grams: meal.grams ? Number(meal.grams) : undefined,
+              protein: meal.protein ? Number(meal.protein) : undefined,
+              fat: meal.fat ? Number(meal.fat) : undefined,
+              carbs: meal.carbs ? Number(meal.carbs) : undefined,
+              ingredients: ingredients.length ? ingredients : undefined,
+              planned: true,
+              createdBy: uid,
+              createdByName: name,
+              createdAt: Date.now(),
+            })
+          );
+          count++;
+        });
       });
     });
 
