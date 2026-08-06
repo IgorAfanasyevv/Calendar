@@ -1,7 +1,9 @@
-import { useMemo, useState } from 'react';
-import { Plus, Trash2, Star, BookOpen, Check, ExternalLink, Link2, Bookmark } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { httpsCallable } from 'firebase/functions';
+import { Plus, Trash2, Star, BookOpen, Check, ExternalLink, Link2, Bookmark, Loader2 } from 'lucide-react';
 import { useReadingStore } from '../store/readingStore';
 import { useAuthStore } from '../store/authStore';
+import { functions } from '../lib/firebase';
 import Modal from '../components/Modal';
 import ChangeCoverModal from '../components/ChangeCoverModal';
 import type { ReadingItem } from '../types';
@@ -131,6 +133,7 @@ export default function ReadingView({ workspaceId }: { workspaceId: string }) {
       {creating && (
         <Modal title="Добавить книгу" onClose={() => setCreating(false)}>
           <NewItemForm
+            workspaceId={workspaceId}
             onSave={async (data) => {
               await addItem(workspaceId, data, actor);
               setCreating(false);
@@ -190,21 +193,90 @@ export default function ReadingView({ workspaceId }: { workspaceId: string }) {
   );
 }
 
-function NewItemForm({ onSave }: { onSave: (data: Partial<ReadingItem>) => Promise<void> }) {
+const searchBookCoversCall = httpsCallable<
+  { workspaceId: string; query: string },
+  { candidates: { title: string; author?: string; coverUrl: string }[] }
+>(functions, 'searchBookCovers');
+
+function NewItemForm({ workspaceId, onSave }: { workspaceId: string; onSave: (data: Partial<ReadingItem>) => Promise<void> }) {
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [note, setNote] = useState('');
   const [url, setUrl] = useState('');
+  const [coverUrl, setCoverUrl] = useState<string | undefined>(undefined);
+  const [suggestions, setSuggestions] = useState<{ title: string; author?: string; coverUrl: string }[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  // Ищем по мере ввода, с небольшой задержкой, чтобы не слать запрос на каждую букву
+  useEffect(() => {
+    if (!title.trim() || title.trim().length < 3) {
+      setSuggestions([]);
+      return;
+    }
+    setSearching(true);
+    const timeout = setTimeout(() => {
+      searchBookCoversCall({ workspaceId, query: title.trim() })
+        .then((res) => setSuggestions(res.data.candidates || []))
+        .catch(() => setSuggestions([]))
+        .finally(() => setSearching(false));
+    }, 400);
+    return () => clearTimeout(timeout);
+  }, [title, workspaceId]);
+
+  function pickSuggestion(s: { title: string; author?: string; coverUrl: string }) {
+    setTitle(s.title);
+    if (s.author) setAuthor(s.author);
+    setCoverUrl(s.coverUrl);
+    setShowSuggestions(false);
+    setSuggestions([]);
+  }
 
   return (
     <div className="space-y-3">
-      <input className="input" placeholder="Название книги" value={title} onChange={(e) => setTitle(e.target.value)} />
+      <div className="relative">
+        <input
+          className="input"
+          placeholder="Название книги"
+          value={title}
+          onChange={(e) => {
+            setTitle(e.target.value);
+            setCoverUrl(undefined);
+            setShowSuggestions(true);
+          }}
+          onFocus={() => setShowSuggestions(true)}
+          onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+        />
+        {showSuggestions && (searching || suggestions.length > 0) && (
+          <div className="absolute z-10 mt-1 w-full max-h-64 overflow-y-auto rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 shadow-lg">
+            {searching && (
+              <p className="px-3 py-2 text-xs text-neutral-400 flex items-center gap-1.5">
+                <Loader2 size={11} className="animate-spin" /> Ищу книги...
+              </p>
+            )}
+            {!searching &&
+              suggestions.map((s, i) => (
+                <button
+                  key={i}
+                  onMouseDown={() => pickSuggestion(s)}
+                  className="w-full flex items-center gap-2.5 text-left px-2.5 py-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 border-b border-neutral-100 dark:border-neutral-800 last:border-0"
+                >
+                  <img src={s.coverUrl} alt={s.title} className="w-8 h-11 object-cover rounded shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium truncate">{s.title}</p>
+                    {s.author && <p className="text-[10px] text-neutral-400 truncate">{s.author}</p>}
+                  </div>
+                </button>
+              ))}
+          </div>
+        )}
+      </div>
       <input className="input" placeholder="Автор (необязательно)" value={author} onChange={(e) => setAuthor(e.target.value)} />
       <input className="input" placeholder="Заметка (необязательно)" value={note} onChange={(e) => setNote(e.target.value)} />
       <input className="input" placeholder="Ссылка, где купить/читать (необязательно)" value={url} onChange={(e) => setUrl(e.target.value)} />
       <button
         disabled={!title.trim()}
-        onClick={() => onSave({ title: title.trim(), author: author.trim() || undefined, note, url: url.trim() || undefined })}
+        onClick={() => onSave({ title: title.trim(), author: author.trim() || undefined, note, url: url.trim() || undefined, coverUrl })}
         className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white font-medium text-sm disabled:opacity-50"
       >
         Добавить
