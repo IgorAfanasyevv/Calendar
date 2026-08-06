@@ -1,16 +1,18 @@
 import { useState } from 'react';
-import { Copy, Check, Moon, Sun, LogOut, UserX, Download, Loader2, Globe } from 'lucide-react';
+import { Copy, Check, Moon, Sun, LogOut, UserX, Download, Loader2, Globe, PlayCircle } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useWorkspaceStore } from '../store/workspaceStore';
 import { useThemeStore } from '../store/themeStore';
 import { useLanguageStore } from '../store/languageStore';
 import { exportWorkspaceData } from '../lib/exportData';
+import OnboardingModal from '../components/OnboardingModal';
 
 export default function SettingsView() {
   const { profile, logOut } = useAuthStore();
   const { workspace, removeMember } = useWorkspaceStore();
   const { dark, toggle } = useThemeStore();
   const { language, setLanguage, t } = useLanguageStore();
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [copied, setCopied] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -132,6 +134,18 @@ export default function SettingsView() {
           {dark ? t('settings_theme_light') : t('settings_theme_dark')}
         </button>
       </div>
+
+      <div className="rounded-2xl glass p-5 space-y-4">
+        <h2 className="text-sm font-semibold text-neutral-500">Приветствие</h2>
+        <button
+          onClick={() => setShowOnboarding(true)}
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-sm font-medium"
+        >
+          <PlayCircle size={15} /> Посмотреть приветствие ещё раз
+        </button>
+      </div>
+
+      {showOnboarding && <OnboardingModal onClose={() => setShowOnboarding(false)} />}
 
       <div className="rounded-2xl glass p-5 space-y-3">
         <h2 className="text-sm font-semibold text-neutral-500">{t('settings_export')}</h2>

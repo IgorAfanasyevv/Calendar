@@ -413,4 +413,5 @@ export interface UserProfile {
   email: string;
   displayName: string;
   workspaceId?: string;
+  onboardingSeen?: boolean; // видел ли человек приветственное окно с объяснением возможностей
 }

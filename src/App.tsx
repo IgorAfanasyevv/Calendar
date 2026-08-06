@@ -25,6 +25,7 @@ import SettingsView from './pages/SettingsView';
 import GlobalAssistant from './components/GlobalAssistant';
 import GlobalSearch from './components/GlobalSearch';
 import WhatsNewModal from './components/WhatsNewModal';
+import OnboardingModal from './components/OnboardingModal';
 import { useImportantDateStore } from './store/importantDateStore';
 import { useHabitStore } from './store/habitStore';
 import { useJournalStore } from './store/journalStore';
@@ -180,7 +181,7 @@ export default function App() {
       <ReminderPopup workspaceId={workspace.id} />
       <GlobalAssistant />
       <GlobalSearch onNavigate={setTab} />
-      <WhatsNewModal />
+      {!profile.onboardingSeen ? <OnboardingModal /> : <WhatsNewModal />}
     </>
   );
 }

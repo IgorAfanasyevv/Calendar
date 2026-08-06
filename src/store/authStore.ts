@@ -22,6 +22,7 @@ interface AuthState {
   resetPassword: (email: string) => Promise<void>;
   logOut: () => Promise<void>;
   clearError: () => void;
+  markOnboardingSeen: () => Promise<void>;
 }
 
 let unsubscribeProfile: (() => void) | null = null;
@@ -79,6 +80,11 @@ export const useAuthStore = create<AuthState>((set) => {
     loading: true,
     error: null,
     clearError: () => set({ error: null }),
+    markOnboardingSeen: async () => {
+      const user = auth.currentUser;
+      if (!user) return;
+      await setDoc(doc(db, 'users', user.uid), { onboardingSeen: true }, { merge: true });
+    },
     signUp: async (email, password, displayName) => {
       set({ error: null });
       try {
