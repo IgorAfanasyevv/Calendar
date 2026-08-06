@@ -54,13 +54,15 @@ const MEAL_LABELS: Record<MealType, string> = {
   snack: 'Перекус',
 };
 
+const MEAL_ORDER: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
+
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00');
   return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', weekday: 'short' });
 }
 
 export default function FoodMenuView({ workspaceId }: { workspaceId: string }) {
-  const { entries, addEntry, deleteEntry, sendIngredientsToShopping, unselectFromMenu, setIngredients } = useFoodStore();
+  const { entries, addEntry, deleteEntry, sendIngredientsToShopping, markAddedToShopping, unselectFromMenu, setIngredients } = useFoodStore();
   const { firebaseUser, profile } = useAuthStore();
   const { workspace } = useWorkspaceStore();
   const actor = { uid: firebaseUser?.uid || '', name: profile?.displayName || '' };
@@ -101,13 +103,56 @@ export default function FoodMenuView({ workspaceId }: { workspaceId: string }) {
       map[e.date] = map[e.date] || [];
       map[e.date].push(e);
     });
-    return Object.entries(map);
+    const dayGroups = Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
+
+    // Ключ "подписи" дня — набор блюд (тип+название), отсортированный, чтобы порядок
+    // на экране не мешал сравнению одинаковых наборов на соседние дни подряд.
+    const signature = (list: FoodEntry[]) =>
+      list.map((e) => `${e.mealType}:${e.name}`).sort().join('|');
+
+    // Объединяем ПОДРЯД идущие дни с полностью одинаковым набором блюд (например
+    // сгенерированные парами меню) — вместо двух отдельных карточек показываем одну
+    // с диапазоном дат, а кнопки применяются сразу к обоим дням.
+    const merged: { dates: string[]; entries: FoodEntry[] }[] = [];
+    dayGroups.forEach(([date, list]) => {
+      const prev = merged[merged.length - 1];
+      if (prev && signature(prev.entries) === signature(list)) {
+        prev.dates.push(date);
+      } else {
+        merged.push({ dates: [date], entries: list });
+      }
+    });
+    return merged;
   }, [plannedEntries]);
 
-  async function handleSelectForShopping(entry: FoodEntry) {
+  function formatDateRange(dates: string[]): string {
+    if (dates.length === 1) return formatDate(dates[0]);
+    const first = new Date(dates[0] + 'T00:00:00');
+    const last = new Date(dates[dates.length - 1] + 'T00:00:00');
+    const sameMonth = first.getMonth() === last.getMonth();
+    const firstLabel = first.toLocaleDateString('ru-RU', sameMonth ? { day: 'numeric' } : { day: 'numeric', month: 'long' });
+    const lastLabel = last.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+    return `${firstLabel}–${lastLabel}`;
+  }
+
+  // Находит все записи-"близнецы" в других объединённых днях с тем же mealType+name,
+  // чтобы кнопки (удалить/выбрать) могли применить действие сразу ко всем дням пары.
+  function siblingsOf(entry: FoodEntry, group: { dates: string[]; entries: FoodEntry[] }): FoodEntry[] {
+    if (group.dates.length <= 1) return [entry];
+    return plannedEntries.filter(
+      (e) => group.dates.includes(e.date) && e.mealType === entry.mealType && e.name === entry.name
+    );
+  }
+
+  async function handleSelectForShopping(entry: FoodEntry, siblings: FoodEntry[]) {
     setSendingId(entry.id);
     try {
+      // Продукты отправляем в покупки только один раз (готовят обычно одной партией на
+      // оба дня), но статус "выбрано" проставляем всем дням пары, чтобы все пропали
+      // из "Запланировано" и появились в "Точно буду готовить" вместе.
       await sendIngredientsToShopping(entry);
+      const rest = siblings.filter((s) => s.id !== entry.id);
+      await Promise.all(rest.map((s) => markAddedToShopping(s)));
     } finally {
       setSendingId(null);
     }
@@ -159,59 +204,69 @@ export default function FoodMenuView({ workspaceId }: { workspaceId: string }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6 items-start">
         <div className="space-y-5">
-          {grouped.map(([date, list]) => (
-            <div key={date}>
+          {grouped.map((group) => (
+            <div key={group.dates.join('_')}>
               <h3 className="text-xs font-semibold text-neutral-400 uppercase tracking-wide mb-2 capitalize">
-                {formatDate(date)}
+                {formatDateRange(group.dates)}
+                {group.dates.length > 1 && <span className="normal-case font-normal text-neutral-400"> · одно и то же меню на оба дня</span>}
               </h3>
               <div className="space-y-1.5">
-                {list.map((e) => (
-                  <div key={e.id} className="flex items-center gap-3 rounded-xl bg-amber-50/60 dark:bg-amber-500/10 px-3 py-2.5">
-                    <span className="text-xs font-medium text-neutral-500 shrink-0 w-16">{MEAL_LABELS[e.mealType]}</span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm truncate">{e.name}</p>
-                      <p className="text-[11px] text-neutral-400">
-                        {e.grams ? `${e.grams} г · ` : ''}{e.calories} ккал
-                        {(e.protein || e.fat || e.carbs) && (
-                          <> · Б:{e.protein || 0} Ж:{e.fat || 0} У:{e.carbs || 0}</>
+                {[...group.entries]
+                  .sort((a, b) => MEAL_ORDER.indexOf(a.mealType) - MEAL_ORDER.indexOf(b.mealType))
+                  .map((e) => {
+                    const siblings = siblingsOf(e, group);
+                    return (
+                      <div key={e.id} className="flex items-center gap-3 rounded-xl bg-amber-50/60 dark:bg-amber-500/10 px-3 py-2.5">
+                        <span className="text-xs font-medium text-neutral-500 shrink-0 w-16">{MEAL_LABELS[e.mealType]}</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm truncate">{e.name}</p>
+                          <p className="text-[11px] text-neutral-400">
+                            {e.grams ? `${e.grams} г · ` : ''}{e.calories} ккал
+                            {(e.protein || e.fat || e.carbs) && (
+                              <> · Б:{e.protein || 0} Ж:{e.fat || 0} У:{e.carbs || 0}</>
+                            )}
+                          </p>
+                        </div>
+                        {e.ingredients && e.ingredients.length > 0 ? (
+                          <button
+                            onClick={() => handleSelectForShopping(e, siblings)}
+                            disabled={sendingId === e.id}
+                            className="flex items-center gap-1 text-[11px] font-medium text-violet-600 hover:text-violet-700 bg-violet-50 dark:bg-violet-500/10 px-2 py-1 rounded-lg shrink-0"
+                            title={e.ingredients.join(', ')}
+                          >
+                            {sendingId === e.id ? <Loader2 size={12} className="animate-spin" /> : <ShoppingCart size={12} />}
+                            Выбрать
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => setAddingIngredientsFor(e)}
+                            className="flex items-center gap-1 text-[11px] font-medium text-neutral-500 hover:text-violet-600 bg-neutral-100 dark:bg-neutral-800 px-2 py-1 rounded-lg shrink-0"
+                          >
+                            <ShoppingCart size={12} /> Добавить продукты
+                          </button>
                         )}
-                      </p>
-                    </div>
-                    {e.ingredients && e.ingredients.length > 0 ? (
-                      <button
-                        onClick={() => handleSelectForShopping(e)}
-                        disabled={sendingId === e.id}
-                        className="flex items-center gap-1 text-[11px] font-medium text-violet-600 hover:text-violet-700 bg-violet-50 dark:bg-violet-500/10 px-2 py-1 rounded-lg shrink-0"
-                        title={e.ingredients.join(', ')}
-                      >
-                        {sendingId === e.id ? <Loader2 size={12} className="animate-spin" /> : <ShoppingCart size={12} />}
-                        Выбрать
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => setAddingIngredientsFor(e)}
-                        className="flex items-center gap-1 text-[11px] font-medium text-neutral-500 hover:text-violet-600 bg-neutral-100 dark:bg-neutral-800 px-2 py-1 rounded-lg shrink-0"
-                      >
-                        <ShoppingCart size={12} /> Добавить продукты
-                      </button>
-                    )}
-                    <button
-                      onClick={() => setRecipeEntry(e)}
-                      className="flex items-center gap-1 text-[11px] font-medium text-amber-600 hover:text-amber-700 bg-amber-50 dark:bg-amber-500/10 px-2 py-1 rounded-lg shrink-0"
-                    >
-                      <BookOpen size={12} /> Рецепт
-                    </button>
-                    <button
-                      onClick={() => setReplacingEntry(e)}
-                      className="flex items-center gap-1 text-[11px] font-medium text-indigo-600 hover:text-indigo-700 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-1 rounded-lg shrink-0"
-                    >
-                      <RefreshCw size={12} /> Заменить
-                    </button>
-                    <button onClick={() => deleteEntry(e, actor)} className="text-neutral-400 hover:text-rose-500 shrink-0">
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                ))}
+                        <button
+                          onClick={() => setRecipeEntry(e)}
+                          className="flex items-center gap-1 text-[11px] font-medium text-amber-600 hover:text-amber-700 bg-amber-50 dark:bg-amber-500/10 px-2 py-1 rounded-lg shrink-0"
+                        >
+                          <BookOpen size={12} /> Рецепт
+                        </button>
+                        <button
+                          onClick={() => setReplacingEntry(e)}
+                          className="flex items-center gap-1 text-[11px] font-medium text-indigo-600 hover:text-indigo-700 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-1 rounded-lg shrink-0"
+                        >
+                          <RefreshCw size={12} /> Заменить
+                        </button>
+                        <button
+                          onClick={() => siblings.forEach((s) => deleteEntry(s, actor))}
+                          className="text-neutral-400 hover:text-rose-500 shrink-0"
+                          title={siblings.length > 1 ? 'Удалит на оба дня' : 'Удалить'}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    );
+                  })}
               </div>
             </div>
           ))}

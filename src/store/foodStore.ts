@@ -24,6 +24,7 @@ interface FoodState {
   addPreset: (workspaceId: string, preset: Partial<FoodPreset>) => Promise<void>;
   deletePreset: (preset: FoodPreset) => Promise<void>;
   sendIngredientsToShopping: (entry: FoodEntry) => Promise<void>;
+  markAddedToShopping: (entry: FoodEntry) => Promise<void>;
   unselectFromMenu: (entry: FoodEntry) => Promise<void>;
   setIngredients: (entry: FoodEntry, ingredients: string[]) => Promise<void>;
 }
@@ -108,6 +109,12 @@ export const useFoodStore = create<FoodState>((set) => ({
         )
       )
     );
+    await updateDoc(doc(db, 'workspaces', entry.workspaceId, 'food', entry.id), { addedToShopping: true });
+  },
+  // Пометить как "выбрано" БЕЗ повторной отправки продуктов в покупки — для дней-"близнецов"
+  // с тем же блюдом (например пара дней из одного набора меню), где продукты уже отправлены
+  // один раз для первого дня, а второй просто нужно синхронизировать по статусу.
+  markAddedToShopping: async (entry) => {
     await updateDoc(doc(db, 'workspaces', entry.workspaceId, 'food', entry.id), { addedToShopping: true });
   },
   // Вернуть блюдо назад из "Точно буду готовить" в общий список меню
