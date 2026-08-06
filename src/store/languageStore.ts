@@ -17,6 +17,7 @@ const translations = {
     nav_dates: 'Даты',
     nav_journal: 'Дневник',
     nav_watchlist: 'Смотрим',
+    nav_reading: 'Читаем',
     nav_travel: 'Путешествия',
     nav_settings: 'Настройки',
 
@@ -146,6 +147,7 @@ const translations = {
     nav_dates: 'Dates',
     nav_journal: 'Journal',
     nav_watchlist: 'Watching',
+    nav_reading: 'Reading',
     nav_travel: 'Travel',
     nav_settings: 'Settings',
 

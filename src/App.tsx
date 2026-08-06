@@ -19,6 +19,7 @@ import ImportantDatesView from './pages/ImportantDatesView';
 import HabitsView from './pages/HabitsView';
 import JournalView from './pages/JournalView';
 import WatchlistView from './pages/WatchlistView';
+import ReadingView from './pages/ReadingView';
 import TravelView from './pages/TravelView';
 import SettingsView from './pages/SettingsView';
 import GlobalAssistant from './components/GlobalAssistant';
@@ -28,6 +29,7 @@ import { useImportantDateStore } from './store/importantDateStore';
 import { useHabitStore } from './store/habitStore';
 import { useJournalStore } from './store/journalStore';
 import { useWatchlistStore } from './store/watchlistStore';
+import { useReadingStore } from './store/readingStore';
 import { useTripStore } from './store/tripStore';
 import { useSavingsStore } from './store/savingsStore';
 import { useFinanceBoardStore } from './store/financeBoardStore';
@@ -47,6 +49,7 @@ export default function App() {
   const { listenHabits, listenLogs } = useHabitStore();
   const { listen: listenJournal } = useJournalStore();
   const { listen: listenWatchlist } = useWatchlistStore();
+  const { listen: listenReading } = useReadingStore();
   const { listen: listenTrips } = useTripStore();
   const { listenPots } = useSavingsStore();
   const { listen: listenFinanceBoards } = useFinanceBoardStore();
@@ -86,6 +89,7 @@ export default function App() {
     const unsubWorkouts = listenWorkouts(workspace.id);
     const unsubFood = listenFood(workspace.id);
     const unsubWatchlist = listenWatchlist(workspace.id);
+    const unsubReading = listenReading(workspace.id);
     const unsubPots = listenPots(workspace.id);
     const unsubTrips = listenTrips(workspace.id);
     return () => {
@@ -101,6 +105,7 @@ export default function App() {
       unsubWorkouts();
       unsubFood();
       unsubWatchlist();
+      unsubReading();
       unsubPots();
       unsubTrips();
     };
@@ -118,6 +123,7 @@ export default function App() {
     listenWorkouts,
     listenFood,
     listenWatchlist,
+    listenReading,
     listenPots,
     listenTrips,
   ]);
@@ -167,6 +173,7 @@ export default function App() {
         {tab === 'habits' && <HabitsView workspaceId={workspace.id} />}
         {tab === 'journal' && <JournalView workspaceId={workspace.id} />}
         {tab === 'watchlist' && <WatchlistView workspaceId={workspace.id} />}
+        {tab === 'reading' && <ReadingView workspaceId={workspace.id} />}
         {tab === 'travel' && <TravelView workspaceId={workspace.id} />}
         {tab === 'settings' && <SettingsView />}
       </Layout>

@@ -999,12 +999,58 @@ const ASSISTANT_TOOLS = [
       },
     },
   },
+  {
+    name: 'add_reading_items',
+    description:
+      'Добавить одну или несколько книг в раздел "Читаем" (список "хотим прочитать"). Если нужно найти актуальный список ' +
+      'реальных книг (например "все книги такого-то автора") — сначала поищи в интернете точные названия.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        items: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              title: { type: 'string', description: 'Название книги' },
+              author: { type: 'string', description: 'Автор, если известен' },
+            },
+            required: ['title'],
+          },
+        },
+      },
+      required: ['items'],
+    },
+  },
+  {
+    name: 'add_covers_to_existing_reading',
+    description:
+      'Найти и добавить обложки книгам, которые уже есть в разделе "Читаем", но у них ещё нет обложки. Используй, когда ' +
+      'пользователь просит "добавь обложки к книгам" и т.п. Если items не переданы — обработает все книги без обложки, ' +
+      'ища по их текущему названию+автору.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        items: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              title: { type: 'string', description: 'Название книги как оно есть в "Читаем" — чтобы найти нужную запись' },
+              search_query: { type: 'string', description: 'Название+автор для точного поиска обложки, например "Мастер и Маргарита Булгаков"' },
+            },
+            required: ['title', 'search_query'],
+          },
+        },
+      },
+    },
+  },
 ];
 
 async function buildAssistantContext(workspaceId, uid, actorName) {
   const today = todayStr();
 
-  const [tasksSnap, goalsSnap, shoppingSnap, boardsSnap, foodSnap, workoutsSnap, wsSnap, watchlistSnap] = await Promise.all([
+  const [tasksSnap, goalsSnap, shoppingSnap, boardsSnap, foodSnap, workoutsSnap, wsSnap, watchlistSnap, readingSnap] = await Promise.all([
     db.collection('workspaces').doc(workspaceId).collection('tasks').where('done', '==', false).limit(30).get(),
     db.collection('workspaces').doc(workspaceId).collection('goals').limit(20).get(),
     db.collection('workspaces').doc(workspaceId).collection('shopping').where('bought', '==', false).limit(30).get(),
@@ -1013,6 +1059,7 @@ async function buildAssistantContext(workspaceId, uid, actorName) {
     db.collection('workspaces').doc(workspaceId).collection('workouts').where('createdBy', '==', uid).limit(10).get(),
     db.collection('workspaces').doc(workspaceId).get(),
     db.collection('workspaces').doc(workspaceId).collection('watchlist').limit(50).get(),
+    db.collection('workspaces').doc(workspaceId).collection('reading').limit(50).get(),
   ]);
 
   const tasks = tasksSnap.docs.map((d) => {
@@ -1080,6 +1127,11 @@ async function buildAssistantContext(workspaceId, uid, actorName) {
     return { title: w.title, type: w.type, status: w.status, hasPoster: !!w.posterUrl };
   });
 
+  const reading = readingSnap.docs.map((d) => {
+    const r = d.data();
+    return { title: r.title, author: r.author, status: r.status, hasCover: !!r.coverUrl };
+  });
+
   return `Сегодня ${today}. Текущий пользователь: ${actorName}.
 
 Активные задачи (до 30): ${JSON.stringify(tasks)}
@@ -1093,7 +1145,9 @@ async function buildAssistantContext(workspaceId, uid, actorName) {
 Фитнес — дневная цель по калориям: ${calorieGoal || 'не задана'}. Съедено сегодня: ${todaysCalories} ккал (${JSON.stringify(todaysFood)}).
 Последние тренировки: ${JSON.stringify(recentWorkouts)}
 
-Раздел "Смотрим" (фильмы/сериалы, hasPoster показывает, есть ли уже обложка): ${JSON.stringify(watchlist)}`;
+Раздел "Смотрим" (фильмы/сериалы, hasPoster показывает, есть ли уже обложка): ${JSON.stringify(watchlist)}
+
+Раздел "Читаем" (книги, hasCover показывает, есть ли уже обложка): ${JSON.stringify(reading)}`;
 }
 
 /**
@@ -1617,6 +1671,31 @@ async function fetchTmdbPoster(title, type, apiKey) {
   }
 }
 
+/** Ищет обложку книги через Open Library (бесплатно, без ключа). */
+async function fetchBookCover(query) {
+  try {
+    const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=1&fields=cover_i`;
+    const res = await fetch(url);
+    const bodyText = await res.text();
+    if (!res.ok) {
+      logger.error('Open Library вернул ошибку', { status: res.status, body: bodyText.slice(0, 300), query });
+      return { url: null, error: `Open Library ${res.status}: ${bodyText.slice(0, 200)}` };
+    }
+    let data;
+    try {
+      data = JSON.parse(bodyText);
+    } catch {
+      return { url: null, error: `Open Library вернул не-JSON ответ: ${bodyText.slice(0, 200)}` };
+    }
+    const coverId = (data.docs || []).map((d) => d.cover_i).find(Boolean);
+    if (!coverId) return { url: null, error: null }; // реально не нашлось — не ошибка сервиса
+    return { url: `https://covers.openlibrary.org/b/id/${coverId}-L.jpg`, error: null };
+  } catch (err) {
+    logger.error('Не удалось получить обложку книги', err);
+    return { url: null, error: `Внутренняя ошибка: ${err && err.message}` };
+  }
+}
+
   if (name === 'add_watchlist_items') {
     const list = Array.isArray(input.items) ? input.items : [];
     if (list.length === 0) return { ok: false, error: 'Не передан список фильмов/сериалов' };
@@ -1709,13 +1788,94 @@ async function fetchTmdbPoster(title, type, apiKey) {
     });
     await batch.commit();
 
+    return { ok: true, updated: updatedCount, checked: targets.length, notFound: notFoundTitles, posterServiceError: firstError || undefined };
+  }
+
+  if (name === 'add_reading_items') {
+    const list = Array.isArray(input.items) ? input.items : [];
+    if (list.length === 0) return { ok: false, error: 'Не передан список книг' };
+    const validItems = list.filter((item) => item.title && item.title.trim());
+
+    const coverResults = await Promise.all(
+      validItems.map((item) => fetchBookCover(`${item.title.trim()} ${item.author || ''}`.trim()))
+    );
+    const firstError = coverResults.find((r) => r.error)?.error;
+
+    const batch = db.batch();
+    const col = db.collection('workspaces').doc(workspaceId).collection('reading');
+    validItems.forEach((item, i) => {
+      const ref = col.doc();
+      batch.set(
+        ref,
+        stripUndefinedFields({
+          workspaceId,
+          title: item.title.trim(),
+          author: item.author || undefined,
+          status: 'to_read',
+          coverUrl: coverResults[i].url || undefined,
+          createdBy: uid,
+          createdByName: actorName,
+          createdAt: Date.now(),
+        })
+      );
+    });
+    await batch.commit();
     return {
       ok: true,
-      updated: updatedCount,
-      checked: targets.length,
-      notFound: notFoundTitles,
-      posterServiceError: firstError || undefined,
+      created: 'reading_items',
+      count: validItems.length,
+      titles: validItems.map((i) => i.title),
+      coversFound: coverResults.filter((r) => r.url).length,
+      coverServiceError: firstError || undefined,
     };
+  }
+
+  if (name === 'add_covers_to_existing_reading') {
+    const col = db.collection('workspaces').doc(workspaceId).collection('reading');
+    const snap = await col.get();
+    const withoutCover = snap.docs.filter((d) => !d.data().coverUrl);
+
+    if (withoutCover.length === 0) {
+      return { ok: true, updated: 0, message: 'Обновлять нечего — у всех книг уже есть обложки' };
+    }
+
+    const items = Array.isArray(input.items) ? input.items : [];
+    let targets;
+    if (items.length > 0) {
+      targets = items
+        .map((item) => {
+          const doc = withoutCover.find((d) => (d.data().title || '').toLowerCase().includes((item.title || '').toLowerCase()));
+          return doc ? { doc, searchQuery: item.search_query || item.title } : null;
+        })
+        .filter(Boolean);
+    } else {
+      targets = withoutCover.map((doc) => ({
+        doc,
+        searchQuery: `${doc.data().title} ${doc.data().author || ''}`.trim(),
+      }));
+    }
+
+    if (targets.length === 0) {
+      return { ok: true, updated: 0, message: 'Не нашлось книг без обложки, совпадающих с переданными названиями' };
+    }
+
+    const coverResults = await Promise.all(targets.map((t) => fetchBookCover(t.searchQuery)));
+    const firstError = coverResults.find((r) => r.error)?.error;
+
+    const batch = db.batch();
+    let updatedCount = 0;
+    const notFoundTitles = [];
+    targets.forEach((t, i) => {
+      if (coverResults[i].url) {
+        batch.update(t.doc.ref, { coverUrl: coverResults[i].url });
+        updatedCount++;
+      } else {
+        notFoundTitles.push(t.doc.data().title);
+      }
+    });
+    await batch.commit();
+
+    return { ok: true, updated: updatedCount, checked: targets.length, notFound: notFoundTitles, coverServiceError: firstError || undefined };
   }
 
   return { ok: false, error: `Неизвестный инструмент: ${name}` };
@@ -1749,6 +1909,7 @@ async function handleAssistant(request) {
     `Если пользователь просит что-то создать, изменить или удалить — используй подходящий инструмент, не выдумывай, что уже сделано, пока реально не вызвал инструмент. Перед удалением можешь кратко уточнить, если не уверен(а), что нашёл именно нужный элемент, но если запрос однозначный — просто удаляй/меняй. ` +
     `Не спрашивай подтверждение для действий с низким риском, которые сам умеешь выполнить без человека (например перевод названия на английский, поиск фактов) — если знаешь ответ, сразу используй его и вызывай инструмент, а не перечисляй варианты в чате в ожидании "да, добавь". Уточняй только когда реально не уверен(а) в конкретном элементе или запрос неоднозначен. ` +
     `Если инструмент добавления постеров вернул поле posterServiceError — ОБЯЗАТЕЛЬНО процитируй пользователю его значение дословно (это реальная техническая ошибка сервиса TMDB, например неверный ключ), а не выдумывай общие предположения вроде "может быть проблема с индексацией" — если этого поля нет, но постеры всё равно не нашлись, тогда это значит именно "не нашлось в базе", так и скажи. ` +
+    `То же самое касается coverServiceError у книг — цитируй дословно, если есть. Про книги в "Читаем": используй add_reading_items для добавления и add_covers_to_existing_reading, чтобы задним числом найти обложки уже добавленным книгам без обложки — так же, не спрашивая подтверждения, сразу действием. ` +
     `Инструменты удаления/изменения задач сами находят и обрабатывают ВСЕ подходящие по названию задачи за один вызов и возвращают поле count с точным числом затронутых — всегда называй пользователю именно это число из результата инструмента, не предполагай и не округляй сам. ` +
     `Если пользователь просит ПОВТОРЯЮЩУЮСЯ задачу (например "каждую среду до конца года", "каждый день на этой неделе") — используй в create_task поля repeat_frequency + repeat_until вместе с date (первое вхождение), сервер сам создаст все нужные повторения одним действием, не нужно вызывать create_task много раз подряд самому. Если пользователь не назвал явную дату окончания повтора ("до конца года", "до июня") — переведи это в конкретную дату (например "до конца года" = 31 декабря текущего года). ` +
     `Если данных не хватает для действия (например, не нашлась вкладка финансов или цель) — прямо скажи об этом. ` +
@@ -1886,6 +2047,40 @@ exports.searchFoodPhoto = onCall({ secrets: ['UNSPLASH_ACCESS_KEY'] }, async (re
   } catch (err) {
     if (err instanceof HttpsError) throw err;
     logger.error('searchFoodPhoto error', err);
+    throw new HttpsError('internal', (err && err.message) || 'Внутренняя ошибка сервера');
+  }
+});
+
+exports.searchBookCovers = onCall({}, async (request) => {
+  try {
+    const uid = request.auth && request.auth.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Нужно войти в аккаунт.');
+    const { workspaceId, query } = request.data || {};
+    if (!workspaceId || !query) throw new HttpsError('invalid-argument', 'Не хватает параметров.');
+
+    const info = await getMember(workspaceId, uid);
+    if (!info) throw new HttpsError('permission-denied', 'Вы не участник этого пространства.');
+
+    // Open Library — полностью бесплатный публичный сервис, без ключа/лимитов авторизации
+    const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=8&fields=title,author_name,cover_i`;
+    const res = await fetch(url);
+    const bodyText = await res.text();
+    if (!res.ok) throw new HttpsError('internal', `Open Library ${res.status}: ${bodyText.slice(0, 200)}`);
+
+    const data = JSON.parse(bodyText);
+    const candidates = (data.docs || [])
+      .filter((d) => d.cover_i)
+      .slice(0, 8)
+      .map((d) => ({
+        title: d.title,
+        author: (d.author_name || [])[0],
+        coverUrl: `https://covers.openlibrary.org/b/id/${d.cover_i}-L.jpg`,
+      }));
+
+    return { candidates };
+  } catch (err) {
+    if (err instanceof HttpsError) throw err;
+    logger.error('searchBookCovers error', err);
     throw new HttpsError('internal', (err && err.message) || 'Внутренняя ошибка сервера');
   }
 });

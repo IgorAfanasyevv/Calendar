@@ -321,6 +321,24 @@ export interface SavingsTransaction {
   createdAt: number;
 }
 
+export type ReadingStatus = 'to_read' | 'read';
+
+export interface ReadingItem {
+  id: string;
+  workspaceId: string;
+  title: string;
+  author?: string;
+  status: ReadingStatus;
+  rating?: number; // 1-5
+  note?: string;
+  url?: string;
+  coverUrl?: string;
+  progressNote?: string; // на чём остановились — например "Глава 12" или "стр. 240"
+  createdBy: string;
+  createdByName: string;
+  createdAt: number;
+}
+
 export type WatchType = 'movie' | 'series' | 'other';
 export type WatchStatus = 'to_watch' | 'watched';
 
