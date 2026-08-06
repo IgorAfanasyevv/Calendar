@@ -487,6 +487,38 @@ ${current.ingredients && current.ingredients.length ? `Используй эти
     return { parsed };
   }
 
+  if (action === 'estimate_food_by_name') {
+    const foodQuery = request.data.foodQuery;
+    if (!foodQuery || !foodQuery.trim()) throw new HttpsError('invalid-argument', 'Не указано название еды.');
+
+    const prompt = `${SAFETY_NOTE}
+
+Пользователь ввёл название еды/блюда для добавления в дневник питания: "${foodQuery.trim()}".
+Если в названии уже указано количество (например "200г курицы", "2 яйца", "чашка кофе") — используй именно его.
+Если количество не указано — возьми типичную стандартную порцию для этого продукта/блюда (например для кофе — 1 чашка ~200мл ~2 ккал без сахара/молока, если не уточнено иное).
+
+Оцени калорийность и БЖУ для этого. Ответь СТРОГО одним JSON-объектом, без текста до/после:
+{"name":"Нормализованное название","calories":5,"grams":200,"protein":0,"fat":0,"carbs":0}
+Если продукт совсем без калорий (вода, чёрный кофе без добавок и т.п.) — так и укажи calories:0 и БЖУ:0, не выдумывай лишнего.`;
+
+    const msg = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 300,
+      messages: [{ role: 'user', content: prompt }],
+    });
+    const raw = msg.content.map((b) => b.text || '').join('\n').trim();
+
+    let parsed;
+    try {
+      parsed = extractJson(raw);
+    } catch (e) {
+      logger.error('Не удалось разобрать JSON оценки еды по названию', { error: e.message, raw: raw.slice(0, 300) });
+      throw new HttpsError('internal', `Не получилось оценить: ${e.message}`);
+    }
+
+    return { parsed };
+  }
+
   if (action === 'parse_workout_photo') {
     // Поддерживаем и одно фото (imageBase64/imageMediaType), и несколько сразу (images: [{base64, mediaType}])
     const photoList = Array.isArray(images) && images.length > 0

@@ -10,7 +10,7 @@ import type { FoodEntry, MealType } from '../types';
 const NEW_FOOD = '__new__';
 
 const fitnessAssistantCall = httpsCallable<
-  { workspaceId: string; action: string; imageBase64?: string; imageMediaType?: string },
+  { workspaceId: string; action: string; imageBase64?: string; imageMediaType?: string; foodQuery?: string },
   { parsed?: { name?: string; calories?: number; grams?: number; protein?: number; fat?: number; carbs?: number } }
 >(functions, 'fitnessAssistant');
 
@@ -52,6 +52,8 @@ export default function AddFoodModal({
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [presetSearch, setPresetSearch] = useState('');
   const [presetDropdownOpen, setPresetDropdownOpen] = useState(false);
+  const [estimatingByName, setEstimatingByName] = useState(false);
+  const [estimateError, setEstimateError] = useState<string | null>(null);
 
   // Коэффициенты "на грамм" — если заданы, изменение граммовки пересчитывает
   // калории/БЖУ пропорционально. Появляются после фото/выбора готового блюда/
@@ -129,6 +131,40 @@ export default function AddFoodModal({
       setPhotoError((err as { message?: string })?.message || 'Не получилось распознать фото. Попробуйте другое.');
     } finally {
       setRecognizingPhoto(false);
+    }
+  }
+
+  async function handleEstimateByName(query: string) {
+    if (!query.trim() || estimatingByName) return;
+    setEstimatingByName(true);
+    setEstimateError(null);
+    try {
+      const res = await fitnessAssistantCall({ workspaceId, action: 'estimate_food_by_name', foodQuery: query.trim() });
+      const p = res.data.parsed;
+      if (p) {
+        setSelected(NEW_FOOD);
+        setName(p.name || query.trim());
+        setCalories(p.calories != null ? String(p.calories) : '');
+        setGrams(p.grams ? String(p.grams) : '');
+        setProtein(p.protein != null ? String(p.protein) : '');
+        setFat(p.fat != null ? String(p.fat) : '');
+        setCarbs(p.carbs != null ? String(p.carbs) : '');
+        setPerGramRates(
+          p.grams
+            ? {
+                calories: p.calories != null ? p.calories / p.grams : undefined,
+                protein: p.protein != null ? p.protein / p.grams : undefined,
+                fat: p.fat != null ? p.fat / p.grams : undefined,
+                carbs: p.carbs != null ? p.carbs / p.grams : undefined,
+              }
+            : null
+        );
+        setPresetDropdownOpen(false);
+      }
+    } catch (err) {
+      setEstimateError((err as { message?: string })?.message || 'Не получилось оценить. Впишите калории вручную.');
+    } finally {
+      setEstimatingByName(false);
     }
   }
 
@@ -217,7 +253,7 @@ export default function AddFoodModal({
         )}
         {photoError && <p className="text-[11px] text-rose-500 -mt-1">{photoError}</p>}
 
-        {!editingEntry && presets.length > 0 && (
+        {!editingEntry && (
           <div className="relative">
             <div className="flex gap-2">
               <div className="relative flex-1">
@@ -255,7 +291,19 @@ export default function AddFoodModal({
                         </button>
                       ))}
                     {presets.filter((p) => p.name.toLowerCase().includes(presetSearch.toLowerCase())).length === 0 && (
-                      <p className="px-3 py-2 text-xs text-neutral-400">Ничего не найдено</p>
+                      <div className="px-3 py-2">
+                        <p className="text-xs text-neutral-400 mb-1.5">Ничего не найдено среди сохранённого</p>
+                        {presetSearch.trim() && (
+                          <button
+                            onMouseDown={() => handleEstimateByName(presetSearch)}
+                            disabled={estimatingByName}
+                            className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-xs font-medium disabled:opacity-50"
+                          >
+                            {estimatingByName && <Loader2 size={12} className="animate-spin" />}
+                            🤖 Оценить «{presetSearch}» через ИИ
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                 )}
@@ -278,6 +326,7 @@ export default function AddFoodModal({
             </div>
           </div>
         )}
+        {estimateError && <p className="text-[11px] text-rose-500 -mt-1">{estimateError}</p>}
 
         <input
           className="input"
