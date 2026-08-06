@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Plus, Trash2, Star, Clapperboard, Tv, Film, Check, ExternalLink, Link2 } from 'lucide-react';
+import { Plus, Trash2, Star, Clapperboard, Tv, Film, Check, ExternalLink, Link2, PlayCircle } from 'lucide-react';
 import { useWatchlistStore } from '../store/watchlistStore';
 import { useAuthStore } from '../store/authStore';
 import Modal from '../components/Modal';
@@ -17,6 +17,7 @@ export default function WatchlistView({ workspaceId }: { workspaceId: string }) 
   const [changingPosterFor, setChangingPosterFor] = useState<WatchlistItem | null>(null);
   const [ratingFor, setRatingFor] = useState<WatchlistItem | null>(null);
   const [linkFor, setLinkFor] = useState<WatchlistItem | null>(null);
+  const [progressFor, setProgressFor] = useState<WatchlistItem | null>(null);
   const [tab, setTab] = useState<'to_watch' | 'watched'>('to_watch');
 
   const toWatch = useMemo(() => items.filter((i) => i.status === 'to_watch'), [items]);
@@ -80,6 +81,9 @@ export default function WatchlistView({ workspaceId }: { workspaceId: string }) 
                   {item.rating ? ` · ${'★'.repeat(item.rating)}${'☆'.repeat(5 - item.rating)}` : ''}
                 </p>
                 {item.note && <p className="text-[11px] text-neutral-400 truncate">{item.note}</p>}
+                {item.progressNote && (
+                  <p className="text-[11px] text-violet-500 truncate">▶ {item.progressNote}</p>
+                )}
               </div>
               {item.url && (
                 <a
@@ -97,6 +101,13 @@ export default function WatchlistView({ workspaceId }: { workspaceId: string }) 
                 title={item.url ? 'Изменить ссылку' : 'Добавить ссылку'}
               >
                 <Link2 size={14} />
+              </button>
+              <button
+                onClick={() => setProgressFor(item)}
+                className="text-neutral-400 hover:text-violet-500 shrink-0"
+                title={item.progressNote ? 'Изменить отметку прогресса' : 'Отметить, на чём остановились'}
+              >
+                <PlayCircle size={14} />
               </button>
               {item.status === 'to_watch' ? (
                 <button
@@ -157,6 +168,18 @@ export default function WatchlistView({ workspaceId }: { workspaceId: string }) 
             onSave={async (url) => {
               await updateItem(linkFor, { url: url || undefined });
               setLinkFor(null);
+            }}
+          />
+        </Modal>
+      )}
+
+      {progressFor && (
+        <Modal title={`На чём остановились — «${progressFor.title}»`} onClose={() => setProgressFor(null)}>
+          <ProgressForm
+            initial={progressFor.progressNote}
+            onSave={async (note) => {
+              await updateItem(progressFor, { progressNote: note || undefined });
+              setProgressFor(null);
             }}
           />
         </Modal>
@@ -230,6 +253,40 @@ function LinkForm({ initial, onSave }: { initial?: string; onSave: (url: string)
         onKeyDown={(e) => e.key === 'Enter' && handleSave()}
       />
       <p className="text-xs text-neutral-400">Ссылка на легальный сервис, где будете смотреть (Кинопоиск, Иви, Netflix и т.п.)</p>
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white font-medium text-sm disabled:opacity-50"
+      >
+        Сохранить
+      </button>
+    </div>
+  );
+}
+
+function ProgressForm({ initial, onSave }: { initial?: string; onSave: (note: string) => Promise<void> }) {
+  const [note, setNote] = useState(initial || '');
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await onSave(note.trim());
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <input
+        autoFocus
+        className="input"
+        placeholder='Например: "Сезон 2, серия 5" или "На 45 минуте"'
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+      />
       <button
         onClick={handleSave}
         disabled={saving}

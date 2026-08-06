@@ -296,6 +296,23 @@ offset — через сколько дней от сегодня (0 = сего�
     : '';
 
   if (action === 'weekly_menu') {
+    // Удаляем предыдущее незавершённое меню этого человека перед генерацией нового —
+    // иначе старые и новые планы накапливались бы вперемешку. Блюда, которые уже
+    // отметили "Выбрать" (addedToShopping) — не трогаем, это подтверждённые планы готовки.
+    const oldSnap = await db
+      .collection('workspaces')
+      .doc(workspaceId)
+      .collection('food')
+      .where('createdBy', '==', uid)
+      .where('planned', '==', true)
+      .get();
+    const toDelete = oldSnap.docs.filter((d) => !d.data().addedToShopping);
+    if (toDelete.length > 0) {
+      const deleteBatch = db.batch();
+      toDelete.forEach((d) => deleteBatch.delete(d.ref));
+      await deleteBatch.commit();
+    }
+
     const prompt = `${SAFETY_NOTE}
 ${prefsText}
 ${macroGoalText}

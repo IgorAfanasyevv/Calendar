@@ -334,6 +334,7 @@ export interface WatchlistItem {
   note?: string;
   url?: string;
   posterUrl?: string;
+  progressNote?: string; // на чём остановились — например "Сезон 2, серия 5" или "На 45 минуте"
   createdBy: string;
   createdByName: string;
   createdAt: number;

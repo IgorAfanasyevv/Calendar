@@ -216,54 +216,60 @@ export default function FoodMenuView({ workspaceId }: { workspaceId: string }) {
                   .map((e) => {
                     const siblings = siblingsOf(e, group);
                     return (
-                      <div key={e.id} className="flex items-center gap-3 rounded-xl bg-amber-50/60 dark:bg-amber-500/10 px-3 py-2.5">
-                        <span className="text-xs font-medium text-neutral-500 shrink-0 w-16">{MEAL_LABELS[e.mealType]}</span>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm truncate">{e.name}</p>
-                          <p className="text-[11px] text-neutral-400">
-                            {e.grams ? `${e.grams} г · ` : ''}{e.calories} ккал
+                      <div key={e.id} className="rounded-xl bg-amber-50/60 dark:bg-amber-500/10 px-3 py-2.5 space-y-2 sm:space-y-0 sm:flex sm:items-center sm:gap-3">
+                        <div className="flex items-center justify-between sm:contents">
+                          <span className="text-xs font-medium text-neutral-500 shrink-0 sm:w-16">{MEAL_LABELS[e.mealType]}</span>
+                          <button
+                            onClick={() => siblings.forEach((s) => deleteEntry(s, actor))}
+                            className="text-neutral-400 hover:text-rose-500 shrink-0 sm:order-last"
+                            title={siblings.length > 1 ? 'Удалит на оба дня' : 'Удалить'}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                        <div className="min-w-0 sm:flex-1">
+                          <p className="text-sm">{e.name}</p>
+                          <p className="text-[11px] text-neutral-400 space-y-0.5 sm:space-y-0">
+                            <span className="block sm:inline">{e.grams ? `${e.grams} г · ` : ''}{e.calories} ккал</span>
                             {(e.protein || e.fat || e.carbs) && (
-                              <> · Б:{e.protein || 0} Ж:{e.fat || 0} У:{e.carbs || 0}</>
+                              <span className="block sm:inline sm:before:content-['·'] sm:before:mx-1">
+                                Б:{e.protein || 0} Ж:{e.fat || 0} У:{e.carbs || 0}
+                              </span>
                             )}
                           </p>
                         </div>
-                        {e.ingredients && e.ingredients.length > 0 ? (
+                        <div className="flex flex-col sm:flex-row gap-1.5 sm:shrink-0">
+                          {e.ingredients && e.ingredients.length > 0 ? (
+                            <button
+                              onClick={() => handleSelectForShopping(e, siblings)}
+                              disabled={sendingId === e.id}
+                              className="flex items-center justify-center gap-1 text-[11px] font-medium text-violet-600 hover:text-violet-700 bg-violet-50 dark:bg-violet-500/10 px-2 py-1 rounded-lg shrink-0"
+                              title={e.ingredients.join(', ')}
+                            >
+                              {sendingId === e.id ? <Loader2 size={12} className="animate-spin" /> : <ShoppingCart size={12} />}
+                              Выбрать
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => setAddingIngredientsFor(e)}
+                              className="flex items-center justify-center gap-1 text-[11px] font-medium text-neutral-500 hover:text-violet-600 bg-neutral-100 dark:bg-neutral-800 px-2 py-1 rounded-lg shrink-0"
+                            >
+                              <ShoppingCart size={12} /> Добавить продукты
+                            </button>
+                          )}
                           <button
-                            onClick={() => handleSelectForShopping(e, siblings)}
-                            disabled={sendingId === e.id}
-                            className="flex items-center gap-1 text-[11px] font-medium text-violet-600 hover:text-violet-700 bg-violet-50 dark:bg-violet-500/10 px-2 py-1 rounded-lg shrink-0"
-                            title={e.ingredients.join(', ')}
+                            onClick={() => setRecipeEntry(e)}
+                            className="flex items-center justify-center gap-1 text-[11px] font-medium text-amber-600 hover:text-amber-700 bg-amber-50 dark:bg-amber-500/10 px-2 py-1 rounded-lg shrink-0"
                           >
-                            {sendingId === e.id ? <Loader2 size={12} className="animate-spin" /> : <ShoppingCart size={12} />}
-                            Выбрать
+                            <BookOpen size={12} /> Рецепт
                           </button>
-                        ) : (
                           <button
-                            onClick={() => setAddingIngredientsFor(e)}
-                            className="flex items-center gap-1 text-[11px] font-medium text-neutral-500 hover:text-violet-600 bg-neutral-100 dark:bg-neutral-800 px-2 py-1 rounded-lg shrink-0"
+                            onClick={() => setReplacingEntry(e)}
+                            className="flex items-center justify-center gap-1 text-[11px] font-medium text-indigo-600 hover:text-indigo-700 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-1 rounded-lg shrink-0"
                           >
-                            <ShoppingCart size={12} /> Добавить продукты
+                            <RefreshCw size={12} /> Заменить
                           </button>
-                        )}
-                        <button
-                          onClick={() => setRecipeEntry(e)}
-                          className="flex items-center gap-1 text-[11px] font-medium text-amber-600 hover:text-amber-700 bg-amber-50 dark:bg-amber-500/10 px-2 py-1 rounded-lg shrink-0"
-                        >
-                          <BookOpen size={12} /> Рецепт
-                        </button>
-                        <button
-                          onClick={() => setReplacingEntry(e)}
-                          className="flex items-center gap-1 text-[11px] font-medium text-indigo-600 hover:text-indigo-700 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-1 rounded-lg shrink-0"
-                        >
-                          <RefreshCw size={12} /> Заменить
-                        </button>
-                        <button
-                          onClick={() => siblings.forEach((s) => deleteEntry(s, actor))}
-                          className="text-neutral-400 hover:text-rose-500 shrink-0"
-                          title={siblings.length > 1 ? 'Удалит на оба дня' : 'Удалить'}
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                        </div>
                       </div>
                     );
                   })}
