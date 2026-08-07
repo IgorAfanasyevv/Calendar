@@ -47,18 +47,35 @@ async function sendPushToUser(uid, title, body) {
 exports.sendTestPushNotification = onCall({}, async (request) => {
   const uid = request.auth && request.auth.uid;
   if (!uid) throw new HttpsError('unauthenticated', 'Нужно войти в аккаунт.');
+  const { workspaceId } = request.data || {};
+  if (!workspaceId) throw new HttpsError('invalid-argument', 'Не хватает параметров.');
 
-  const userSnap = await db.collection('users').doc(uid).get();
-  const tokenCount = Object.keys((userSnap.data() || {}).fcmTokens || {}).length;
-  if (tokenCount === 0) {
+  const wsSnap = await db.collection('workspaces').doc(workspaceId).get();
+  if (!wsSnap.exists) throw new HttpsError('not-found', 'Пространство не найдено.');
+  const workspace = wsSnap.data();
+  const allMemberUids = workspace.memberUids || [];
+  if (!allMemberUids.includes(uid)) throw new HttpsError('permission-denied', 'Вы не участник этого пространства.');
+
+  // Считаем, у скольких участников вообще есть хоть одно зарегистрированное устройство —
+  // если ни у кого, честно предупреждаем, а не просто "тихо" ничего не отправляем.
+  const usersSnaps = await Promise.all(allMemberUids.map((memberUid) => db.collection('users').doc(memberUid).get()));
+  const tokenCounts = usersSnaps.map((s) => Object.keys((s.data() || {}).fcmTokens || {}).length);
+  const totalDevices = tokenCounts.reduce((a, b) => a + b, 0);
+
+  if (totalDevices === 0) {
     throw new HttpsError(
       'failed-precondition',
-      'На этом устройстве уведомления ещё не включены — сначала нажмите "Включить уведомления" выше.'
+      'Ни у кого в этом пространстве ещё не включены уведомления на устройстве — сначала нажмите "Включить уведомления" выше (на каждом устройстве отдельно).'
     );
   }
 
-  await sendPushToUser(uid, '🔔 Тестовое уведомление', 'Если вы это видите — push-уведомления работают!');
-  return { ok: true, sentToDevices: tokenCount };
+  await Promise.all(
+    allMemberUids.map((memberUid) =>
+      sendPushToUser(memberUid, '🔔 Тестовое уведомление', 'Если вы это видите — push-уведомления работают!')
+    )
+  );
+
+  return { ok: true, sentToDevices: totalDevices, sentToMembers: allMemberUids.length };
 });
 
 exports.sendTaskPushReminders = onSchedule('every 15 minutes', async () => {

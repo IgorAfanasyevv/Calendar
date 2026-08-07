@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { httpsCallable } from 'firebase/functions';
 import { Copy, Check, Moon, Sun, LogOut, UserX, Download, Loader2, Globe, PlayCircle, Bell, BellOff, Send } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
@@ -10,12 +10,20 @@ import { exportWorkspaceData } from '../lib/exportData';
 import { functions } from '../lib/firebase';
 import OnboardingModal from '../components/OnboardingModal';
 
-const sendTestNotificationCall = httpsCallable<void, { ok: boolean; sentToDevices: number }>(functions, 'sendTestPushNotification');
+const sendTestNotificationCall = httpsCallable<
+  { workspaceId: string },
+  { ok: boolean; sentToDevices: number; sentToMembers: number }
+>(functions, 'sendTestPushNotification');
 
 export default function SettingsView() {
   const { profile, logOut } = useAuthStore();
-  const { permission, enabling, error: notifError, enable: enableNotifications, disable: disableNotifications } = useNotificationsStore();
+  const { permission, enabling, error: notifError, enable: enableNotifications, disable: disableNotifications, ensureRegistered } = useNotificationsStore();
   const [testSending, setTestSending] = useState(false);
+
+  useEffect(() => {
+    if (profile) ensureRegistered(profile.uid);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.uid]);
   const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
   const { workspace, removeMember } = useWorkspaceStore();
   const { dark, toggle } = useThemeStore();
@@ -166,11 +174,15 @@ export default function SettingsView() {
         {permission === 'granted' && (
           <button
             onClick={async () => {
+              if (!workspace) return;
               setTestSending(true);
               setTestResult(null);
               try {
-                await sendTestNotificationCall();
-                setTestResult({ ok: true, text: 'Отправлено! Проверьте телефон/компьютер.' });
+                const res = await sendTestNotificationCall({ workspaceId: workspace.id });
+                setTestResult({
+                  ok: true,
+                  text: `Отправлено на ${res.data.sentToDevices} устройств(о) у ${res.data.sentToMembers} участников. Проверьте телефоны/компьютеры обоих.`,
+                });
               } catch (e) {
                 setTestResult({ ok: false, text: (e as { message?: string })?.message || 'Не удалось отправить' });
               } finally {
@@ -181,7 +193,7 @@ export default function SettingsView() {
             className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-sm font-medium disabled:opacity-60"
           >
             {testSending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
-            {testSending ? 'Отправляю...' : 'Отправить тестовое уведомление'}
+            {testSending ? 'Отправляю...' : 'Отправить тестовое уведомление всем'}
           </button>
         )}
         {testResult && (
