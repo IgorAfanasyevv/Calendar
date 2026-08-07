@@ -60,21 +60,32 @@ export default function WatchlistView({ workspaceId }: { workspaceId: string }) 
         {visible.map((item) => {
           const Icon = TYPE_ICONS[item.type];
           return (
-            <div key={item.id} className="flex items-center gap-3 rounded-2xl glass p-4">
-              <button onClick={() => setChangingPosterFor(item)} className="shrink-0" title="Сменить постер">
-                {item.posterUrl ? (
-                  <img
-                    src={item.posterUrl}
-                    alt={item.title}
-                    className="w-12 h-16 rounded-lg object-cover shadow-sm hover:opacity-80 transition"
-                  />
-                ) : (
-                  <div className="w-9 h-9 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-700">
-                    <Icon size={16} />
-                  </div>
-                )}
-              </button>
-              <div className="min-w-0 flex-1">
+            <div key={item.id} className="rounded-2xl glass p-4 space-y-3 sm:space-y-0 sm:flex sm:items-center sm:gap-3">
+              <div className="flex items-center gap-3">
+                <button onClick={() => setChangingPosterFor(item)} className="shrink-0" title="Сменить постер">
+                  {item.posterUrl ? (
+                    <img
+                      src={item.posterUrl}
+                      alt={item.title}
+                      className="w-12 h-16 rounded-lg object-cover shadow-sm hover:opacity-80 transition"
+                    />
+                  ) : (
+                    <div className="w-9 h-9 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-700">
+                      <Icon size={16} />
+                    </div>
+                  )}
+                </button>
+                <div className="min-w-0 flex-1 sm:hidden">
+                  <p className="text-sm font-medium">{item.title}</p>
+                  <p className="text-[11px] text-neutral-400">
+                    {TYPE_LABELS[item.type]} · {item.createdByName}
+                    {item.rating ? ` · ${'★'.repeat(item.rating)}${'☆'.repeat(5 - item.rating)}` : ''}
+                  </p>
+                  {item.note && <p className="text-[11px] text-neutral-400">{item.note}</p>}
+                  {item.progressNote && <p className="text-[11px] text-violet-500">▶ {item.progressNote}</p>}
+                </div>
+              </div>
+              <div className="hidden sm:block min-w-0 flex-1">
                 <p className="text-sm font-medium truncate">{item.title}</p>
                 <p className="text-[11px] text-neutral-400">
                   {TYPE_LABELS[item.type]} · {item.createdByName}
@@ -85,45 +96,47 @@ export default function WatchlistView({ workspaceId }: { workspaceId: string }) 
                   <p className="text-[11px] text-violet-500 truncate">▶ {item.progressNote}</p>
                 )}
               </div>
-              {item.url && (
-                <a
-                  href={item.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-[11px] font-medium text-indigo-600 hover:text-indigo-700 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-1 rounded-lg shrink-0"
-                >
-                  <ExternalLink size={12} /> Открыть
-                </a>
-              )}
-              <button
-                onClick={() => setLinkFor(item)}
-                className="text-neutral-400 hover:text-indigo-500 shrink-0"
-                title={item.url ? 'Изменить ссылку' : 'Добавить ссылку'}
-              >
-                <Link2 size={14} />
-              </button>
-              <button
-                onClick={() => setProgressFor(item)}
-                className="text-neutral-400 hover:text-violet-500 shrink-0"
-                title={item.progressNote ? 'Изменить отметку прогресса' : 'Отметить, на чём остановились'}
-              >
-                <PlayCircle size={14} />
-              </button>
-              {item.status === 'to_watch' ? (
+              <div className="flex flex-wrap items-center gap-1.5 sm:shrink-0">
+                {item.url && (
+                  <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-[11px] font-medium text-indigo-600 hover:text-indigo-700 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-1 rounded-lg shrink-0"
+                  >
+                    <ExternalLink size={12} /> Открыть
+                  </a>
+                )}
                 <button
-                  onClick={() => setRatingFor(item)}
-                  className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 hover:text-emerald-700 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-1 rounded-lg shrink-0"
+                  onClick={() => setLinkFor(item)}
+                  className="text-neutral-400 hover:text-indigo-500 shrink-0"
+                  title={item.url ? 'Изменить ссылку' : 'Добавить ссылку'}
                 >
-                  <Check size={12} /> Посмотрели
+                  <Link2 size={14} />
                 </button>
-              ) : (
-                <button onClick={() => setRatingFor(item)} className="text-neutral-400 hover:text-amber-500 shrink-0" title="Изменить оценку">
-                  <Star size={14} />
+                <button
+                  onClick={() => setProgressFor(item)}
+                  className="text-neutral-400 hover:text-violet-500 shrink-0"
+                  title={item.progressNote ? 'Изменить отметку прогресса' : 'Отметить, на чём остановились'}
+                >
+                  <PlayCircle size={14} />
                 </button>
-              )}
-              <button onClick={() => deleteItem(item, actor)} className="text-neutral-400 hover:text-rose-500 shrink-0">
-                <Trash2 size={14} />
-              </button>
+                {item.status === 'to_watch' ? (
+                  <button
+                    onClick={() => setRatingFor(item)}
+                    className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 hover:text-emerald-700 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-1 rounded-lg shrink-0"
+                  >
+                    <Check size={12} /> Посмотрели
+                  </button>
+                ) : (
+                  <button onClick={() => setRatingFor(item)} className="text-neutral-400 hover:text-amber-500 shrink-0" title="Изменить оценку">
+                    <Star size={14} />
+                  </button>
+                )}
+                <button onClick={() => deleteItem(item, actor)} className="text-neutral-400 hover:text-rose-500 shrink-0 ml-auto sm:ml-0">
+                  <Trash2 size={14} />
+                </button>
+              </div>
             </div>
           );
         })}
