@@ -10,6 +10,14 @@ export interface ChangelogEntry {
 // понимает, видел ли человек уже эту запись.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2026-07-30-50',
+    date: '30 июля 2026',
+    title: 'Убрана вкладка Привычки',
+    items: [
+      'Вкладка "Привычки" полностью убрана из приложения по вашей просьбе',
+    ],
+  },
+  {
     version: '2026-07-30-49',
     date: '30 июля 2026',
     title: 'Ключ для поиска книг (устраняет "Quota exceeded")',

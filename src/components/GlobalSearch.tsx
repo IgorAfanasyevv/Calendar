@@ -7,7 +7,6 @@ import { useFinanceStore } from '../store/financeStore';
 import { useFinanceBoardStore } from '../store/financeBoardStore';
 import { useJournalStore } from '../store/journalStore';
 import { useWatchlistStore } from '../store/watchlistStore';
-import { useHabitStore } from '../store/habitStore';
 import { useImportantDateStore } from '../store/importantDateStore';
 import { useWorkoutStore } from '../store/workoutStore';
 import { useFoodStore } from '../store/foodStore';
@@ -31,7 +30,6 @@ export default function GlobalSearch({ onNavigate }: { onNavigate: (tab: Tab) =>
   const { boards } = useFinanceBoardStore();
   const { entries: journalEntries } = useJournalStore();
   const { items: watchlistItems } = useWatchlistStore();
-  const { habits } = useHabitStore();
   const { dates: importantDates } = useImportantDateStore();
   const { entries: workoutEntries } = useWorkoutStore();
   const { entries: foodEntries } = useFoodStore();
@@ -64,9 +62,6 @@ export default function GlobalSearch({ onNavigate }: { onNavigate: (tab: Tab) =>
     watchlistItems.forEach((w) => {
       if (w.title.toLowerCase().includes(q)) out.push({ type: 'Смотрим', title: w.title, tab: 'watchlist' });
     });
-    habits.forEach((h) => {
-      if (h.name.toLowerCase().includes(q)) out.push({ type: 'Привычка', title: h.name, tab: 'habits' });
-    });
     importantDates.forEach((d) => {
       if (d.title.toLowerCase().includes(q)) out.push({ type: 'Дата', title: d.title, subtitle: d.date, tab: 'dates' });
     });
@@ -78,7 +73,7 @@ export default function GlobalSearch({ onNavigate }: { onNavigate: (tab: Tab) =>
     });
 
     return out.slice(0, 30);
-  }, [query, tasks, goals, shoppingItems, boards, entriesByBoard, journalEntries, watchlistItems, habits, importantDates, workoutEntries, foodEntries]);
+  }, [query, tasks, goals, shoppingItems, boards, entriesByBoard, journalEntries, watchlistItems, importantDates, workoutEntries, foodEntries]);
 
   function handleSelect(result: SearchResult) {
     onNavigate(result.tab);

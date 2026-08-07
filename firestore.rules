@@ -86,12 +86,6 @@ service cloud.firestore {
       match /importantDates/{dateId} {
         allow read, write: if isMember(workspaceId);
       }
-      match /habits/{habitId} {
-        allow read, write: if isMember(workspaceId);
-      }
-      match /habitLogs/{logId} {
-        allow read, write: if isMember(workspaceId);
-      }
       match /journal/{entryId} {
         allow read, write: if isMember(workspaceId);
       }

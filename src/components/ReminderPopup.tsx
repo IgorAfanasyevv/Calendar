@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Bell, X, ListChecks, Flame, Dumbbell, UtensilsCrossed } from 'lucide-react';
+import { Bell, X, ListChecks, Dumbbell, UtensilsCrossed } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useTaskStore } from '../store/taskStore';
-import { useHabitStore } from '../store/habitStore';
 import { useWorkoutStore } from '../store/workoutStore';
 import { useFoodStore } from '../store/foodStore';
 import { effectiveDate, localDateStr } from '../lib/timezone';
@@ -15,7 +14,6 @@ interface ReminderItem {
 export default function ReminderPopup({ workspaceId }: { workspaceId: string }) {
   const { firebaseUser } = useAuthStore();
   const { tasks } = useTaskStore();
-  const { habits, logs } = useHabitStore();
   const { entries: workouts } = useWorkoutStore();
   const { entries: foodEntries } = useFoodStore();
   const [reminders, setReminders] = useState<ReminderItem[]>([]);
@@ -42,14 +40,6 @@ export default function ReminderPopup({ workspaceId }: { workspaceId: string }) 
         const d = effectiveDate(t);
         if (d === today) items.push({ icon: ListChecks, text: `Сегодня: «${t.title}»` });
         else if (d === tomorrow) items.push({ icon: ListChecks, text: `Завтра: «${t.title}»` });
-      });
-
-    // Привычки, не отмеченные сегодня этим человеком
-    habits
-      .filter((h) => !h.archived)
-      .forEach((h) => {
-        const done = logs.some((l) => l.habitId === h.id && l.uid === uid && l.date === today);
-        if (!done) items.push({ icon: Flame, text: `Не забудьте отметить привычку «${h.name}»` });
       });
 
     // Запланированные (ИИ-план) тренировки на сегодня или просроченные
@@ -81,7 +71,7 @@ export default function ReminderPopup({ workspaceId }: { workspaceId: string }) 
     setVisible(true);
     localStorage.setItem(storageKey, '1');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firebaseUser?.uid, workspaceId, tasks, habits, logs, workouts, foodEntries]);
+  }, [firebaseUser?.uid, workspaceId, tasks, workouts, foodEntries]);
 
   if (!visible || reminders.length === 0) return null;
 

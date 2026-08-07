@@ -6,7 +6,6 @@ import {
   Wallet,
   Dumbbell,
   CalendarHeart,
-  Flame,
   BookHeart,
   Clapperboard,
   BookOpen,
@@ -27,7 +26,7 @@ import { usePresence } from '../hooks/usePresence';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { WifiOff } from 'lucide-react';
 
-export type Tab = 'home' | 'goals' | 'shopping' | 'finance' | 'fitness' | 'dates' | 'habits' | 'journal' | 'watchlist' | 'reading' | 'travel' | 'settings';
+export type Tab = 'home' | 'goals' | 'shopping' | 'finance' | 'fitness' | 'dates' | 'journal' | 'watchlist' | 'reading' | 'travel' | 'settings';
 
 const NAV: { id: Tab; labelKey: TranslationKey; icon: typeof LayoutDashboard }[] = [
   { id: 'home', labelKey: 'nav_home', icon: LayoutDashboard },
@@ -35,7 +34,6 @@ const NAV: { id: Tab; labelKey: TranslationKey; icon: typeof LayoutDashboard }[]
   { id: 'shopping', labelKey: 'nav_shopping', icon: ShoppingCart },
   { id: 'finance', labelKey: 'nav_finance', icon: Wallet },
   { id: 'fitness', labelKey: 'nav_fitness', icon: Dumbbell },
-  { id: 'habits', labelKey: 'nav_habits', icon: Flame },
   { id: 'dates', labelKey: 'nav_dates', icon: CalendarHeart },
   { id: 'journal', labelKey: 'nav_journal', icon: BookHeart },
   { id: 'watchlist', labelKey: 'nav_watchlist', icon: Clapperboard },

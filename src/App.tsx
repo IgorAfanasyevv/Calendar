@@ -16,7 +16,6 @@ import ShoppingView from './pages/ShoppingView';
 import FinanceView from './pages/FinanceView';
 import FitnessView from './pages/FitnessView';
 import ImportantDatesView from './pages/ImportantDatesView';
-import HabitsView from './pages/HabitsView';
 import JournalView from './pages/JournalView';
 import WatchlistView from './pages/WatchlistView';
 import ReadingView from './pages/ReadingView';
@@ -27,7 +26,6 @@ import GlobalSearch from './components/GlobalSearch';
 import WhatsNewModal from './components/WhatsNewModal';
 import OnboardingModal from './components/OnboardingModal';
 import { useImportantDateStore } from './store/importantDateStore';
-import { useHabitStore } from './store/habitStore';
 import { useJournalStore } from './store/journalStore';
 import { useWatchlistStore } from './store/watchlistStore';
 import { useReadingStore } from './store/readingStore';
@@ -47,7 +45,6 @@ export default function App() {
   const { listen: listenShopping } = useShoppingStore();
   const { listen: listenActivity } = useActivityStore();
   const { listen: listenDates } = useImportantDateStore();
-  const { listenHabits, listenLogs } = useHabitStore();
   const { listen: listenJournal } = useJournalStore();
   const { listen: listenWatchlist } = useWatchlistStore();
   const { listen: listenReading } = useReadingStore();
@@ -83,8 +80,6 @@ export default function App() {
     const unsubShopping = listenShopping(workspace.id);
     const unsubActivity = listenActivity(workspace.id);
     const unsubDates = listenDates(workspace.id);
-    const unsubHabits = listenHabits(workspace.id);
-    const unsubHabitLogs = listenLogs(workspace.id);
     const unsubJournal = listenJournal(workspace.id);
     const unsubFinanceBoards = listenFinanceBoards(workspace.id);
     const unsubWorkouts = listenWorkouts(workspace.id);
@@ -99,8 +94,6 @@ export default function App() {
       unsubShopping();
       unsubActivity();
       unsubDates();
-      unsubHabits();
-      unsubHabitLogs();
       unsubJournal();
       unsubFinanceBoards();
       unsubWorkouts();
@@ -117,8 +110,6 @@ export default function App() {
     listenShopping,
     listenActivity,
     listenDates,
-    listenHabits,
-    listenLogs,
     listenJournal,
     listenFinanceBoards,
     listenWorkouts,
@@ -171,7 +162,6 @@ export default function App() {
         {tab === 'finance' && <FinanceView workspaceId={workspace.id} />}
         {tab === 'fitness' && <FitnessView workspaceId={workspace.id} />}
         {tab === 'dates' && <ImportantDatesView workspaceId={workspace.id} />}
-        {tab === 'habits' && <HabitsView workspaceId={workspace.id} />}
         {tab === 'journal' && <JournalView workspaceId={workspace.id} />}
         {tab === 'watchlist' && <WatchlistView workspaceId={workspace.id} />}
         {tab === 'reading' && <ReadingView workspaceId={workspace.id} />}
