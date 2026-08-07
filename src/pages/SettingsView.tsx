@@ -17,7 +17,7 @@ const sendTestNotificationCall = httpsCallable<
 
 export default function SettingsView() {
   const { profile, logOut } = useAuthStore();
-  const { permission, enabling, error: notifError, enable: enableNotifications, disable: disableNotifications, ensureRegistered } = useNotificationsStore();
+  const { permission, registered, enabling, error: notifError, enable: enableNotifications, disable: disableNotifications, ensureRegistered } = useNotificationsStore();
   const [testSending, setTestSending] = useState(false);
 
   useEffect(() => {
@@ -154,8 +154,9 @@ export default function SettingsView() {
           <button
             onClick={async () => {
               if (!profile) return;
-              if (permission === 'granted') {
+              if (registered) {
                 await disableNotifications(profile.uid);
+                setTestResult({ ok: true, text: 'Уведомления отключены на этом устройстве.' });
               } else {
                 try {
                   await enableNotifications(profile.uid);
@@ -167,11 +168,11 @@ export default function SettingsView() {
             disabled={enabling}
             className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-sm font-medium disabled:opacity-60"
           >
-            {enabling ? <Loader2 size={15} className="animate-spin" /> : permission === 'granted' ? <BellOff size={15} /> : <Bell size={15} />}
-            {enabling ? 'Включаю...' : permission === 'granted' ? 'Отключить уведомления' : 'Включить уведомления'}
+            {enabling ? <Loader2 size={15} className="animate-spin" /> : registered ? <BellOff size={15} /> : <Bell size={15} />}
+            {enabling ? 'Включаю...' : registered ? 'Отключить уведомления' : 'Включить уведомления'}
           </button>
         )}
-        {permission === 'granted' && (
+        {registered && (
           <button
             onClick={async () => {
               if (!workspace) return;
