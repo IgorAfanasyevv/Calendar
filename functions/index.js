@@ -1821,22 +1821,37 @@ async function fetchTmdbPoster(title, type, apiKey) {
 /** Ищет обложку книги через Open Library (бесплатно, без ключа). */
 async function fetchBookCover(query) {
   try {
-    const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=1&fields=cover_i`;
-    const res = await fetch(url);
-    const bodyText = await res.text();
-    if (!res.ok) {
-      logger.error('Open Library вернул ошибку', { status: res.status, body: bodyText.slice(0, 300), query });
-      return { url: null, error: `Open Library ${res.status}: ${bodyText.slice(0, 200)}` };
+    const tryFetch = async (langRestrict) => {
+      const params = new URLSearchParams({ q: query, maxResults: '1', country: 'US' });
+      if (langRestrict) params.set('langRestrict', langRestrict);
+      const res = await fetch(`https://www.googleapis.com/books/v1/volumes?${params.toString()}`);
+      const bodyText = await res.text();
+      if (!res.ok) {
+        logger.error('Google Books вернул ошибку', { status: res.status, body: bodyText.slice(0, 300), query });
+        return { url: null, httpError: `Google Books ${res.status}: ${bodyText.slice(0, 200)}` };
+      }
+      let data;
+      try {
+        data = JSON.parse(bodyText);
+      } catch {
+        return { url: null, httpError: `Google Books вернул не-JSON ответ: ${bodyText.slice(0, 200)}` };
+      }
+      const thumb = (data.items || [])
+        .map((item) => item.volumeInfo && item.volumeInfo.imageLinks && item.volumeInfo.imageLinks.thumbnail)
+        .find(Boolean);
+      if (!thumb) return { url: null, httpError: null };
+      return { url: thumb.replace('http://', 'https://').replace('&edge=curl', ''), httpError: null };
+    };
+
+    // Сначала пробуем найти именно русское издание, и только если не нашлось — любое
+    let { url, httpError } = await tryFetch('ru');
+    if (!url && !httpError) {
+      const fallback = await tryFetch(null);
+      url = fallback.url;
+      httpError = fallback.httpError;
     }
-    let data;
-    try {
-      data = JSON.parse(bodyText);
-    } catch {
-      return { url: null, error: `Open Library вернул не-JSON ответ: ${bodyText.slice(0, 200)}` };
-    }
-    const coverId = (data.docs || []).map((d) => d.cover_i).find(Boolean);
-    if (!coverId) return { url: null, error: null }; // реально не нашлось — не ошибка сервиса
-    return { url: `https://covers.openlibrary.org/b/id/${coverId}-L.jpg`, error: null };
+    if (httpError) return { url: null, error: httpError };
+    return { url, error: null }; // url === null здесь значит "реально не нашлось", не ошибка сервиса
   } catch (err) {
     logger.error('Не удалось получить обложку книги', err);
     return { url: null, error: `Внутренняя ошибка: ${err && err.message}` };
@@ -2208,21 +2223,38 @@ exports.searchBookCovers = onCall({}, async (request) => {
     const info = await getMember(workspaceId, uid);
     if (!info) throw new HttpsError('permission-denied', 'Вы не участник этого пространства.');
 
-    // Open Library — полностью бесплатный публичный сервис, без ключа/лимитов авторизации
-    const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=8&fields=title,author_name,cover_i`;
-    const res = await fetch(url);
-    const bodyText = await res.text();
-    if (!res.ok) throw new HttpsError('internal', `Open Library ${res.status}: ${bodyText.slice(0, 200)}`);
+    // Google Books — бесплатно, без ключа. Сначала ищем именно русские издания
+    // (langRestrict=ru), и только если их нет — показываем что найдётся без ограничения
+    // по языку (лучше показать на другом языке, чем ничего).
+    const fetchBooks = async (langRestrict) => {
+      const params = new URLSearchParams({ q: query, maxResults: '8', country: 'US' });
+      if (langRestrict) params.set('langRestrict', langRestrict);
+      const res = await fetch(`https://www.googleapis.com/books/v1/volumes?${params.toString()}`);
+      const bodyText = await res.text();
+      if (!res.ok) return { ok: false, error: `Google Books ${res.status}: ${bodyText.slice(0, 200)}`, items: [] };
+      const data = JSON.parse(bodyText);
+      return { ok: true, items: data.items || [] };
+    };
 
-    const data = JSON.parse(bodyText);
-    const candidates = (data.docs || [])
-      .filter((d) => d.cover_i)
+    let result = await fetchBooks('ru');
+    if (result.ok && result.items.length === 0) {
+      result = await fetchBooks(null);
+    }
+    if (!result.ok) throw new HttpsError('internal', result.error);
+
+    const candidates = result.items
+      .filter((item) => item.volumeInfo && item.volumeInfo.imageLinks && item.volumeInfo.imageLinks.thumbnail)
       .slice(0, 8)
-      .map((d) => ({
-        title: d.title,
-        author: (d.author_name || [])[0],
-        coverUrl: `https://covers.openlibrary.org/b/id/${d.cover_i}-L.jpg`,
-      }));
+      .map((item) => {
+        const v = item.volumeInfo;
+        // Google отдаёт http:// и иногда обрезающий край страницы — приводим к https и убираем это
+        const cover = v.imageLinks.thumbnail.replace('http://', 'https://').replace('&edge=curl', '');
+        return {
+          title: v.title,
+          author: (v.authors || [])[0],
+          coverUrl: cover,
+        };
+      });
 
     return { candidates };
   } catch (err) {
