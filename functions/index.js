@@ -1,11 +1,126 @@
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { initializeApp } = require('firebase-admin/app');
-const { getFirestore } = require('firebase-admin/firestore');
+const { getFirestore, FieldValue } = require('firebase-admin/firestore');
+const { getMessaging } = require('firebase-admin/messaging');
 const logger = require('firebase-functions/logger');
 const Anthropic = require('@anthropic-ai/sdk');
 
 initializeApp();
 const db = getFirestore();
+const messaging = getMessaging();
+
+/** Отправляет push-уведомление всем зарегистрированным устройствам пользователя.
+ * Токены хранятся в users/{uid}.fcmTokens как объект {token: true}. Недействительные
+ * токены (например уведомления отключили на устройстве) автоматически убираются. */
+async function sendPushToUser(uid, title, body) {
+  const userSnap = await db.collection('users').doc(uid).get();
+  const tokens = Object.keys((userSnap.data() || {}).fcmTokens || {});
+  if (tokens.length === 0) return;
+
+  const results = await Promise.allSettled(
+    tokens.map((token) => messaging.send({ token, notification: { title, body } }))
+  );
+
+  const deadTokens = [];
+  results.forEach((r, i) => {
+    if (r.status === 'rejected') {
+      const code = r.reason && r.reason.errorInfo && r.reason.errorInfo.code;
+      if (code === 'messaging/registration-token-not-registered' || code === 'messaging/invalid-registration-token') {
+        deadTokens.push(tokens[i]);
+      } else {
+        logger.error('Не удалось отправить push', { uid, error: r.reason && r.reason.message });
+      }
+    }
+  });
+
+  if (deadTokens.length > 0) {
+    const update = {};
+    deadTokens.forEach((t) => {
+      update[`fcmTokens.${t}`] = FieldValue.delete();
+    });
+    await db.collection('users').doc(uid).update(update).catch(() => {});
+  }
+}
+
+exports.sendTaskPushReminders = onSchedule('every 15 minutes', async () => {
+  const now = Date.now();
+  const WINDOW_MS = 20 * 60 * 1000;
+  const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+  const ONE_HOUR_MS = 60 * 60 * 1000;
+
+  const tasksSnap = await db.collectionGroup('tasks').where('done', '==', false).get();
+  const workspaceCache = new Map();
+
+  for (const taskDoc of tasksSnap.docs) {
+    const task = taskDoc.data();
+    if (!task.dueAtUtc) continue;
+    const workspaceId = task.workspaceId;
+
+    try {
+      const dueIn = task.dueAtUtc - now;
+      const shouldRemind1Day = !task.reminder1DaySent && dueIn > 0 && dueIn <= ONE_DAY_MS && dueIn > ONE_DAY_MS - WINDOW_MS;
+      const shouldRemind1Hour = !task.reminder1HourSent && dueIn > 0 && dueIn <= ONE_HOUR_MS && dueIn > ONE_HOUR_MS - WINDOW_MS;
+      if (!shouldRemind1Day && !shouldRemind1Hour) continue;
+
+      if (!workspaceCache.has(workspaceId)) {
+        const wsSnap = await db.collection('workspaces').doc(workspaceId).get();
+        workspaceCache.set(workspaceId, wsSnap.exists ? wsSnap.data() : null);
+      }
+      const workspace = workspaceCache.get(workspaceId);
+      if (!workspace) continue;
+      const members = workspace.members || [];
+
+      let targetUid = null;
+      if (task.assignee === 'me') targetUid = task.createdBy;
+      else if (task.assignee === 'partner') targetUid = (members.find((m) => m.uid !== task.createdBy) || {}).uid;
+      const targets = task.assignee === 'together' ? members.map((m) => m.uid) : [targetUid].filter(Boolean);
+
+      const when = shouldRemind1Day ? 'завтра' : 'через час';
+      await Promise.all(
+        targets.map((uid) => sendPushToUser(uid, `Напоминание: ${task.title}`, `Задача ${when}${task.time ? ` в ${task.time}` : ''}`))
+      );
+
+      await taskDoc.ref.update(shouldRemind1Day ? { reminder1DaySent: true } : { reminder1HourSent: true });
+    } catch (err) {
+      logger.error(`Не удалось отправить push-напоминание по задаче ${taskDoc.id}`, err);
+    }
+  }
+});
+
+exports.sendImportantDatePushReminders = onSchedule('every day 08:00', async () => {
+  const datesSnap = await db.collectionGroup('importantDates').get();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const workspaceCache = new Map();
+
+  for (const dateDoc of datesSnap.docs) {
+    const dateData = dateDoc.data();
+    if (!dateData.date) continue;
+
+    try {
+      const [, month, day] = dateData.date.split('-').map(Number);
+      const thisYearDate = new Date(today.getFullYear(), month - 1, day);
+      const daysUntil = Math.round((thisYearDate - today) / (24 * 60 * 60 * 1000));
+      const remindDaysBefore = dateData.remindDaysBefore != null ? dateData.remindDaysBefore : 0;
+      if (daysUntil !== remindDaysBefore) continue;
+
+      const workspaceId = dateData.workspaceId;
+      if (!workspaceCache.has(workspaceId)) {
+        const wsSnap = await db.collection('workspaces').doc(workspaceId).get();
+        workspaceCache.set(workspaceId, wsSnap.exists ? wsSnap.data() : null);
+      }
+      const workspace = workspaceCache.get(workspaceId);
+      if (!workspace) continue;
+
+      const when = daysUntil === 0 ? 'сегодня' : `через ${daysUntil} дн.`;
+      const members = workspace.members || [];
+      await Promise.all(members.map((m) => sendPushToUser(m.uid, `🎉 ${dateData.title}`, `Важная дата — ${when}`)));
+    } catch (err) {
+      logger.error(`Не удалось отправить push-напоминание по важной дате ${dateDoc.id}`, err);
+    }
+  }
+});
 
 // ---------------------------------------------------------------------------
 // ИИ-помощник по питанию: подсказки меню, авто-меню на неделю, анализ дневника

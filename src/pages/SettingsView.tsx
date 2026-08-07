@@ -1,14 +1,16 @@
 import { useState } from 'react';
-import { Copy, Check, Moon, Sun, LogOut, UserX, Download, Loader2, Globe, PlayCircle } from 'lucide-react';
+import { Copy, Check, Moon, Sun, LogOut, UserX, Download, Loader2, Globe, PlayCircle, Bell, BellOff } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useWorkspaceStore } from '../store/workspaceStore';
 import { useThemeStore } from '../store/themeStore';
 import { useLanguageStore } from '../store/languageStore';
+import { useNotificationsStore } from '../store/notificationsStore';
 import { exportWorkspaceData } from '../lib/exportData';
 import OnboardingModal from '../components/OnboardingModal';
 
 export default function SettingsView() {
   const { profile, logOut } = useAuthStore();
+  const { permission, enabling, error: notifError, enable: enableNotifications, disable: disableNotifications } = useNotificationsStore();
   const { workspace, removeMember } = useWorkspaceStore();
   const { dark, toggle } = useThemeStore();
   const { language, setLanguage, t } = useLanguageStore();
@@ -122,6 +124,44 @@ export default function SettingsView() {
             Удалять участников может только владелец пространства.
           </p>
         )}
+      </div>
+
+      <div className="rounded-2xl glass p-5 space-y-4">
+        <h2 className="text-sm font-semibold text-neutral-500">Уведомления на этом устройстве</h2>
+        {permission === 'unsupported' && (
+          <p className="text-xs text-neutral-400">Этот браузер не поддерживает push-уведомления.</p>
+        )}
+        {permission === 'denied' && (
+          <p className="text-xs text-neutral-400">
+            Уведомления заблокированы в настройках браузера для этого сайта — разрешите их там, чтобы включить здесь.
+          </p>
+        )}
+        {(permission === 'default' || permission === 'granted') && (
+          <button
+            onClick={async () => {
+              if (!profile) return;
+              if (permission === 'granted') {
+                await disableNotifications(profile.uid);
+              } else {
+                try {
+                  await enableNotifications(profile.uid);
+                } catch {
+                  // ошибка уже показана ниже через notifError
+                }
+              }
+            }}
+            disabled={enabling}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-sm font-medium disabled:opacity-60"
+          >
+            {enabling ? <Loader2 size={15} className="animate-spin" /> : permission === 'granted' ? <BellOff size={15} /> : <Bell size={15} />}
+            {enabling ? 'Включаю...' : permission === 'granted' ? 'Отключить уведомления' : 'Включить уведомления'}
+          </button>
+        )}
+        {notifError && <p className="text-xs text-rose-500">{notifError}</p>}
+        <p className="text-[11px] text-neutral-400">
+          Напоминания о задачах и важных датах будут приходить push-уведомлением на это устройство. На iPhone работает
+          только если сайт добавлен на домашний экран (Поделиться → "На экран «Домой»").
+        </p>
       </div>
 
       <div className="rounded-2xl glass p-5 space-y-4">

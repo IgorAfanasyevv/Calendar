@@ -3,6 +3,7 @@ import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth'
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 import { getFunctions } from 'firebase/functions';
 import { getStorage } from 'firebase/storage';
+import { getMessaging, isSupported as isMessagingSupported } from 'firebase/messaging';
 
 // Эти значения берутся из .env (см. .env.example).
 // Получить их можно в Firebase Console -> Project Settings -> General -> "Your apps" -> SDK setup and configuration.
@@ -30,6 +31,18 @@ export const db = initializeFirestore(app, {
 
 export const functions = getFunctions(app);
 export const storage = getStorage(app);
+
+// Push-уведомления (Firebase Cloud Messaging) — не во всех браузерах/режимах поддерживаются
+// (например недоступны в приватных вкладках некоторых браузеров), поэтому инициализируем
+// только если isMessagingSupported() подтвердит, что можно.
+export let messaging: ReturnType<typeof getMessaging> | null = null;
+isMessagingSupported()
+  .then((supported) => {
+    if (supported) messaging = getMessaging(app);
+  })
+  .catch(() => {
+    // messaging остаётся null — функции уведомлений просто не будут доступны
+  });
 
 // Явно закрепляем сессию в браузере (localStorage), чтобы имя и пространство
 // не сбрасывались при перезапуске браузера или устройства — сессия живёт,
