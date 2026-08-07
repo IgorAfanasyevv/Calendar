@@ -1,7 +1,7 @@
 import { localDateStr } from '../lib/timezone';
 import { useEffect, useMemo, useState } from 'react';
 import { httpsCallable } from 'firebase/functions';
-import { Plus, Trash2, CalendarRange, RefreshCw, Loader2, ShoppingCart, BookOpen, Image as ImageIcon } from 'lucide-react';
+import { Plus, Trash2, CalendarRange, RefreshCw, Loader2, ShoppingCart, BookOpen, Image as ImageIcon, Check } from 'lucide-react';
 import { useFoodStore } from '../store/foodStore';
 import { useAuthStore } from '../store/authStore';
 import { useWorkspaceStore } from '../store/workspaceStore';
@@ -56,6 +56,52 @@ const MEAL_LABELS: Record<MealType, string> = {
 
 const MEAL_ORDER: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
+// Ключ "подписи" дня — набор блюд (тип+название), отсортированный, чтобы порядок
+// на экране не мешал сравнению одинаковых наборов на соседние дни подряд.
+function daySignature(list: FoodEntry[]) {
+  return list.map((e) => `${e.mealType}:${e.name}`).sort().join('|');
+}
+
+// Объединяет ПОДРЯД идущие дни с полностью одинаковым набором блюд (например
+// сгенерированные парами меню) в одну группу с диапазоном дат — переиспользуется
+// и для "Запланировано", и для "Точно буду готовить".
+function mergeConsecutiveDayGroups(entries: FoodEntry[]): { dates: string[]; entries: FoodEntry[] }[] {
+  const map: Record<string, FoodEntry[]> = {};
+  entries.forEach((e) => {
+    map[e.date] = map[e.date] || [];
+    map[e.date].push(e);
+  });
+  const dayGroups = Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
+
+  const merged: { dates: string[]; entries: FoodEntry[] }[] = [];
+  dayGroups.forEach(([date, list]) => {
+    const prev = merged[merged.length - 1];
+    if (prev && daySignature(prev.entries) === daySignature(list)) {
+      prev.dates.push(date);
+    } else {
+      merged.push({ dates: [date], entries: list });
+    }
+  });
+  return merged;
+}
+
+function formatDateRange(dates: string[]): string {
+  if (dates.length === 1) return formatDate(dates[0]);
+  const first = new Date(dates[0] + 'T00:00:00');
+  const last = new Date(dates[dates.length - 1] + 'T00:00:00');
+  const sameMonth = first.getMonth() === last.getMonth();
+  const firstLabel = first.toLocaleDateString('ru-RU', sameMonth ? { day: 'numeric' } : { day: 'numeric', month: 'long' });
+  const lastLabel = last.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+  return `${firstLabel}–${lastLabel}`;
+}
+
+// Находит все записи-"близнецы" в других днях того же диапазона с тем же mealType+name,
+// чтобы кнопки (удалить/выбрать) могли применить действие сразу ко всем дням пары.
+function siblingsInGroup(entry: FoodEntry, group: { dates: string[]; entries: FoodEntry[] }, allEntries: FoodEntry[]): FoodEntry[] {
+  if (group.dates.length <= 1) return [entry];
+  return allEntries.filter((e) => group.dates.includes(e.date) && e.mealType === entry.mealType && e.name === entry.name);
+}
+
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00');
   return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', weekday: 'short' });
@@ -97,51 +143,11 @@ export default function FoodMenuView({ workspaceId }: { workspaceId: string }) {
     [entries, selectedUid]
   );
 
-  const grouped = useMemo(() => {
-    const map: Record<string, FoodEntry[]> = {};
-    plannedEntries.forEach((e) => {
-      map[e.date] = map[e.date] || [];
-      map[e.date].push(e);
-    });
-    const dayGroups = Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
+  const grouped = useMemo(() => mergeConsecutiveDayGroups(plannedEntries), [plannedEntries]);
+  const chosenGrouped = useMemo(() => mergeConsecutiveDayGroups(chosenEntries), [chosenEntries]);
 
-    // Ключ "подписи" дня — набор блюд (тип+название), отсортированный, чтобы порядок
-    // на экране не мешал сравнению одинаковых наборов на соседние дни подряд.
-    const signature = (list: FoodEntry[]) =>
-      list.map((e) => `${e.mealType}:${e.name}`).sort().join('|');
-
-    // Объединяем ПОДРЯД идущие дни с полностью одинаковым набором блюд (например
-    // сгенерированные парами меню) — вместо двух отдельных карточек показываем одну
-    // с диапазоном дат, а кнопки применяются сразу к обоим дням.
-    const merged: { dates: string[]; entries: FoodEntry[] }[] = [];
-    dayGroups.forEach(([date, list]) => {
-      const prev = merged[merged.length - 1];
-      if (prev && signature(prev.entries) === signature(list)) {
-        prev.dates.push(date);
-      } else {
-        merged.push({ dates: [date], entries: list });
-      }
-    });
-    return merged;
-  }, [plannedEntries]);
-
-  function formatDateRange(dates: string[]): string {
-    if (dates.length === 1) return formatDate(dates[0]);
-    const first = new Date(dates[0] + 'T00:00:00');
-    const last = new Date(dates[dates.length - 1] + 'T00:00:00');
-    const sameMonth = first.getMonth() === last.getMonth();
-    const firstLabel = first.toLocaleDateString('ru-RU', sameMonth ? { day: 'numeric' } : { day: 'numeric', month: 'long' });
-    const lastLabel = last.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
-    return `${firstLabel}–${lastLabel}`;
-  }
-
-  // Находит все записи-"близнецы" в других объединённых днях с тем же mealType+name,
-  // чтобы кнопки (удалить/выбрать) могли применить действие сразу ко всем дням пары.
   function siblingsOf(entry: FoodEntry, group: { dates: string[]; entries: FoodEntry[] }): FoodEntry[] {
-    if (group.dates.length <= 1) return [entry];
-    return plannedEntries.filter(
-      (e) => group.dates.includes(e.date) && e.mealType === entry.mealType && e.name === entry.name
-    );
+    return siblingsInGroup(entry, group, plannedEntries);
   }
 
   async function handleSelectForShopping(entry: FoodEntry, siblings: FoodEntry[]) {
@@ -286,23 +292,42 @@ export default function FoodMenuView({ workspaceId }: { workspaceId: string }) {
           <h3 className="text-sm font-semibold flex items-center gap-1.5 mb-3">
             <ShoppingCart size={14} className="text-violet-600" /> Точно буду готовить
           </h3>
-          {chosenEntries.length > 0 ? (
-            <div className="space-y-2">
-              {chosenEntries.map((e) => (
-                <div key={e.id} className="rounded-xl bg-violet-50/60 dark:bg-violet-500/10 px-3 py-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium truncate">{e.name}</p>
-                      <p className="text-[10px] text-neutral-400">{formatDate(e.date)} · {MEAL_LABELS[e.mealType]}</p>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button onClick={() => setRecipeEntry(e)} className="text-neutral-400 hover:text-amber-600" title="Посмотреть рецепт">
-                        <BookOpen size={12} />
-                      </button>
-                      <button onClick={() => unselectFromMenu(e)} className="text-neutral-400 hover:text-rose-500" title="Вернуть в общий список">
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
+          {chosenGrouped.length > 0 ? (
+            <div className="space-y-3">
+              {chosenGrouped.map((group) => (
+                <div key={group.dates.join('_')}>
+                  <p className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wide mb-1.5 capitalize">
+                    {formatDateRange(group.dates)}
+                  </p>
+                  <div className="space-y-2">
+                    {group.entries.map((e) => {
+                      const siblings = siblingsInGroup(e, group, chosenEntries);
+                      return (
+                        <div key={e.id} className="rounded-xl bg-violet-50/60 dark:bg-violet-500/10 px-3 py-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium truncate">{e.name}</p>
+                              <p className="text-[10px] text-neutral-400">{MEAL_LABELS[e.mealType]}</p>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button onClick={() => setRecipeEntry(e)} className="text-neutral-400 hover:text-amber-600" title="Посмотреть рецепт">
+                                <BookOpen size={12} />
+                              </button>
+                              <button
+                                onClick={() => siblings.forEach((s) => deleteEntry(s, actor))}
+                                className="flex items-center gap-1 text-[10px] font-medium text-emerald-600 hover:text-emerald-700 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded-md"
+                                title="Приготовлено — убрать из списка"
+                              >
+                                <Check size={11} /> Готово
+                              </button>
+                              <button onClick={() => siblings.forEach((s) => unselectFromMenu(s))} className="text-neutral-400 hover:text-rose-500" title="Вернуть в общий список">
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               ))}

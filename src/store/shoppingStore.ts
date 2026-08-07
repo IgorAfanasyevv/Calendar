@@ -1,8 +1,8 @@
 import { localDateStr } from '../lib/timezone';
 import { create } from 'zustand';
-import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDocs, onSnapshot, orderBy, query, updateDoc, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import type { ShoppingItem } from '../types';
+import type { ShoppingItem, FinanceEntry } from '../types';
 import { logActivity } from './activityStore';
 import { useWorkspaceStore } from './workspaceStore';
 import { useFinanceBoardStore } from './financeBoardStore';
@@ -65,6 +65,37 @@ async function addToFinanceIfConfigured(item: ShoppingItem, actor: { uid: string
   const board = useFinanceBoardStore.getState().boards.find((b) => b.id === boardId);
   if (!board) return;
 
+  const amount = item.price * item.quantity;
+  const today = localDateStr(Date.now());
+  const thisMonth = today.slice(0, 7); // YYYY-MM
+
+  // Если в этой вкладке уже есть ЗАПЛАНИРОВАННАЯ (ещё не оплаченная полностью) трата
+  // той же категории на этот месяц — засчитываем покупку как частичную оплату именно
+  // её (как кнопка "Оплатить"), а не создаём отдельную независимую запись. Иначе баланс
+  // уменьшался бы, а сумма "предстоящих трат" оставалась прежней — и ручное уменьшение
+  // задваивало бы расход.
+  // Спрашиваем базу напрямую (не полагаемся на локальный кэш useFinanceStore — он заполняется
+  // только после открытия вкладки Финансов, а покупки могут отмечаться и без захода туда).
+  const entriesSnap = await getDocs(
+    query(
+      collection(db, 'workspaces', item.workspaceId, 'financeBoards', boardId, 'entries'),
+      where('planned', '==', true),
+      where('type', '==', 'expense'),
+      where('category', '==', item.category)
+    )
+  );
+  const matchingPlanned = entriesSnap.docs
+    .map((d) => ({ id: d.id, ...d.data() }) as FinanceEntry)
+    .find((e) => e.date.slice(0, 7) === thisMonth && e.amount - (e.paidAmount || 0) > 0);
+
+  if (matchingPlanned) {
+    // Не платим больше, чем остаток по плану — если покупка крупнее остатка,
+    // остаток закрывается полностью, а не "уходит в минус" внутри платежа.
+    const remaining = matchingPlanned.amount - (matchingPlanned.paidAmount || 0);
+    await useFinanceStore.getState().payInstallment(matchingPlanned, Math.min(amount, remaining), actor, board.currency);
+    return;
+  }
+
   // Если валюта товара отличается от валюты вкладки финансов — сумма
   // добавляется как есть (без конвертации), но помечаем это в заметке,
   // чтобы не запутаться при просмотре истории операций.
@@ -78,10 +109,10 @@ async function addToFinanceIfConfigured(item: ShoppingItem, actor: { uid: string
     boardId,
     {
       type: 'expense',
-      amount: item.price * item.quantity,
+      amount,
       category: item.category,
       note,
-      date: localDateStr(Date.now()),
+      date: today,
     },
     actor,
     board.currency

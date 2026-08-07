@@ -100,15 +100,16 @@ export const useFoodStore = create<FoodState>((set) => ({
     const ingredients = entry.ingredients || [];
     if (ingredients.length === 0) return;
     const owner = { uid: entry.createdBy, name: entry.createdByName };
-    await Promise.all(
-      ingredients.map((ingredientName) =>
-        useShoppingStore.getState().addItem(
-          entry.workspaceId,
-          { name: ingredientName, category: 'Продукты', quantity: 1, createdBy: entry.createdBy, createdByName: entry.createdByName },
-          owner
-        )
-      )
-    );
+    // ВАЖНО: отправляем по одному, последовательно (не Promise.all) — механизм объединения
+    // одинаковых продуктов в покупках сравнивает с уже добавленными, и при параллельной
+    // отправке два одинаковых ингредиента могут "не увидеть" друг друга и задвоиться.
+    for (const ingredientName of ingredients) {
+      await useShoppingStore.getState().addItem(
+        entry.workspaceId,
+        { name: ingredientName, category: 'Продукты', quantity: 1, createdBy: entry.createdBy, createdByName: entry.createdByName },
+        owner
+      );
+    }
     await updateDoc(doc(db, 'workspaces', entry.workspaceId, 'food', entry.id), { addedToShopping: true });
   },
   // Пометить как "выбрано" БЕЗ повторной отправки продуктов в покупки — для дней-"близнецов"
