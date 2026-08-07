@@ -219,19 +219,25 @@ function NewItemForm({ workspaceId, onSave }: { workspaceId: string; onSave: (da
   const [coverUrl, setCoverUrl] = useState<string | undefined>(undefined);
   const [suggestions, setSuggestions] = useState<{ title: string; author?: string; coverUrl: string }[]>([]);
   const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
   // Ищем по мере ввода, с небольшой задержкой, чтобы не слать запрос на каждую букву
   useEffect(() => {
     if (!title.trim() || title.trim().length < 3) {
       setSuggestions([]);
+      setSearchError(null);
       return;
     }
     setSearching(true);
+    setSearchError(null);
     const timeout = setTimeout(() => {
       searchBookCoversCall({ workspaceId, query: title.trim() })
         .then((res) => setSuggestions(res.data.candidates || []))
-        .catch(() => setSuggestions([]))
+        .catch((e) => {
+          setSuggestions([]);
+          setSearchError((e as { message?: string })?.message || 'Не удалось найти книги');
+        })
         .finally(() => setSearching(false));
     }, 400);
     return () => clearTimeout(timeout);
@@ -260,12 +266,16 @@ function NewItemForm({ workspaceId, onSave }: { workspaceId: string; onSave: (da
           onFocus={() => setShowSuggestions(true)}
           onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
         />
-        {showSuggestions && (searching || suggestions.length > 0) && (
+        {showSuggestions && title.trim().length >= 3 && (
           <div className="absolute z-10 mt-1 w-full max-h-64 overflow-y-auto rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 shadow-lg">
             {searching && (
               <p className="px-3 py-2 text-xs text-neutral-400 flex items-center gap-1.5">
                 <Loader2 size={11} className="animate-spin" /> Ищу книги...
               </p>
+            )}
+            {!searching && searchError && <p className="px-3 py-2 text-xs text-rose-500">{searchError}</p>}
+            {!searching && !searchError && suggestions.length === 0 && (
+              <p className="px-3 py-2 text-xs text-neutral-400">Ничего не найдено — можно ввести название вручную</p>
             )}
             {!searching &&
               suggestions.map((s, i) => (

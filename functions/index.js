@@ -1822,12 +1822,12 @@ async function fetchTmdbPoster(title, type, apiKey) {
 async function fetchBookCover(query) {
   try {
     const tryFetch = async (langRestrict) => {
-      const params = new URLSearchParams({ q: query, maxResults: '1', country: 'US' });
+      const params = new URLSearchParams({ q: query, maxResults: '3' });
       if (langRestrict) params.set('langRestrict', langRestrict);
       const res = await fetch(`https://www.googleapis.com/books/v1/volumes?${params.toString()}`);
       const bodyText = await res.text();
       if (!res.ok) {
-        logger.error('Google Books вернул ошибку', { status: res.status, body: bodyText.slice(0, 300), query });
+        logger.error('Google Books вернул ошибку', { status: res.status, body: bodyText.slice(0, 300), query, langRestrict });
         return { url: null, httpError: `Google Books ${res.status}: ${bodyText.slice(0, 200)}` };
       }
       let data;
@@ -1843,14 +1843,10 @@ async function fetchBookCover(query) {
       return { url: thumb.replace('http://', 'https://').replace('&edge=curl', ''), httpError: null };
     };
 
-    // Сначала пробуем найти именно русское издание, и только если не нашлось — любое
-    let { url, httpError } = await tryFetch('ru');
-    if (!url && !httpError) {
-      const fallback = await tryFetch(null);
-      url = fallback.url;
-      httpError = fallback.httpError;
-    }
-    if (httpError) return { url: null, error: httpError };
+    // Ищем русское издание и любое другое параллельно, предпочитаем русское, если оба нашлись
+    const [ru, any] = await Promise.all([tryFetch('ru'), tryFetch(null)]);
+    if (ru.httpError && any.httpError) return { url: null, error: ru.httpError };
+    const url = ru.url || any.url || null;
     return { url, error: null }; // url === null здесь значит "реально не нашлось", не ошибка сервиса
   } catch (err) {
     logger.error('Не удалось получить обложку книги', err);
@@ -2223,27 +2219,41 @@ exports.searchBookCovers = onCall({}, async (request) => {
     const info = await getMember(workspaceId, uid);
     if (!info) throw new HttpsError('permission-denied', 'Вы не участник этого пространства.');
 
-    // Google Books — бесплатно, без ключа. Сначала ищем именно русские издания
-    // (langRestrict=ru), и только если их нет — показываем что найдётся без ограничения
-    // по языку (лучше показать на другом языке, чем ничего).
+    // Google Books — бесплатно, без ключа. Ищем и русские издания, и любые другие —
+    // объединяем оба списка (русские показываем первыми), чтобы точно что-то найти
+    // даже если конкретно русского издания нет в индексе Google Books под этим запросом.
     const fetchBooks = async (langRestrict) => {
-      const params = new URLSearchParams({ q: query, maxResults: '8', country: 'US' });
+      const params = new URLSearchParams({ q: query, maxResults: '8' });
       if (langRestrict) params.set('langRestrict', langRestrict);
-      const res = await fetch(`https://www.googleapis.com/books/v1/volumes?${params.toString()}`);
+      const url = `https://www.googleapis.com/books/v1/volumes?${params.toString()}`;
+      const res = await fetch(url);
       const bodyText = await res.text();
-      if (!res.ok) return { ok: false, error: `Google Books ${res.status}: ${bodyText.slice(0, 200)}`, items: [] };
-      const data = JSON.parse(bodyText);
+      if (!res.ok) {
+        logger.error('Google Books вернул ошибку', { status: res.status, body: bodyText.slice(0, 300), query, langRestrict });
+        return { ok: false, error: `Google Books ${res.status}: ${bodyText.slice(0, 200)}`, items: [] };
+      }
+      let data;
+      try {
+        data = JSON.parse(bodyText);
+      } catch {
+        return { ok: false, error: `Google Books вернул не-JSON ответ: ${bodyText.slice(0, 200)}`, items: [] };
+      }
       return { ok: true, items: data.items || [] };
     };
 
-    let result = await fetchBooks('ru');
-    if (result.ok && result.items.length === 0) {
-      result = await fetchBooks(null);
+    const [ruResult, anyResult] = await Promise.all([fetchBooks('ru'), fetchBooks(null)]);
+    if (!ruResult.ok && !anyResult.ok) {
+      throw new HttpsError('internal', ruResult.error || anyResult.error);
     }
-    if (!result.ok) throw new HttpsError('internal', result.error);
 
-    const candidates = result.items
+    const seen = new Set();
+    const candidates = [...ruResult.items, ...anyResult.items]
       .filter((item) => item.volumeInfo && item.volumeInfo.imageLinks && item.volumeInfo.imageLinks.thumbnail)
+      .filter((item) => {
+        if (seen.has(item.id)) return false;
+        seen.add(item.id);
+        return true;
+      })
       .slice(0, 8)
       .map((item) => {
         const v = item.volumeInfo;
