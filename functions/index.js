@@ -43,6 +43,24 @@ async function sendPushToUser(uid, title, body) {
   }
 }
 
+/** Быстрая проверка — отправляет тестовый push сразу тому, кто нажал кнопку в Настройках. */
+exports.sendTestPushNotification = onCall({}, async (request) => {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'Нужно войти в аккаунт.');
+
+  const userSnap = await db.collection('users').doc(uid).get();
+  const tokenCount = Object.keys((userSnap.data() || {}).fcmTokens || {}).length;
+  if (tokenCount === 0) {
+    throw new HttpsError(
+      'failed-precondition',
+      'На этом устройстве уведомления ещё не включены — сначала нажмите "Включить уведомления" выше.'
+    );
+  }
+
+  await sendPushToUser(uid, '🔔 Тестовое уведомление', 'Если вы это видите — push-уведомления работают!');
+  return { ok: true, sentToDevices: tokenCount };
+});
+
 exports.sendTaskPushReminders = onSchedule('every 15 minutes', async () => {
   const now = Date.now();
   const WINDOW_MS = 20 * 60 * 1000;

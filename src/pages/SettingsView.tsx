@@ -1,16 +1,22 @@
 import { useState } from 'react';
-import { Copy, Check, Moon, Sun, LogOut, UserX, Download, Loader2, Globe, PlayCircle, Bell, BellOff } from 'lucide-react';
+import { httpsCallable } from 'firebase/functions';
+import { Copy, Check, Moon, Sun, LogOut, UserX, Download, Loader2, Globe, PlayCircle, Bell, BellOff, Send } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useWorkspaceStore } from '../store/workspaceStore';
 import { useThemeStore } from '../store/themeStore';
 import { useLanguageStore } from '../store/languageStore';
 import { useNotificationsStore } from '../store/notificationsStore';
 import { exportWorkspaceData } from '../lib/exportData';
+import { functions } from '../lib/firebase';
 import OnboardingModal from '../components/OnboardingModal';
+
+const sendTestNotificationCall = httpsCallable<void, { ok: boolean; sentToDevices: number }>(functions, 'sendTestPushNotification');
 
 export default function SettingsView() {
   const { profile, logOut } = useAuthStore();
   const { permission, enabling, error: notifError, enable: enableNotifications, disable: disableNotifications } = useNotificationsStore();
+  const [testSending, setTestSending] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
   const { workspace, removeMember } = useWorkspaceStore();
   const { dark, toggle } = useThemeStore();
   const { language, setLanguage, t } = useLanguageStore();
@@ -156,6 +162,30 @@ export default function SettingsView() {
             {enabling ? <Loader2 size={15} className="animate-spin" /> : permission === 'granted' ? <BellOff size={15} /> : <Bell size={15} />}
             {enabling ? 'Включаю...' : permission === 'granted' ? 'Отключить уведомления' : 'Включить уведомления'}
           </button>
+        )}
+        {permission === 'granted' && (
+          <button
+            onClick={async () => {
+              setTestSending(true);
+              setTestResult(null);
+              try {
+                await sendTestNotificationCall();
+                setTestResult({ ok: true, text: 'Отправлено! Проверьте телефон/компьютер.' });
+              } catch (e) {
+                setTestResult({ ok: false, text: (e as { message?: string })?.message || 'Не удалось отправить' });
+              } finally {
+                setTestSending(false);
+              }
+            }}
+            disabled={testSending}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-sm font-medium disabled:opacity-60"
+          >
+            {testSending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+            {testSending ? 'Отправляю...' : 'Отправить тестовое уведомление'}
+          </button>
+        )}
+        {testResult && (
+          <p className={`text-xs ${testResult.ok ? 'text-emerald-500' : 'text-rose-500'}`}>{testResult.text}</p>
         )}
         {notifError && <p className="text-xs text-rose-500">{notifError}</p>}
         <p className="text-[11px] text-neutral-400">
