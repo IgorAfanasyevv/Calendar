@@ -122,6 +122,38 @@ exports.sendImportantDatePushReminders = onSchedule('every day 08:00', async () 
   }
 });
 
+/** Вечером (20:00) — напоминание тем, кто ещё не занёс ни одной записи в дневник питания сегодня. */
+exports.sendEveningFoodPushReminders = onSchedule('every day 20:00', async () => {
+  const today = new Date().toISOString().slice(0, 10);
+  const workspacesSnap = await db.collection('workspaces').get();
+
+  for (const wsDoc of workspacesSnap.docs) {
+    const workspace = wsDoc.data();
+    const workspaceId = wsDoc.id;
+    const members = workspace.members || [];
+    if (members.length === 0) continue;
+
+    try {
+      const foodSnap = await db
+        .collection('workspaces')
+        .doc(workspaceId)
+        .collection('food')
+        .where('date', '==', today)
+        .get();
+      const loggedUids = new Set(foodSnap.docs.filter((d) => !d.data().planned).map((d) => d.data().createdBy));
+
+      const forgot = members.filter((m) => !loggedUids.has(m.uid));
+      await Promise.all(
+        forgot.map((m) =>
+          sendPushToUser(m.uid, '🍽️ Не забыли про еду?', 'Сегодня вы ещё не занесли ни одного приёма пищи в дневник питания')
+        )
+      );
+    } catch (err) {
+      logger.error(`Не удалось отправить вечернее push-напоминание о еде для пространства ${workspaceId}`, err);
+    }
+  }
+});
+
 // ---------------------------------------------------------------------------
 // ИИ-помощник по питанию: подсказки меню, авто-меню на неделю, анализ дневника
 // ---------------------------------------------------------------------------
