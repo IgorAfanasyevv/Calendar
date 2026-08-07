@@ -1824,6 +1824,8 @@ async function fetchBookCover(query) {
     const tryFetch = async (langRestrict) => {
       const params = new URLSearchParams({ q: query, maxResults: '3' });
       if (langRestrict) params.set('langRestrict', langRestrict);
+      const apiKey = process.env.GOOGLE_BOOKS_API_KEY;
+      if (apiKey) params.set('key', apiKey);
       const res = await fetch(`https://www.googleapis.com/books/v1/volumes?${params.toString()}`);
       const bodyText = await res.text();
       if (!res.ok) {
@@ -2039,7 +2041,7 @@ async function fetchBookCover(query) {
   return { ok: false, error: `Неизвестный инструмент: ${name}` };
 }
 
-exports.assistant = onCall({ secrets: ['ANTHROPIC_API_KEY', 'TMDB_API_KEY'] }, async (request) => {
+exports.assistant = onCall({ secrets: ['ANTHROPIC_API_KEY', 'TMDB_API_KEY', 'GOOGLE_BOOKS_API_KEY'] }, async (request) => {
   try {
     return await handleAssistant(request);
   } catch (err) {
@@ -2209,7 +2211,7 @@ exports.searchFoodPhoto = onCall({ secrets: ['UNSPLASH_ACCESS_KEY'] }, async (re
   }
 });
 
-exports.searchBookCovers = onCall({}, async (request) => {
+exports.searchBookCovers = onCall({ secrets: ['GOOGLE_BOOKS_API_KEY'] }, async (request) => {
   try {
     const uid = request.auth && request.auth.uid;
     if (!uid) throw new HttpsError('unauthenticated', 'Нужно войти в аккаунт.');
@@ -2225,6 +2227,8 @@ exports.searchBookCovers = onCall({}, async (request) => {
     const fetchBooks = async (langRestrict) => {
       const params = new URLSearchParams({ q: query, maxResults: '8' });
       if (langRestrict) params.set('langRestrict', langRestrict);
+      const apiKey = process.env.GOOGLE_BOOKS_API_KEY;
+      if (apiKey) params.set('key', apiKey);
       const url = `https://www.googleapis.com/books/v1/volumes?${params.toString()}`;
       const res = await fetch(url);
       const bodyText = await res.text();

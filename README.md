@@ -322,6 +322,27 @@ npm run deploy:functions
 
 ---
 
+## 9.5. Обложки книг в разделе "Читаем"
+
+Поиск обложек книг (Google Books) без ключа даёт очень маленький общий лимит запросов в день на весь проект —
+он быстро заканчивается. Бесплатный API-ключ поднимает лимит в разы.
+
+1. [console.cloud.google.com](https://console.cloud.google.com) → тот же проект, что и Firebase
+2. **APIs & Services → Library** → найдите **"Books API"** → **Enable**
+3. **APIs & Services → Credentials → Create Credentials → API key**
+4. Скопируйте ключ (можно ограничить его только для Books API — Edit API key → Restrict key)
+5. Сохраните и задеплойте:
+```bash
+npx firebase-tools functions:secrets:set GOOGLE_BOOKS_API_KEY
+```
+(вставьте ключ, когда попросит, затем)
+```bash
+npm run deploy:functions
+```
+
+Без этого ключа поиск книг может периодически показывать ошибку "Quota exceeded" — само приложение
+при этом не ломается, просто временно не может искать обложки, пока лимит не обновится на следующий день.
+
 ---
 
 ## 9.4. Push-уведомления (напоминания на телефон/компьютер)
