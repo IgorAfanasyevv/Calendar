@@ -12,7 +12,7 @@ import OnboardingModal from '../components/OnboardingModal';
 
 const sendTestNotificationCall = httpsCallable<
   { workspaceId: string },
-  { ok: boolean; sentToDevices: number; sentToMembers: number }
+  { ok: boolean; sentToDevices: number; sentToMembers: number; breakdown: { name: string; devices: number }[] }
 >(functions, 'sendTestPushNotification');
 
 export default function SettingsView() {
@@ -179,9 +179,12 @@ export default function SettingsView() {
               setTestResult(null);
               try {
                 const res = await sendTestNotificationCall({ workspaceId: workspace.id });
+                const details = res.data.breakdown
+                  .map((b) => `${b.name}: ${b.devices > 0 ? `${b.devices} устр.` : 'не включено'}`)
+                  .join(', ');
                 setTestResult({
                   ok: true,
-                  text: `Отправлено на ${res.data.sentToDevices} устройств(о) у ${res.data.sentToMembers} участников. Проверьте телефоны/компьютеры обоих.`,
+                  text: `Отправлено на ${res.data.sentToDevices} устройств(о). ${details}`,
                 });
               } catch (e) {
                 setTestResult({ ok: false, text: (e as { message?: string })?.message || 'Не удалось отправить' });

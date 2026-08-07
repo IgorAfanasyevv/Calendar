@@ -69,13 +69,19 @@ exports.sendTestPushNotification = onCall({}, async (request) => {
     );
   }
 
+  const members = workspace.members || [];
+  const breakdown = allMemberUids.map((memberUid, i) => {
+    const member = members.find((m) => m.uid === memberUid);
+    return { name: (member && member.displayName) || 'Участник', devices: tokenCounts[i] };
+  });
+
   await Promise.all(
     allMemberUids.map((memberUid) =>
       sendPushToUser(memberUid, '🔔 Тестовое уведомление', 'Если вы это видите — push-уведомления работают!')
     )
   );
 
-  return { ok: true, sentToDevices: totalDevices, sentToMembers: allMemberUids.length };
+  return { ok: true, sentToDevices: totalDevices, sentToMembers: allMemberUids.length, breakdown };
 });
 
 exports.sendTaskPushReminders = onSchedule('every 15 minutes', async () => {
