@@ -76,7 +76,7 @@ export default function ReminderPopup({ workspaceId }: { workspaceId: string }) 
   if (!visible || reminders.length === 0) return null;
 
   return (
-    <div className="fixed z-40 bottom-24 md:bottom-6 left-4 md:left-6 w-[calc(100%-5.5rem)] sm:w-[calc(100%-2rem)] max-w-sm rounded-2xl bg-white dark:bg-neutral-900 shadow-2xl border border-neutral-200/60 dark:border-neutral-800 p-4 animate-[modalIn_.2s_ease-out]">
+    <div className="fixed z-40 bottom-28 md:bottom-6 left-4 md:left-6 w-[calc(100%-5.5rem)] sm:w-[calc(100%-2rem)] max-w-sm rounded-2xl bg-white dark:bg-neutral-900 shadow-2xl border border-neutral-200/60 dark:border-neutral-800 p-4 animate-[modalIn_.2s_ease-out]">
       <div className="flex items-center justify-between mb-2">
         <span className="flex items-center gap-1.5 text-sm font-semibold text-indigo-500">
           <Bell size={15} /> Напоминания на сегодня

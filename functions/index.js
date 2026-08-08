@@ -164,6 +164,62 @@ exports.sendImportantDatePushReminders = onSchedule('every day 08:00', async () 
 });
 
 /** Вечером (20:00) — напоминание тем, кто ещё не занёс ни одной записи в дневник питания сегодня. */
+/**
+ * Утром — то же самое, что попап "Напоминания на сегодня" в самом приложении, но пушем,
+ * чтобы дошло даже если приложение не открыто: задачи на сегодня/завтра и тренировки
+ * на сегодня/просроченные. Каждому — своё персональное письмо, только если есть что сказать.
+ */
+exports.sendMorningPushReminders = onSchedule('every day 07:00', async () => {
+  const today = new Date().toISOString().slice(0, 10);
+  const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const workspacesSnap = await db.collection('workspaces').get();
+
+  for (const wsDoc of workspacesSnap.docs) {
+    const workspace = wsDoc.data();
+    const workspaceId = wsDoc.id;
+    const members = workspace.members || [];
+    if (members.length === 0) continue;
+
+    try {
+      const tasksSnap = await db.collection('workspaces').doc(workspaceId).collection('tasks').where('done', '==', false).get();
+      const allTasks = tasksSnap.docs.map((d) => d.data());
+
+      const workoutsSnap = await db
+        .collection('workspaces')
+        .doc(workspaceId)
+        .collection('workouts')
+        .where('planned', '==', true)
+        .get();
+      const allWorkouts = workoutsSnap.docs.map((d) => d.data()).filter((w) => w.date <= today);
+
+      for (const member of members) {
+        const todayTasks = [];
+        const tomorrowTasks = [];
+        allTasks.forEach((t) => {
+          const isMine =
+            t.assignee === 'together' ||
+            (t.assignee === 'me' && t.createdBy === member.uid) ||
+            (t.assignee === 'partner' && t.createdBy !== member.uid);
+          if (!isMine) return;
+          if (t.date === today) todayTasks.push(t.title);
+          else if (t.date === tomorrow) tomorrowTasks.push(t.title);
+        });
+        const myWorkouts = allWorkouts.filter((w) => w.createdBy === member.uid).map((w) => w.name);
+
+        const lines = [];
+        if (todayTasks.length) lines.push(`Сегодня: ${todayTasks.slice(0, 5).join(', ')}${todayTasks.length > 5 ? '…' : ''}`);
+        if (tomorrowTasks.length) lines.push(`Завтра: ${tomorrowTasks.slice(0, 5).join(', ')}${tomorrowTasks.length > 5 ? '…' : ''}`);
+        if (myWorkouts.length) lines.push(`Тренировка: ${myWorkouts.slice(0, 3).join(', ')}${myWorkouts.length > 3 ? '…' : ''}`);
+
+        if (lines.length === 0) continue;
+        await sendPushToUser(member.uid, '📋 Напоминания на сегодня', lines.join(' · '));
+      }
+    } catch (err) {
+      logger.error(`Не удалось отправить утреннее push-напоминание для пространства ${workspaceId}`, err);
+    }
+  }
+});
+
 exports.sendEveningFoodPushReminders = onSchedule('every day 20:00', async () => {
   const today = new Date().toISOString().slice(0, 10);
   const workspacesSnap = await db.collection('workspaces').get();

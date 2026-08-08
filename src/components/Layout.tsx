@@ -132,12 +132,15 @@ export default function Layout({
       </aside>
 
       {/* Mobile top nav */}
-      <div className="md:hidden fixed bottom-0 inset-x-0 z-30 glass border-t border-neutral-200/50 dark:border-neutral-800 flex overflow-x-auto py-2 px-1">
+      <div
+        className="md:hidden fixed bottom-0 inset-x-0 z-30 glass border-t border-neutral-200/50 dark:border-neutral-800 flex overflow-x-auto py-2 px-1"
+        style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
+      >
         {NAV.map(({ id, labelKey, icon: Icon }) => (
           <button
             key={id}
             onClick={() => onTabChange(id)}
-            className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg text-[10px] shrink-0 min-w-[64px] ${
+            className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg text-[10px] shrink-0 min-w-[64px] ${
               tab === id ? 'text-indigo-600 dark:text-indigo-400' : 'text-neutral-500'
             }`}
           >
@@ -147,7 +150,7 @@ export default function Layout({
         ))}
       </div>
 
-      <main className="flex-1 min-w-0 pb-20 md:pb-0 overflow-y-auto h-screen">
+      <main className="flex-1 min-w-0 pb-24 md:pb-0 overflow-y-auto h-screen">
         {!browserOnline && (
           <div className="sticky top-0 z-20 flex items-center justify-center gap-2 bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 text-xs font-medium py-2 px-4">
             <WifiOff size={13} />

@@ -66,7 +66,7 @@ export default function GlobalAssistant() {
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          className="fixed z-40 bottom-24 md:bottom-6 right-4 md:right-6 w-14 h-14 rounded-full bg-gradient-to-br from-indigo-500 to-rose-400 text-white shadow-lg shadow-indigo-500/30 flex items-center justify-center hover:brightness-105 active:scale-95 transition"
+          className="fixed z-40 bottom-28 md:bottom-6 right-4 md:right-6 w-14 h-14 rounded-full bg-gradient-to-br from-indigo-500 to-rose-400 text-white shadow-lg shadow-indigo-500/30 flex items-center justify-center hover:brightness-105 active:scale-95 transition"
           title="ИИ-помощник"
         >
           <Sparkles size={22} />
