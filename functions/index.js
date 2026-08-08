@@ -13,6 +13,19 @@ const messaging = getMessaging();
 /** Отправляет push-уведомление всем зарегистрированным устройствам пользователя.
  * Токены хранятся в users/{uid}.fcmTokens как объект {token: true}. Недействительные
  * токены (например уведомления отключили на устройстве) автоматически убираются. */
+/** Текущий час (0-23) в часовом поясе конкретного пользователя. Если часовой пояс
+ * ещё не сохранён (человек не заходил в приложение после этого обновления) или
+ * невалиден — считаем, что это UTC, чтобы не сломать логику. */
+function getLocalHour(timezone) {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: timezone || 'UTC' });
+    const hourStr = formatter.format(new Date());
+    return Number(hourStr) % 24; // "24" в некоторых окружениях означает полночь
+  } catch {
+    return new Date().getUTCHours();
+  }
+}
+
 async function sendPushToUser(uid, title, body) {
   const userSnap = await db.collection('users').doc(uid).get();
   const tokens = Object.keys((userSnap.data() || {}).fcmTokens || {});
@@ -129,23 +142,18 @@ exports.sendTaskPushReminders = onSchedule('every 15 minutes', async () => {
   }
 });
 
-exports.sendImportantDatePushReminders = onSchedule('every day 08:00', async () => {
+// Запускается каждый час; у каждого участника пространства проверяем ЕГО местное 8 утра
+// и ЕГО местную дату, чтобы дата "сегодня"/"через N дней" считалась правильно в любом поясе.
+exports.sendImportantDatePushReminders = onSchedule('every hour', async () => {
   const datesSnap = await db.collectionGroup('importantDates').get();
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
   const workspaceCache = new Map();
+  const userTzCache = new Map();
 
   for (const dateDoc of datesSnap.docs) {
     const dateData = dateDoc.data();
     if (!dateData.date) continue;
 
     try {
-      const [, month, day] = dateData.date.split('-').map(Number);
-      const thisYearDate = new Date(today.getFullYear(), month - 1, day);
-      const daysUntil = Math.round((thisYearDate - today) / (24 * 60 * 60 * 1000));
-      const remindDaysBefore = dateData.remindDaysBefore != null ? dateData.remindDaysBefore : 0;
-      if (daysUntil !== remindDaysBefore) continue;
-
       const workspaceId = dateData.workspaceId;
       if (!workspaceCache.has(workspaceId)) {
         const wsSnap = await db.collection('workspaces').doc(workspaceId).get();
@@ -153,25 +161,48 @@ exports.sendImportantDatePushReminders = onSchedule('every day 08:00', async () 
       }
       const workspace = workspaceCache.get(workspaceId);
       if (!workspace) continue;
-
-      const when = daysUntil === 0 ? 'сегодня' : `через ${daysUntil} дн.`;
       const members = workspace.members || [];
-      await Promise.all(members.map((m) => sendPushToUser(m.uid, `🎉 ${dateData.title}`, `Важная дата — ${when}`)));
+
+      for (const member of members) {
+        if (!userTzCache.has(member.uid)) {
+          const userSnap = await db.collection('users').doc(member.uid).get();
+          userTzCache.set(member.uid, (userSnap.data() || {}).timezone);
+        }
+        const timezone = userTzCache.get(member.uid);
+        if (getLocalHour(timezone) !== 8) continue; // у этого человека сейчас не 8 утра — пропускаем
+
+        const todayStr = getLocalDateStr(timezone, 0);
+        const [todayY] = todayStr.split('-').map(Number);
+        const [, month, day] = dateData.date.split('-').map(Number);
+        const todayDate = new Date(todayStr + 'T00:00:00');
+        const thisYearDate = new Date(todayY, month - 1, day);
+        const daysUntil = Math.round((thisYearDate - todayDate) / (24 * 60 * 60 * 1000));
+        const remindDaysBefore = dateData.remindDaysBefore != null ? dateData.remindDaysBefore : 0;
+        if (daysUntil !== remindDaysBefore) continue;
+
+        const when = daysUntil === 0 ? 'сегодня' : `через ${daysUntil} дн.`;
+        await sendPushToUser(member.uid, `🎉 ${dateData.title}`, `Важная дата — ${when}`);
+      }
     } catch (err) {
       logger.error(`Не удалось отправить push-напоминание по важной дате ${dateDoc.id}`, err);
     }
   }
 });
 
-/** Вечером (20:00) — напоминание тем, кто ещё не занёс ни одной записи в дневник питания сегодня. */
-/**
- * Утром — то же самое, что попап "Напоминания на сегодня" в самом приложении, но пушем,
- * чтобы дошло даже если приложение не открыто: задачи на сегодня/завтра и тренировки
- * на сегодня/просроченные. Каждому — своё персональное письмо, только если есть что сказать.
- */
-exports.sendMorningPushReminders = onSchedule('every day 07:00', async () => {
-  const today = new Date().toISOString().slice(0, 10);
-  const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+/** Дата (YYYY-MM-DD) в часовом поясе конкретного пользователя, со сдвигом в днях. */
+function getLocalDateStr(timezone, offsetDays = 0) {
+  try {
+    const now = new Date(Date.now() + offsetDays * 24 * 60 * 60 * 1000);
+    const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: timezone || 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' });
+    return formatter.format(now); // en-CA даёт формат YYYY-MM-DD
+  } catch {
+    return new Date(Date.now() + offsetDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  }
+}
+
+// Запускается каждый час и сама решает, у кого сейчас локально 7 утра — так работает
+// правильно для любого часового пояса пользователя, а не только для одного фиксированного.
+exports.sendMorningPushReminders = onSchedule('every hour', async () => {
   const workspacesSnap = await db.collection('workspaces').get();
 
   for (const wsDoc of workspacesSnap.docs) {
@@ -190,9 +221,17 @@ exports.sendMorningPushReminders = onSchedule('every day 07:00', async () => {
         .collection('workouts')
         .where('planned', '==', true)
         .get();
-      const allWorkouts = workoutsSnap.docs.map((d) => d.data()).filter((w) => w.date <= today);
+      const allWorkoutsRaw = workoutsSnap.docs.map((d) => d.data());
 
       for (const member of members) {
+        const userSnap = await db.collection('users').doc(member.uid).get();
+        const timezone = (userSnap.data() || {}).timezone;
+        if (getLocalHour(timezone) !== 7) continue; // у этого человека сейчас не 7 утра — пропускаем
+
+        const today = getLocalDateStr(timezone, 0);
+        const tomorrow = getLocalDateStr(timezone, 1);
+        const myWorkouts = allWorkoutsRaw.filter((w) => w.createdBy === member.uid && w.date <= today).map((w) => w.name);
+
         const todayTasks = [];
         const tomorrowTasks = [];
         allTasks.forEach((t) => {
@@ -204,7 +243,6 @@ exports.sendMorningPushReminders = onSchedule('every day 07:00', async () => {
           if (t.date === today) todayTasks.push(t.title);
           else if (t.date === tomorrow) tomorrowTasks.push(t.title);
         });
-        const myWorkouts = allWorkouts.filter((w) => w.createdBy === member.uid).map((w) => w.name);
 
         const lines = [];
         if (todayTasks.length) lines.push(`Сегодня: ${todayTasks.slice(0, 5).join(', ')}${todayTasks.length > 5 ? '…' : ''}`);
@@ -220,8 +258,7 @@ exports.sendMorningPushReminders = onSchedule('every day 07:00', async () => {
   }
 });
 
-exports.sendEveningFoodPushReminders = onSchedule('every day 20:00', async () => {
-  const today = new Date().toISOString().slice(0, 10);
+exports.sendEveningFoodPushReminders = onSchedule('every hour', async () => {
   const workspacesSnap = await db.collection('workspaces').get();
 
   for (const wsDoc of workspacesSnap.docs) {
@@ -231,20 +268,24 @@ exports.sendEveningFoodPushReminders = onSchedule('every day 20:00', async () =>
     if (members.length === 0) continue;
 
     try {
-      const foodSnap = await db
-        .collection('workspaces')
-        .doc(workspaceId)
-        .collection('food')
-        .where('date', '==', today)
-        .get();
-      const loggedUids = new Set(foodSnap.docs.filter((d) => !d.data().planned).map((d) => d.data().createdBy));
+      for (const member of members) {
+        const userSnap = await db.collection('users').doc(member.uid).get();
+        const timezone = (userSnap.data() || {}).timezone;
+        if (getLocalHour(timezone) !== 20) continue; // у этого человека сейчас не 20:00 — пропускаем
 
-      const forgot = members.filter((m) => !loggedUids.has(m.uid));
-      await Promise.all(
-        forgot.map((m) =>
-          sendPushToUser(m.uid, '🍽️ Не забыли про еду?', 'Сегодня вы ещё не занесли ни одного приёма пищи в дневник питания')
-        )
-      );
+        const today = getLocalDateStr(timezone, 0);
+        const foodSnap = await db
+          .collection('workspaces')
+          .doc(workspaceId)
+          .collection('food')
+          .where('date', '==', today)
+          .where('createdBy', '==', member.uid)
+          .get();
+        const loggedToday = foodSnap.docs.some((d) => !d.data().planned);
+        if (loggedToday) continue;
+
+        await sendPushToUser(member.uid, '🍽️ Не забыли про еду?', 'Сегодня вы ещё не занесли ни одного приёма пищи в дневник питания');
+      }
     } catch (err) {
       logger.error(`Не удалось отправить вечернее push-напоминание о еде для пространства ${workspaceId}`, err);
     }

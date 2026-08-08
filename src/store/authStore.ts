@@ -43,7 +43,14 @@ export const useAuthStore = create<AuthState>((set) => {
       ref,
       (snap) => {
         if (snap.exists()) {
-          set({ profile: snap.data() as UserProfile, loading: false, error: null });
+          const profile = snap.data() as UserProfile;
+          set({ profile, loading: false, error: null });
+          // Тихо запоминаем часовой пояс устройства — используется на сервере, чтобы
+          // присылать push-уведомления в правильное МЕСТНОЕ время, а не по UTC.
+          const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+          if (detectedTz && profile.timezone !== detectedTz) {
+            setDoc(ref, { timezone: detectedTz }, { merge: true }).catch(() => {});
+          }
         } else {
           // Аккаунт есть в Firebase Auth, но профиля в Firestore нет —
           // например, если запись профиля не удалась при регистрации.
@@ -52,6 +59,7 @@ export const useAuthStore = create<AuthState>((set) => {
             uid: user.uid,
             email: user.email || '',
             displayName: user.displayName || (user.email ? user.email.split('@')[0] : 'Пользователь'),
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           };
           setDoc(ref, fallbackProfile).catch((err) => {
             set({
@@ -94,6 +102,7 @@ export const useAuthStore = create<AuthState>((set) => {
           uid: cred.user.uid,
           email,
           displayName,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         };
         await setDoc(doc(db, 'users', cred.user.uid), profile);
       } catch (e) {

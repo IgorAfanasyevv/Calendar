@@ -391,4 +391,5 @@ export interface UserProfile {
   displayName: string;
   workspaceId?: string;
   onboardingSeen?: boolean; // видел ли человек приветственное окно с объяснением возможностей
+  timezone?: string; // IANA-название часового пояса (например "Asia/Almaty") — для push-уведомлений в правильное местное время
 }
