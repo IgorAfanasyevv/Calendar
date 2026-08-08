@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { httpsCallable } from 'firebase/functions';
-import { Loader2, Camera, Trash2 } from 'lucide-react';
+import { Loader2, Camera, Trash2, Check } from 'lucide-react';
 import Modal from './Modal';
 import { useFoodStore } from '../store/foodStore';
 import { resizeImageToBase64 } from '../lib/imageResize';
@@ -134,6 +134,8 @@ export default function AddFoodModal({
     }
   }
 
+  const [justFilledByAi, setJustFilledByAi] = useState(false);
+
   async function handleEstimateByName(query: string) {
     if (!query.trim() || estimatingByName) return;
     setEstimatingByName(true);
@@ -160,6 +162,8 @@ export default function AddFoodModal({
             : null
         );
         setPresetDropdownOpen(false);
+        setJustFilledByAi(true);
+        setTimeout(() => setJustFilledByAi(false), 2500);
       }
     } catch (err) {
       setEstimateError((err as { message?: string })?.message || 'Не получилось оценить. Впишите калории вручную.');
@@ -293,18 +297,25 @@ export default function AddFoodModal({
                     {presets.filter((p) => p.name.toLowerCase().includes(presetSearch.toLowerCase())).length === 0 && (
                       <div className="px-3 py-2">
                         <p className="text-xs text-neutral-400 mb-1.5">Ничего не найдено среди сохранённого</p>
-                        {presetSearch.trim() && (
+                        {presetSearch.trim() && !estimatingByName && (
                           <button
                             onMouseDown={() => handleEstimateByName(presetSearch)}
-                            disabled={estimatingByName}
-                            className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-xs font-medium disabled:opacity-50"
+                            className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-xs font-medium"
                           >
-                            {estimatingByName && <Loader2 size={12} className="animate-spin" />}
                             🤖 Оценить «{presetSearch}» через ИИ
                           </button>
                         )}
                       </div>
                     )}
+                  </div>
+                )}
+                {estimatingByName && (
+                  <div className="absolute z-20 mt-1 w-full rounded-xl border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50 dark:bg-indigo-500/10 p-3 flex items-center gap-2.5 shadow-lg">
+                    <Loader2 size={16} className="animate-spin text-indigo-500 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-indigo-700 dark:text-indigo-300">ИИ анализирует «{presetSearch}»...</p>
+                      <p className="text-[11px] text-indigo-500/80 dark:text-indigo-400/70">Считаю точную калорийность и БЖУ по граммам</p>
+                    </div>
                   </div>
                 )}
               </div>
@@ -327,6 +338,11 @@ export default function AddFoodModal({
           </div>
         )}
         {estimateError && <p className="text-[11px] text-rose-500 -mt-1">{estimateError}</p>}
+        {justFilledByAi && (
+          <p className="text-[11px] text-emerald-600 dark:text-emerald-400 -mt-1 flex items-center gap-1">
+            <Check size={11} /> ИИ подобрал КБЖУ — можно поправить вручную, если нужно
+          </p>
+        )}
 
         <input
           className="input"
