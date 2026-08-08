@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { doc, updateDoc, deleteField } from 'firebase/firestore';
 import { db } from './lib/firebase';
 import { useAuthStore } from './store/authStore';
+import { useNotificationsStore } from './store/notificationsStore';
 import { useWorkspaceStore } from './store/workspaceStore';
 import { useTaskStore } from './store/taskStore';
 import { useGoalStore } from './store/goalStore';
@@ -39,6 +40,7 @@ import { Loader2, Heart } from 'lucide-react';
 
 export default function App() {
   const { firebaseUser, profile, loading, error } = useAuthStore();
+  const { ensureRegistered } = useNotificationsStore();
   const { workspace, listen: listenWorkspace } = useWorkspaceStore();
   const { listen: listenTasks } = useTaskStore();
   const { listen: listenGoals } = useGoalStore();
@@ -60,6 +62,13 @@ export default function App() {
     const unsub = listenWorkspace(profile.workspaceId);
     return unsub;
   }, [profile?.workspaceId, listenWorkspace]);
+
+  // Освежаем регистрацию push-уведомлений при каждом открытии приложения (не только в Настройках) —
+  // так шанс, что регистрация "протухнет" между визитами (особенно на iPhone), заметно ниже.
+  useEffect(() => {
+    if (profile?.uid) ensureRegistered(profile.uid);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.uid]);
 
   // Если владелец удалил этого пользователя из пространства — его uid больше
   // не входит в memberUids. Сбрасываем локальную привязку к пространству,
