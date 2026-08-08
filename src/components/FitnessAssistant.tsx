@@ -12,7 +12,7 @@ type Action = 'suggest_today' | 'weekly_menu' | 'analyze' | 'question';
 const fitnessAssistant = httpsCallable<
   { workspaceId: string; action: Action; question?: string },
   { text: string }
->(functions, 'fitnessAssistant');
+>(functions, 'fitnessAssistant', { timeout: 170000 });
 
 export default function FitnessAssistant({ workspaceId }: { workspaceId: string }) {
   const { firebaseUser, profile } = useAuthStore();
