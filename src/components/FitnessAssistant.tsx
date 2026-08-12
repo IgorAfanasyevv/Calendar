@@ -25,7 +25,7 @@ export default function FitnessAssistant({ workspaceId }: { workspaceId: string 
 
   const myMember = workspace?.members.find((m) => m.uid === firebaseUser?.uid);
   const prefs = myMember?.dietPreferences;
-  const hasPrefs = !!(prefs?.restrictions || prefs?.dislikes || prefs?.cuisine);
+  const hasPrefs = !!(prefs?.restrictions || prefs?.dislikes || prefs?.wantMore || prefs?.cuisine);
 
   async function run(action: Action, extra?: { question?: string }) {
     setLoading(action);
@@ -144,6 +144,7 @@ function DietPreferencesForm({
 }) {
   const [restrictions, setRestrictions] = useState(initial?.restrictions || '');
   const [dislikes, setDislikes] = useState(initial?.dislikes || '');
+  const [wantMore, setWantMore] = useState(initial?.wantMore || '');
   const [cuisine, setCuisine] = useState(initial?.cuisine || '');
   const [cookingTime, setCookingTime] = useState<DietPreferences['cookingTime']>(initial?.cookingTime || 'any');
   const [saving, setSaving] = useState(false);
@@ -151,7 +152,7 @@ function DietPreferencesForm({
   async function handleSave() {
     setSaving(true);
     try {
-      await onSave({ restrictions, dislikes, cuisine, cookingTime });
+      await onSave({ restrictions, dislikes, wantMore, cuisine, cookingTime });
     } finally {
       setSaving(false);
     }
@@ -180,6 +181,16 @@ function DietPreferencesForm({
           placeholder="Например: грибы, брокколи, острое"
           value={dislikes}
           onChange={(e) => setDislikes(e.target.value)}
+        />
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-neutral-500 mb-1">Хочу больше</label>
+        <input
+          className="input"
+          placeholder="Например: больше овощей, больше рыбы, больше клетчатки"
+          value={wantMore}
+          onChange={(e) => setWantMore(e.target.value)}
         />
       </div>
 

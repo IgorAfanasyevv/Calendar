@@ -66,6 +66,7 @@ export interface ShoppingItem {
 export interface DietPreferences {
   restrictions?: string; // аллергии/диета: веган, без глютена и т.п.
   dislikes?: string; // нелюбимые продукты
+  wantMore?: string; // чего хочется больше — например "больше овощей", "больше белка"
   cuisine?: string; // предпочитаемая кухня
   cookingTime?: 'quick' | 'standard' | 'any'; // сколько готовы тратить времени на готовку
 }

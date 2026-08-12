@@ -357,6 +357,7 @@ async function handleFitnessAssistant(request) {
   const prefsLines = [
     prefs.restrictions ? `Ограничения/диета/аллергии: ${prefs.restrictions}.` : null,
     prefs.dislikes ? `Не любит: ${prefs.dislikes}.` : null,
+    prefs.wantMore ? `Хочет БОЛЬШЕ этого в рационе (старайся включать чаще обычного): ${prefs.wantMore}.` : null,
     prefs.cuisine ? `Предпочитаемая кухня: ${prefs.cuisine}.` : null,
     cookingTimeLabel ? `Время на готовку: ${cookingTimeLabel}.` : null,
   ].filter(Boolean);
