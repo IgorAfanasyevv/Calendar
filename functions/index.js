@@ -402,42 +402,75 @@ ${remaining !== null ? `Осталось примерно ${remaining} ккал 
     const since = new Date();
     since.setDate(since.getDate() - 13);
     const sinceStr = since.toISOString().slice(0, 10);
-    const foodSnap = await db
-      .collection('workspaces')
-      .doc(workspaceId)
-      .collection('food')
-      .where('createdBy', '==', uid)
-      .get();
+
+    const [foodSnap, workoutsSnap] = await Promise.all([
+      db.collection('workspaces').doc(workspaceId).collection('food').where('createdBy', '==', uid).get(),
+      db.collection('workspaces').doc(workspaceId).collection('workouts').where('createdBy', '==', uid).get(),
+    ]);
+
     const entries = foodSnap.docs
       .map((d) => d.data())
       .filter((e) => !e.planned && e.date >= sinceStr)
       .sort((a, b) => a.date.localeCompare(b.date));
 
-    if (entries.length === 0) {
-      return { text: 'Пока маловато записей в дневнике за последние 2 недели, чтобы сделать содержательный анализ. Продолжайте вести дневник, и здесь появятся полезные наблюдения!' };
+    const workouts = workoutsSnap.docs
+      .map((d) => d.data())
+      .filter((w) => w.date >= sinceStr && !w.planned)
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    if (entries.length === 0 && workouts.length === 0) {
+      return {
+        text: 'Пока маловато записей за последние 2 недели (ни питания, ни тренировок), чтобы сделать содержательный анализ. Продолжайте вести дневник и отмечать тренировки — здесь появятся полезные наблюдения!',
+      };
     }
 
     const byDay = {};
+    const macrosByDay = {};
     entries.forEach((e) => {
       byDay[e.date] = (byDay[e.date] || 0) + (e.calories || 0);
+      macrosByDay[e.date] = macrosByDay[e.date] || { protein: 0, fat: 0, carbs: 0 };
+      macrosByDay[e.date].protein += e.protein || 0;
+      macrosByDay[e.date].fat += e.fat || 0;
+      macrosByDay[e.date].carbs += e.carbs || 0;
     });
     const daysSummary = Object.entries(byDay)
-      .map(([d, cal]) => `${d}: ${cal} ккал`)
+      .map(([d, cal]) => `${d}: ${cal} ккал (Б${macrosByDay[d].protein} Ж${macrosByDay[d].fat} У${macrosByDay[d].carbs})`)
       .join('; ');
+
+    const workoutsSummary = workouts.length
+      ? workouts.map((w) => `${w.date}: ${w.name || w.type} (${w.durationMinutes || '?'} мин${w.caloriesBurned ? `, ~${w.caloriesBurned} ккал` : ''})`).join('; ')
+      : 'тренировок за этот период не отмечено';
+    const workoutDays = new Set(workouts.map((w) => w.date)).size;
+
+    const macroGoalParts = [];
+    if (goal) macroGoalParts.push(`${goal} ккал`);
+    if (proteinGoal) macroGoalParts.push(`белки ~${proteinGoal} г`);
+    if (fatGoal) macroGoalParts.push(`жиры ~${fatGoal} г`);
+    if (carbsGoal) macroGoalParts.push(`углеводы ~${carbsGoal} г`);
 
     const prompt = `${SAFETY_NOTE}
 
-Вот дневник питания ${name} за последние ${Object.keys(byDay).length} дней (сумма калорий по дням):
-${daysSummary}
-${goal ? `Дневная цель — ${goal} ккал.` : 'Дневная цель калорий не задана.'}
+Ты — умный анализатор питания и тренировок для ${name}. Проанализируй за последние 2 недели и дай персональные рекомендации.
 
-Список отдельных приёмов пищи: ${entries.map((e) => `${e.date} ${e.mealType}: ${e.name} (${e.calories} ккал)`).join('; ')}
+Дневная цель: ${macroGoalParts.length ? macroGoalParts.join(', ') : 'не задана (посоветуй в рекомендациях задать её через калькулятор КБЖУ в Дневнике питания)'}
 
-Проанализируй паттерны (например, стабильность по дням, превышения цели, повторяющиеся продукты) и дай 2-3 конкретных, дружелюбных совета по улучшению. Коротко.`;
+Питание по дням (калории и БЖУ, сумма за день): ${daysSummary || 'записей о еде нет'}
+
+Отдельные приёмы пищи: ${entries.map((e) => `${e.date} ${e.mealType}: ${e.name} (${e.calories} ккал, Б${e.protein || 0}/Ж${e.fat || 0}/У${e.carbs || 0})`).join('; ') || 'нет'}
+
+Тренировки: ${workoutsSummary} (всего дней с тренировкой: ${workoutDays} из 14)
+
+Проанализируй по-настоящему, а не формально:
+1. Насколько стабильно и близко к цели питание день ото дня (калории И конкретно белки/жиры/углеводы — не только калории)
+2. Достаточно ли тренировок для этой цели и есть ли явные пропуски/нерегулярность
+3. Согласуется ли то, что человек ест, с тем, сколько тренируется (например мало белка при частых силовых тренировках, или переедание в дни без активности)
+4. Любые заметные паттерны (конкретные продукты, которые часто повторяются и стоило бы разнообразить, дни недели с провалами и т.п.)
+
+Дай 3-4 конкретных, дружелюбных и выполнимых совета — не общие фразы вроде "ешьте больше овощей", а привязанные к РЕАЛЬНЫМ данным этого человека. Коротко, без воды.`;
 
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 600,
+      max_tokens: 700,
       messages: [{ role: 'user', content: prompt }],
     });
     return { text: msg.content.map((b) => b.text || '').join('\n') };

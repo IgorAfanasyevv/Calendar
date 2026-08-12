@@ -75,7 +75,7 @@ export default function FitnessAssistant({ workspaceId }: { workspaceId: string 
         />
         <AssistantButton
           icon={BarChart3}
-          label="Проанализировать дневник"
+          label="Анализ питания и тренировок"
           loading={loading === 'analyze'}
           onClick={() => run('analyze')}
         />
