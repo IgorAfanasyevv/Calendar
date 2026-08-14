@@ -10,7 +10,7 @@ import type { DietPreferences } from '../types';
 type Action = 'suggest_today' | 'weekly_menu' | 'analyze' | 'question';
 
 const fitnessAssistant = httpsCallable<
-  { workspaceId: string; action: Action; question?: string },
+  { workspaceId: string; action: Action; question?: string; analysisGoal?: string },
   { text: string }
 >(functions, 'fitnessAssistant', { timeout: 170000 });
 
@@ -22,12 +22,14 @@ export default function FitnessAssistant({ workspaceId }: { workspaceId: string 
   const [error, setError] = useState<string | null>(null);
   const [question, setQuestion] = useState('');
   const [editingPrefs, setEditingPrefs] = useState(false);
+  const [askingAnalysisGoal, setAskingAnalysisGoal] = useState(false);
+  const [analysisGoal, setAnalysisGoal] = useState('');
 
   const myMember = workspace?.members.find((m) => m.uid === firebaseUser?.uid);
   const prefs = myMember?.dietPreferences;
   const hasPrefs = !!(prefs?.restrictions || prefs?.dislikes || prefs?.wantMore || prefs?.cuisine);
 
-  async function run(action: Action, extra?: { question?: string }) {
+  async function run(action: Action, extra?: { question?: string; analysisGoal?: string }) {
     setLoading(action);
     setError(null);
     setResult(null);
@@ -77,7 +79,7 @@ export default function FitnessAssistant({ workspaceId }: { workspaceId: string 
           icon={BarChart3}
           label="Анализ питания и тренировок"
           loading={loading === 'analyze'}
-          onClick={() => run('analyze')}
+          onClick={() => setAskingAnalysisGoal(true)}
         />
       </div>
 
@@ -129,6 +131,39 @@ export default function FitnessAssistant({ workspaceId }: { workspaceId: string 
               setEditingPrefs(false);
             }}
           />
+        </Modal>
+      )}
+
+      {askingAnalysisGoal && (
+        <Modal title="Анализ питания и тренировок" onClose={() => setAskingAnalysisGoal(false)}>
+          <div className="space-y-3">
+            <p className="text-xs text-neutral-400">
+              Есть конкретная цель? Например "хочу более худую талию" или "хочу нарастить мышцы рук" — ИИ учтёт её
+              при разборе ваших тренировок и питания и даст советы именно под неё. Можно оставить пустым для общего анализа.
+            </p>
+            <input
+              autoFocus
+              className="input"
+              placeholder="Например: более худая талия"
+              value={analysisGoal}
+              onChange={(e) => setAnalysisGoal(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  setAskingAnalysisGoal(false);
+                  run('analyze', { analysisGoal: analysisGoal.trim() || undefined });
+                }
+              }}
+            />
+            <button
+              onClick={() => {
+                setAskingAnalysisGoal(false);
+                run('analyze', { analysisGoal: analysisGoal.trim() || undefined });
+              }}
+              className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-rose-400 text-white font-medium text-sm"
+            >
+              Проанализировать
+            </button>
+          </div>
         </Modal>
       )}
     </div>
