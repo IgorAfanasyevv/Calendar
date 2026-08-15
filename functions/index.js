@@ -326,7 +326,7 @@ async function getMember(workspaceId, uid) {
   return { workspace, member };
 }
 
-exports.fitnessAssistant = onCall({ secrets: ['ANTHROPIC_API_KEY'], timeoutSeconds: 180 }, async (request) => {
+exports.fitnessAssistant = onCall({ secrets: ['ANTHROPIC_API_KEY'], timeoutSeconds: 300 }, async (request) => {
   try {
     return await handleFitnessAssistant(request);
   } catch (err) {

@@ -12,7 +12,7 @@ const NEW_FOOD = '__new__';
 const fitnessAssistantCall = httpsCallable<
   { workspaceId: string; action: string; imageBase64?: string; imageMediaType?: string; foodQuery?: string },
   { parsed?: { name?: string; calories?: number; grams?: number; protein?: number; fat?: number; carbs?: number } }
->(functions, 'fitnessAssistant');
+>(functions, 'fitnessAssistant', { timeout: 120000 });
 
 export default function AddFoodModal({
   workspaceId,
@@ -166,7 +166,12 @@ export default function AddFoodModal({
         setTimeout(() => setJustFilledByAi(false), 2500);
       }
     } catch (err) {
-      setEstimateError((err as { message?: string })?.message || 'Не получилось оценить. Впишите калории вручную.');
+      const rawMessage = (err as { message?: string })?.message;
+      setEstimateError(
+        !rawMessage || rawMessage === 'internal'
+          ? 'Запрос занял слишком много времени и прервался. Попробуйте ещё раз, или впишите калории вручную.'
+          : rawMessage
+      );
     } finally {
       setEstimatingByName(false);
     }

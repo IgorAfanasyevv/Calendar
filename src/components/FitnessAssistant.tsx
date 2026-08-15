@@ -12,7 +12,7 @@ type Action = 'suggest_today' | 'weekly_menu' | 'analyze' | 'question';
 const fitnessAssistant = httpsCallable<
   { workspaceId: string; action: Action; question?: string; analysisGoal?: string },
   { text: string }
->(functions, 'fitnessAssistant', { timeout: 170000 });
+>(functions, 'fitnessAssistant', { timeout: 290000 });
 
 export default function FitnessAssistant({ workspaceId }: { workspaceId: string }) {
   const { firebaseUser, profile } = useAuthStore();
@@ -37,9 +37,13 @@ export default function FitnessAssistant({ workspaceId }: { workspaceId: string 
       const res = await fitnessAssistant({ workspaceId, action, ...extra });
       setResult(res.data.text);
     } catch (e) {
+      const rawMessage = (e as { message?: string })?.message;
+      // "internal" без текста — это сырой код ошибки Firebase, обычно означает, что запрос
+      // прервался по таймауту на уровне платформы, не успев дойти до нашей обработки ошибок.
       setError(
-        (e as { message?: string })?.message ||
-          'Не удалось получить ответ. Проверьте, что настроен API-ключ Anthropic на сервере.'
+        !rawMessage || rawMessage === 'internal'
+          ? 'Запрос занял слишком много времени и прервался. Попробуйте ещё раз — иногда со второго раза проходит быстрее.'
+          : rawMessage
       );
     } finally {
       setLoading(null);
