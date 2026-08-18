@@ -663,7 +663,7 @@ ${avoidList ? `- ВАЖНО: эти блюда уже есть в других �
 
     async function generateSingleGroup(groupLabel, proteinHint, avoidList) {
       const msg = await anthropic.messages.create({
-        model: 'claude-sonnet-5',
+        model: 'claude-haiku-4-5-20251001',
         max_tokens: 3000,
         messages: [{ role: 'user', content: buildSingleGroupPrompt(groupLabel, proteinHint, avoidList) }],
       });
@@ -678,6 +678,7 @@ ${avoidList ? `- ВАЖНО: эти блюда уже есть в других �
           rawLength: raw.length,
           rawPreview: raw.slice(0, 200),
           rawEnd: raw.slice(-200),
+          contentBlockTypes: msg.content.map((b) => b.type),
         });
         if (msg.stop_reason === 'max_tokens') {
           return { ok: false, error: 'Ответ модели получился слишком длинным и обрезался.' };
