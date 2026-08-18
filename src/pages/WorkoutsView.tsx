@@ -710,8 +710,12 @@ function AddWorkoutModal({
         </div>
 
         <div className="grid grid-cols-2 gap-2">
-          <input type="number" className="input" placeholder="Минуты" value={duration} onChange={(e) => setDuration(e.target.value)} />
           <div>
+            <label className="block text-[10px] font-medium text-neutral-500 mb-1">Длительность, минуты</label>
+            <input type="number" className="input" placeholder="Минуты" value={duration} onChange={(e) => setDuration(e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-[10px] font-medium text-neutral-500 mb-1">Сожжено калорий</label>
             <input
               type="number"
               className="input"
