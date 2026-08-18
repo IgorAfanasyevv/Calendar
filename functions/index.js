@@ -669,10 +669,15 @@ ${SIMPLE_INGREDIENTS_NOTE}
     async function generateGroupsPair(groupsLabel, proteinHint) {
       const msg = await anthropic.messages.create({
         model: 'claude-sonnet-5',
-        max_tokens: 3000,
-        messages: [{ role: 'user', content: buildGroupsPrompt(groupsLabel, proteinHint) }],
+        max_tokens: 8000,
+        messages: [
+          { role: 'user', content: buildGroupsPrompt(groupsLabel, proteinHint) },
+          // "Предзаполнение" ответа модели прямо с открывающей скобки JSON — модель физически
+          // не может начать с преамбулы/рассуждений, раз её собственный ответ уже начат с "{".
+          { role: 'assistant', content: '{"groups":[' },
+        ],
       });
-      const raw = msg.content.map((b) => b.text || '').join('\n').trim();
+      const raw = '{"groups":[' + msg.content.map((b) => b.text || '').join('\n').trim();
       try {
         const parsed = extractJson(raw);
         return { ok: true, groups: parsed.groups || [] };
