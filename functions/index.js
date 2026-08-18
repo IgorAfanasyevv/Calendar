@@ -634,50 +634,45 @@ offset — через сколько дней от сегодня (0 = сего�
       await deleteBatch.commit();
     }
 
-    // Раньше просили модель сгенерировать все 4 набора блюд ОДНИМ запросом — с подробным
-    // расчётом калорий по ингредиентам это стало занимать слишком много времени и упиралось
-    // в таймаут. Теперь делаем ДВА запроса ПАРАЛЛЕЛЬНО (по 2 набора в каждом) — суммарный
-    // объём расчёта тот же (точность не страдает), но по времени должно быть примерно вдвое
-    // быстрее, т.к. оба запроса выполняются одновременно, а не один за другим.
-    function buildGroupsPrompt(groupsLabel, proteinHint) {
+    // Раньше просили модель сгенерировать всё меню одним (или двумя) запросами — ответ либо
+    // не укладывался в лимит токенов, либо занимал слишком много времени. Теперь генерируем
+    // КАЖДЫЙ из 4 наборов блюд ОТДЕЛЬНЫМ запросом, и все 4 запроса идут ОДНОВРЕМЕННО —
+    // каждому отдельному запросу нужно сочинить всего 4 блюда, поэтому лимита токенов
+    // теперь точно достаточно, а по времени быстрее или так же, т.к. всё параллельно.
+    function buildSingleGroupPrompt(groupLabel, proteinHint, avoidList) {
       return `${SAFETY_NOTE}
 ${prefsText}
 ${macroGoalText}
-Составь ${groupsLabel} для ${name}. Чтобы не готовить каждый день заново, одни и те же блюда (завтрак, обед, ужин,
-перекус) повторяются на протяжении КАЖДЫХ ДВУХ дней подряд.
+Составь ОДИН набор блюд на день (завтрак, обед, ужин, перекус) для ${name} — ${groupLabel}. Этот набор дальше будет
+использован на 1-2 дня подряд, готовить нужно только один раз.
 
 ${SIMPLE_INGREDIENTS_NOTE}
 
-Простые, реалистичные для готовки дома блюда, но по-настоящему вкусные и разнообразные между наборами — это критически важно:
-- Ни одно блюдо не должно повторяться между наборами (внутри одного набора блюда, конечно, одни и те же на оба дня — так и задумано)
-- Основной источник белка для этой части недели — в основном ${proteinHint} (можно и что-то ещё, но делай упор на это)
-- Меняй гарнир/углеводную основу (рис, гречка, картофель, макароны) — не повторяй один и тот же гарнир в обоих наборах
-- Меняй способ приготовления (варка, запекание, жарка на сковороде, тушение, сырые салаты)
-- Меняй стиль блюда (суп, запеканка, котлеты, салат, каша, омлет)
-- Завтраки в разных наборах тоже должны отличаться друг от друга
+Простое, реалистичное для готовки дома блюдо, но по-настоящему вкусное:
+- Основной источник белка — в основном ${proteinHint} (можно и что-то ещё, но делай упор на это)
+${avoidList ? `- ВАЖНО: эти блюда уже есть в других наборах этой недели, не повторяй их и не делай слишком похожими: ${avoidList}` : ''}
 Для каждого блюда укажи короткий список основных продуктов/ингредиентов (2-6 штук), и у КАЖДОГО продукта сразу укажи нужное количество прямо в строке — граммы для веса или штуки для счётных продуктов, например: "Куриная грудка — 300 г", "Рис — 150 г", "Яйца — 2 шт", "Помидоры — 2 шт".
 
 ВАЖНО про точность калорий и БЖУ: считай их аккуратно по реальной пищевой ценности каждого ингредиента и указанной
-граммовке (не "на глаз") — но делай это МЫСЛЕННО, не расписывай расчёт в ответе. В ответе — только итоговый JSON,
-без какого-либо текста до или после него, это критично для скорости.
+граммовке (не "на глаз") — но делай это МЫСЛЕННО, не расписывай расчёт в ответе.
 
 Выведи ИТОГОВЫЙ JSON СТРОГО в этом формате, без какого-либо текста до или после:
-{"groups":[{"meals":[{"mealType":"breakfast","name":"...","calories":123,"grams":250,"protein":10,"fat":5,"carbs":20,"ingredients":["...","..."]}, ...]}]}
-Ровно 2 элемента в "groups". mealType — один из: breakfast, lunch, dinner, snack. grams — примерный вес порции в граммах (сумма граммовки ингредиентов).`;
+{"meals":[{"mealType":"breakfast","name":"...","calories":123,"grams":250,"protein":10,"fat":5,"carbs":20,"ingredients":["...","..."]}, ...]}
+Ровно 4 элемента в "meals" — по одному на breakfast, lunch, dinner, snack. grams — примерный вес порции в граммах (сумма граммовки ингредиентов).`;
     }
 
-    async function generateGroupsPair(groupsLabel, proteinHint) {
+    async function generateSingleGroup(groupLabel, proteinHint, avoidList) {
       const msg = await anthropic.messages.create({
         model: 'claude-sonnet-5',
-        max_tokens: 8000,
-        messages: [{ role: 'user', content: buildGroupsPrompt(groupsLabel, proteinHint) }],
+        max_tokens: 3000,
+        messages: [{ role: 'user', content: buildSingleGroupPrompt(groupLabel, proteinHint, avoidList) }],
       });
       const raw = msg.content.map((b) => b.text || '').join('\n').trim();
       try {
         const parsed = extractJson(raw);
-        return { ok: true, groups: parsed.groups || [] };
+        return { ok: true, meals: parsed.meals || [] };
       } catch (e) {
-        logger.error('Не удалось разобрать JSON части меню от модели', {
+        logger.error('Не удалось разобрать JSON набора блюд от модели', {
           error: e.message,
           stopReason: msg.stop_reason,
           rawLength: raw.length,
@@ -691,18 +686,22 @@ ${SIMPLE_INGREDIENTS_NOTE}
       }
     }
 
-    const [firstHalf, secondHalf] = await Promise.all([
-      generateGroupsPair('меню на дни 1-4 (первые 2 набора блюд из 4 на всю неделю)', 'курица, яйца, творог'),
-      generateGroupsPair('меню на дни 5-7 (последние 2 набора блюд из 4 на всю неделю, второй набор — всего на 1 день)', 'рыба/морепродукты, фарш, бобовые или печень'),
-    ]);
+    // Задаём разные акценты по белку для каждого набора — так они естественно получаются
+    // разнообразными, даже генерируясь независимо и не видя результатов друг друга.
+    const GROUP_SPECS = [
+      { label: 'первый набор (дни 1-2)', protein: 'курица' },
+      { label: 'второй набор (дни 3-4)', protein: 'рыба или морепродукты' },
+      { label: 'третий набор (дни 5-6)', protein: 'яйца или творог' },
+      { label: 'четвёртый набор (только 1 день)', protein: 'фарш, бобовые или печень' },
+    ];
 
-    if (!firstHalf.ok && !secondHalf.ok) {
-      throw new HttpsError('internal', `${firstHalf.error} ${secondHalf.error}`);
+    const groupResults = await Promise.all(GROUP_SPECS.map((spec) => generateSingleGroup(spec.label, spec.protein)));
+
+    const failedCount = groupResults.filter((r) => !r.ok).length;
+    if (failedCount === GROUP_SPECS.length) {
+      throw new HttpsError('internal', groupResults.map((r) => r.error).join(' '));
     }
-    const parsed = { groups: [...(firstHalf.ok ? firstHalf.groups : []), ...(secondHalf.ok ? secondHalf.groups : [])] };
-    if (parsed.groups.length === 0) {
-      throw new HttpsError('internal', 'Не получилось сгенерировать меню. Попробуйте ещё раз.');
-    }
+    const parsed = { groups: groupResults.map((r) => (r.ok ? { meals: r.meals } : null)) };
 
     const batch = db.batch();
     const foodCol = db.collection('workspaces').doc(workspaceId).collection('food');
@@ -713,6 +712,7 @@ ${SIMPLE_INGREDIENTS_NOTE}
     const GROUP_OFFSETS = [[1, 2], [3, 4], [5, 6], [7]];
 
     (parsed.groups || []).forEach((group, groupIndex) => {
+      if (!group) return; // этот набор не сгенерировался — пропускаем, но индекс других групп не сдвигаем
       const offsets = GROUP_OFFSETS[groupIndex] || [];
       offsets.forEach((offset) => {
         const date = new Date();
@@ -750,8 +750,8 @@ ${SIMPLE_INGREDIENTS_NOTE}
 
     await batch.commit();
     const partialNote =
-      !firstHalf.ok || !secondHalf.ok
-        ? ` Часть меню не получилось составить (${!firstHalf.ok ? firstHalf.error : secondHalf.error}) — добавлена только ${!firstHalf.ok ? 'вторая' : 'первая'} половина недели, попробуйте сгенерировать ещё раз, чтобы дополнить оставшиеся дни.`
+      failedCount > 0
+        ? ` ${failedCount} из ${GROUP_SPECS.length} наборов не получилось составить (${groupResults.filter((r) => !r.ok).map((r) => r.error).join(' ')}) — попробуйте сгенерировать ещё раз, чтобы дополнить оставшиеся дни.`
         : '';
     return {
       text: `Готово! Добавил ${count} приёмов пищи на ближайшую неделю в раздел «Меню».${partialNote} Продукты в покупки пока не отправлял — просмотрите меню, при необходимости замените блюда, а затем нажмите «Выбрать» на нужных, чтобы их продукты попали в ваш список покупок.`,
