@@ -639,7 +639,7 @@ offset — через сколько дней от сегодня (0 = сего�
     // КАЖДЫЙ из 4 наборов блюд ОТДЕЛЬНЫМ запросом, и все 4 запроса идут ОДНОВРЕМЕННО —
     // каждому отдельному запросу нужно сочинить всего 4 блюда, поэтому лимита токенов
     // теперь точно достаточно, а по времени быстрее или так же, т.к. всё параллельно.
-    function buildSingleGroupPrompt(groupLabel, proteinHint, avoidList) {
+    function buildSingleGroupPrompt(groupLabel, styleHints, avoidList) {
       return `${SAFETY_NOTE}
 ${prefsText}
 ${macroGoalText}
@@ -648,8 +648,14 @@ ${macroGoalText}
 
 ${SIMPLE_INGREDIENTS_NOTE}
 
-Простое, реалистичное для готовки дома блюдо, но по-настоящему вкусное:
-- Основной источник белка — в основном ${proteinHint} (можно и что-то ещё, но делай упор на это)
+${prefs.cuisine ? `КРИТИЧЕСКИ ВАЖНО: пользователь явно указал предпочитаемую кухню — "${prefs.cuisine}". Блюда этого набора должны реально относиться именно к этой кухне (конкретные блюда/техники/специи, характерные для неё), а не быть общими "домашними" блюдами без связи с указанной кухней. Если указано несколько кухонь через запятую — в этом наборе можно взять одну-две из них, не обязательно все сразу.` : ''}
+
+Простые, реалистичные для готовки дома блюда, но по-настоящему вкусные:
+- Завтрак — ${styleHints.breakfast}
+- Обед — ${styleHints.lunch}
+- Ужин — ${styleHints.dinner}
+- Перекус — ${styleHints.snack}
+(это ориентир по типу блюда, чтобы не повторяться с другими наборами недели — конкретное название и рецепт придумай сам, с уклоном в указанную кухню, если она задана)
 ${avoidList ? `- ВАЖНО: эти блюда уже есть в других наборах этой недели, не повторяй их и не делай слишком похожими: ${avoidList}` : ''}
 Для каждого блюда укажи короткий список основных продуктов/ингредиентов (2-6 штук), и у КАЖДОГО продукта сразу укажи нужное количество прямо в строке — граммы для веса или штуки для счётных продуктов, например: "Куриная грудка — 300 г", "Рис — 150 г", "Яйца — 2 шт", "Помидоры — 2 шт".
 
@@ -661,11 +667,11 @@ ${avoidList ? `- ВАЖНО: эти блюда уже есть в других �
 Ровно 4 элемента в "meals" — по одному на breakfast, lunch, dinner, snack. grams — примерный вес порции в граммах (сумма граммовки ингредиентов).`;
     }
 
-    async function generateSingleGroup(groupLabel, proteinHint, avoidList) {
+    async function generateSingleGroup(groupLabel, styleHints, avoidList) {
       const msg = await anthropic.messages.create({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 3000,
-        messages: [{ role: 'user', content: buildSingleGroupPrompt(groupLabel, proteinHint, avoidList) }],
+        messages: [{ role: 'user', content: buildSingleGroupPrompt(groupLabel, styleHints, avoidList) }],
       });
       const raw = msg.content.map((b) => b.text || '').join('\n').trim();
       try {
@@ -687,16 +693,30 @@ ${avoidList ? `- ВАЖНО: эти блюда уже есть в других �
       }
     }
 
-    // Задаём разные акценты по белку для каждого набора — так они естественно получаются
-    // разнообразными, даже генерируясь независимо и не видя результатов друг друга.
+    // Задаём РАЗНЫЕ ориентиры по типу блюда для каждого приёма пищи в каждом наборе — так они
+    // получаются структурно разными, даже генерируясь независимо и не видя результатов друг друга
+    // (без этого модели из разных запросов независимо "скатываются" к одним и тем же безопасным
+    // вариантам вроде омлета/пасты/творога).
     const GROUP_SPECS = [
-      { label: 'первый набор (дни 1-2)', protein: 'курица' },
-      { label: 'второй набор (дни 3-4)', protein: 'рыба или морепродукты' },
-      { label: 'третий набор (дни 5-6)', protein: 'яйца или творог' },
-      { label: 'четвёртый набор (только 1 день)', protein: 'фарш, бобовые или печень' },
+      {
+        label: 'первый набор (дни 1-2)',
+        style: { breakfast: 'яичное блюдо (омлет, яичница, шакшука и т.п.)', lunch: 'блюдо с курицей и гарниром', dinner: 'запечённая рыба или морепродукты с овощами', snack: 'молочный/творожный перекус' },
+      },
+      {
+        label: 'второй набор (дни 3-4)',
+        style: { breakfast: 'кашевое блюдо (овсянка, гречневая каша и т.п. с добавками)', lunch: 'суп или наваристое первое блюдо', dinner: 'блюдо с мясным фаршем (котлеты, тефтели, начинка и т.п.)', snack: 'фруктово-ореховый перекус' },
+      },
+      {
+        label: 'третий набор (дни 5-6)',
+        style: { breakfast: 'творожное или йогуртовое блюдо (не омлет)', lunch: 'блюдо на основе риса/крупы с белком', dinner: 'салат или лёгкое блюдо с бобовыми/тофу', snack: 'яичный перекус (например варёные яйца)' },
+      },
+      {
+        label: 'четвёртый набор (только 1 день)',
+        style: { breakfast: 'бутербродное/тостовое блюдо', lunch: 'паста или другое блюдо из теста', dinner: 'блюдо с говядиной или печенью', snack: 'овощной перекус' },
+      },
     ];
 
-    const groupResults = await Promise.all(GROUP_SPECS.map((spec) => generateSingleGroup(spec.label, spec.protein)));
+    const groupResults = await Promise.all(GROUP_SPECS.map((spec) => generateSingleGroup(spec.label, spec.style)));
 
     const failedCount = groupResults.filter((r) => !r.ok).length;
     if (failedCount === GROUP_SPECS.length) {
@@ -1046,22 +1066,31 @@ ${excludeNames.length ? `Уже предлагались и не подошли:
     const current = entrySnap.data();
     const meal = request.data.option;
 
-    await entryRef.update(
-      stripUndefinedFields({
-        name: meal.name || current.name,
-        calories: Number(meal.calories) || current.calories,
-        grams: meal.grams ? Number(meal.grams) : undefined,
-        protein: meal.protein ? Number(meal.protein) : undefined,
-        fat: meal.fat ? Number(meal.fat) : undefined,
-        carbs: meal.carbs ? Number(meal.carbs) : undefined,
-        ingredients: meal.ingredients && meal.ingredients.length ? meal.ingredients : undefined,
-        addedToShopping: false,
-        recipe: null,
-        photoSearchTerm: null,
-      })
-    );
+    const patch = stripUndefinedFields({
+      name: meal.name || current.name,
+      calories: Number(meal.calories) || current.calories,
+      grams: meal.grams ? Number(meal.grams) : undefined,
+      protein: meal.protein ? Number(meal.protein) : undefined,
+      fat: meal.fat ? Number(meal.fat) : undefined,
+      carbs: meal.carbs ? Number(meal.carbs) : undefined,
+      ingredients: meal.ingredients && meal.ingredients.length ? meal.ingredients : undefined,
+      addedToShopping: false,
+      recipe: null,
+      photoSearchTerm: null,
+    });
 
-    return { text: `Заменил(а) «${current.name}» на «${meal.name}».` };
+    // Если это блюдо повторяется на несколько дней подряд (пара дней с одинаковым меню) —
+    // заменяем сразу на ВСЕХ этих днях, иначе пара "разъезжается": один день с новым блюдом,
+    // другой со старым.
+    const siblingIds = Array.isArray(request.data.siblingIds) ? request.data.siblingIds.filter((id) => id && id !== entryId) : [];
+    const batch = db.batch();
+    batch.update(entryRef, patch);
+    siblingIds.forEach((id) => {
+      batch.update(db.collection('workspaces').doc(workspaceId).collection('food').doc(id), patch);
+    });
+    await batch.commit();
+
+    return { text: `Заменил(а) «${current.name}» на «${meal.name}»${siblingIds.length ? ` (на всех ${siblingIds.length + 1} днях, где было это блюдо)` : ''}.` };
   }
 
   if (action === 'question') {

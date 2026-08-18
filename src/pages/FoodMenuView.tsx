@@ -26,7 +26,7 @@ const suggestMealOptionsCall = httpsCallable<
 >(functions, 'fitnessAssistant');
 
 const applyMealOptionCall = httpsCallable<
-  { workspaceId: string; action: 'apply_meal_option'; entryId: string; option: MealOption },
+  { workspaceId: string; action: 'apply_meal_option'; entryId: string; option: MealOption; siblingIds?: string[] },
   { text: string }
 >(functions, 'fitnessAssistant');
 
@@ -108,7 +108,7 @@ function formatDate(dateStr: string): string {
 }
 
 export default function FoodMenuView({ workspaceId }: { workspaceId: string }) {
-  const { entries, addEntry, deleteEntry, sendIngredientsToShopping, markAddedToShopping, unselectFromMenu, setIngredients } = useFoodStore();
+  const { entries, addEntry, deleteEntry, sendIngredientsToShopping, unselectFromMenu, setIngredients } = useFoodStore();
   const { firebaseUser, profile } = useAuthStore();
   const { workspace } = useWorkspaceStore();
   const actor = { uid: firebaseUser?.uid || '', name: profile?.displayName || '' };
@@ -116,6 +116,7 @@ export default function FoodMenuView({ workspaceId }: { workspaceId: string }) {
   const [newDate, setNewDate] = useState(localDateStr(Date.now()));
   const [newMeal, setNewMeal] = useState<MealType>('breakfast');
   const [replacingEntry, setReplacingEntry] = useState<FoodEntry | null>(null);
+  const [replacingSiblingIds, setReplacingSiblingIds] = useState<string[]>([]);
   const [recipeEntry, setRecipeEntry] = useState<FoodEntry | null>(null);
   const [selectedUid, setSelectedUid] = useState(firebaseUser?.uid || '');
   const [sendingId, setSendingId] = useState<string | null>(null);
@@ -153,12 +154,14 @@ export default function FoodMenuView({ workspaceId }: { workspaceId: string }) {
   async function handleSelectForShopping(entry: FoodEntry, siblings: FoodEntry[]) {
     setSendingId(entry.id);
     try {
-      // Продукты отправляем в покупки только один раз (готовят обычно одной партией на
-      // оба дня), но статус "выбрано" проставляем всем дням пары, чтобы все пропали
-      // из "Запланировано" и появились в "Точно буду готовить" вместе.
-      await sendIngredientsToShopping(entry);
-      const rest = siblings.filter((s) => s.id !== entry.id);
-      await Promise.all(rest.map((s) => markAddedToShopping(s)));
+      // Блюдо повторяется N дней подряд (пара/тройка дней) — значит реально нужно продуктов
+      // на N порций (готовите одной партией сразу на все эти дни), поэтому отправляем
+      // ингредиенты в покупки ОТДЕЛЬНО за каждый день — механизм объединения одинаковых
+      // продуктов сам сложит их в нужное количество (например 2 банана вместо 1).
+      // Отправляем последовательно (не параллельно) — это важно для надёжного объединения.
+      for (const s of siblings) {
+        await sendIngredientsToShopping(s);
+      }
     } finally {
       setSendingId(null);
     }
@@ -250,7 +253,11 @@ export default function FoodMenuView({ workspaceId }: { workspaceId: string }) {
                               onClick={() => handleSelectForShopping(e, siblings)}
                               disabled={sendingId === e.id}
                               className="flex items-center justify-center gap-1 text-[11px] font-medium text-violet-600 hover:text-violet-700 bg-violet-50 dark:bg-violet-500/10 px-2 py-1 rounded-lg shrink-0"
-                              title={e.ingredients.join(', ')}
+                              title={
+                                siblings.length > 1
+                                  ? `${e.ingredients.join(', ')} — продукты добавятся на все ${siblings.length} дня(-ей), где это блюдо`
+                                  : e.ingredients.join(', ')
+                              }
                             >
                               {sendingId === e.id ? <Loader2 size={12} className="animate-spin" /> : <ShoppingCart size={12} />}
                               Выбрать
@@ -270,7 +277,10 @@ export default function FoodMenuView({ workspaceId }: { workspaceId: string }) {
                             <BookOpen size={12} /> Рецепт
                           </button>
                           <button
-                            onClick={() => setReplacingEntry(e)}
+                            onClick={() => {
+                              setReplacingEntry(e);
+                              setReplacingSiblingIds(siblings.filter((s) => s.id !== e.id).map((s) => s.id));
+                            }}
                             className="flex items-center justify-center gap-1 text-[11px] font-medium text-indigo-600 hover:text-indigo-700 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-1 rounded-lg shrink-0"
                           >
                             <RefreshCw size={12} /> Заменить
@@ -354,6 +364,7 @@ export default function FoodMenuView({ workspaceId }: { workspaceId: string }) {
         <ReplaceMealModal
           workspaceId={workspaceId}
           entry={replacingEntry}
+          siblingIds={replacingSiblingIds}
           onClose={() => setReplacingEntry(null)}
         />
       )}
@@ -585,10 +596,12 @@ function RecipeModal({
 function ReplaceMealModal({
   workspaceId,
   entry,
+  siblingIds,
   onClose,
 }: {
   workspaceId: string;
   entry: FoodEntry;
+  siblingIds: string[];
   onClose: () => void;
 }) {
   const [preference, setPreference] = useState('');
@@ -620,7 +633,7 @@ function ReplaceMealModal({
     setApplyingIndex(index);
     setError(null);
     try {
-      await applyMealOptionCall({ workspaceId, action: 'apply_meal_option', entryId: entry.id, option });
+      await applyMealOptionCall({ workspaceId, action: 'apply_meal_option', entryId: entry.id, option, siblingIds });
       onClose();
     } catch (e) {
       setError((e as { message?: string })?.message || 'Не удалось заменить блюдо. Попробуйте ещё раз.');
@@ -633,6 +646,7 @@ function ReplaceMealModal({
       <div className="space-y-3">
         <p className="text-xs text-neutral-400">
           {MEAL_LABELS[entry.mealType]}, примерно {entry.calories} ккал — ИИ подберёт несколько вариантов замены похожей калорийности.
+          {siblingIds.length > 0 && ' Замена применится сразу ко всем дням, где сейчас это же блюдо.'}
         </p>
         <div className="flex gap-2">
           <input
