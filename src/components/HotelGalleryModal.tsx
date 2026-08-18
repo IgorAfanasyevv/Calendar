@@ -14,7 +14,11 @@ export default function HotelGalleryModal({ hotel, onClose }: { hotel: FavoriteH
   }
 
   return (
-    <div className="fixed inset-0 z-[70] bg-black/80 flex flex-col" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-[999] bg-black/80 flex flex-col isolate"
+      style={{ transform: 'translateZ(0)' }}
+      onClick={onClose}
+    >
       <div className="flex items-center justify-between p-4 text-white shrink-0" onClick={(e) => e.stopPropagation()}>
         <div className="min-w-0">
           <p className="font-medium truncate">{hotel.name}</p>

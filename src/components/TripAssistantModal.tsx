@@ -241,7 +241,8 @@ export default function TripAssistantModal({
 
     {mapForHotel && (
       <div
-        className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+        className="fixed inset-0 z-[999] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 isolate"
+        style={{ transform: 'translateZ(0)' }}
         onClick={() => setMapForHotel(null)}
       >
         <div

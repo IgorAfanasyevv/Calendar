@@ -92,7 +92,10 @@ export default function OnboardingModal({ onClose }: { onClose?: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+    <div
+      className="fixed inset-0 z-[999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 isolate"
+      style={{ transform: 'translateZ(0)' }}
+    >
       <div className="w-full max-w-md rounded-3xl bg-white dark:bg-neutral-900 shadow-2xl overflow-hidden animate-[modalIn_.2s_ease-out]">
         <div className={`bg-gradient-to-br ${slide.gradient} p-8 flex items-center justify-center`}>
           <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center">

@@ -42,7 +42,11 @@ export default function WhatsNewModal() {
   if (!open || visibleEntries.length === 0) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={handleClose}>
+    <div
+      className="fixed inset-0 z-[999] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 isolate"
+      style={{ transform: 'translateZ(0)' }}
+      onClick={handleClose}
+    >
       <div
         className="w-full max-w-md max-h-[80vh] overflow-y-auto rounded-3xl bg-white dark:bg-neutral-900 shadow-2xl p-6 animate-[modalIn_.2s_ease-out]"
         onClick={(e) => e.stopPropagation()}
