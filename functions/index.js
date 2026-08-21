@@ -855,7 +855,7 @@ ${current.ingredients && current.ingredients.length ? `Используй эти
 Если совсем не удаётся определить блюдо — дай наиболее вероятное предположение по внешнему виду, но не выдумывай лишние ингредиенты.`;
 
     const msg = await anthropic.messages.create({
-      model: 'claude-sonnet-5',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 800,
       messages: [
         {
@@ -903,7 +903,7 @@ ${current.ingredients && current.ingredients.length ? `Используй эти
 Если продукт совсем без калорий (вода, чёрный кофе без добавок и т.п.) — так и укажи calories:0 и БЖУ:0, не выдумывай лишнего.`;
 
     const msg = await anthropic.messages.create({
-      model: 'claude-sonnet-5',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 1500,
       messages: [{ role: 'user', content: prompt }],
     });
@@ -968,7 +968,7 @@ type — один из: strength, cardio, flexibility, sport, other (для ин
 Если что-то не удаётся разобрать — оставь разумное значение по умолчанию, не выдумывай числа, которых не видно на фото.`;
 
     const msg = await anthropic.messages.create({
-      model: 'claude-sonnet-5',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 8000,
       messages: [
         {

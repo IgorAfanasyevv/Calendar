@@ -24,7 +24,7 @@ const fitnessAssistantCall = httpsCallable<
     images?: { base64: string; mediaType: string }[];
   },
   { text?: string; parsed?: { name?: string; type?: WorkoutType; durationMinutes?: number; exercises?: WorkoutExercise[] } }
->(functions, 'fitnessAssistant');
+>(functions, 'fitnessAssistant', { timeout: 170000 });
 
 const TYPE_LABELS: Record<WorkoutType, string> = {
   strength: 'Силовая',
@@ -202,7 +202,12 @@ export default function WorkoutsView({ workspaceId }: { workspaceId: string }) {
         setPhotoSuccess(`Добавлено в предстоящие: «${p.name || 'Тренировка с фото'}» — отметьте выполненной, когда сделаете`);
       }
     } catch (err) {
-      setPhotoError((err as { message?: string })?.message || 'Не получилось распознать фото. Попробуйте другое.');
+      const rawMessage = (err as { message?: string })?.message;
+      setPhotoError(
+        !rawMessage || rawMessage === 'internal'
+          ? 'Запрос занял слишком много времени и прервался. Попробуйте ещё раз, возможно с меньшим числом фото за раз.'
+          : rawMessage
+      );
     } finally {
       setImportingPhoto(false);
     }
